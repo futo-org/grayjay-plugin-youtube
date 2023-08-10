@@ -1,0 +1,77 @@
+{
+	"name": "Youtube",
+	"description": "One of the biggest video platforms owned by Google",
+	"author": "FUTO",
+	"authorUrl": "https://futo.org",
+	
+	"sourceUrl": "https://plugins.grayjay.app/Youtube/YoutubeConfig.json",
+	"repositoryUrl": "https://futo.org",
+	"scriptUrl": "./YoutubeScript.js",
+	"version": 102,
+	"iconUrl": "./youtube.png",
+	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
+
+	"scriptSignature": "",
+	"scriptPublicKey": "",
+	"packages": ["Http", "Utilities"],
+	
+	"allowEval": false,
+	"allowUrls": [
+		"youtube.com",
+		"m.youtube.com",
+		"www.youtube.com",
+		"youtu.be",
+		"www.youtu.be",
+		"m.youtu.be",
+		"s.youtube.com",
+		"suggestqueries-clients6.youtube.com",
+		"youtubei.googleapis.com",
+		"returnyoutubedislikeapi.com"
+	],
+
+	"settings": [
+		{
+			"variable": "youtubeDislikes",
+			"name": "Return YoutubeDislike",
+			"description": "Use Return YoutubeDislike to provide dislikes for videos",
+			"type": "Boolean",
+			"default": "false"
+		},
+		{
+			"variable": "authChannels",
+			"name": "Use Login for Channels",
+			"description": "Use authenticated client for channel (videos) requests. (eg. for member videos)",
+			"type": "Boolean",
+			"default": "false"
+		},
+		{
+			"variable": "authDetails",
+			"name": "Use Login for video details",
+			"description": "Use authenticated client for video requests. (eg. for member videos)",
+			"type": "Boolean",
+			"default": "false"
+		},
+		{
+			"variable": "youtubeActivity",
+			"name": "Provide Youtube Activity",
+			"description": "Use authenticated client for playback, telling Youtube what you watched.",
+			"type": "Boolean",
+			"default": "false"
+		},
+		{
+			"variable": "allowAgeRestricted",
+			"name": "Allow Age Restricted",
+			"description": "Allow watching of age restricted videos",
+			"type": "Boolean",
+			"default": "false"
+		}
+	],
+	
+	"authentication": {
+		"userAgent": "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.5481.153 Mobile Safari/537.36",
+		"loginUrl": "https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3Dhttps%253A%252F%252Fwww.youtube.com%252F&hl=en&ec=65620",
+		"headersToFind": ["authorization"],
+		"cookiesToFind": ["SIDCC"],
+		"cookiesExclOthers": false
+	}
+}
