@@ -1246,7 +1246,7 @@ class RichGridPager extends VideoPager {
 			const newData = validateContinuation(()=>requestBrowse({
 				continuation: this.continuation.token
 			}, !!this.useMobile, !!this.useAuth));
-			if(newData.length > 0) {
+			if(newData && newData.length > 0) {
 				const fakeRichGrid = {
 					contents: newData
 				};
@@ -3189,16 +3189,32 @@ function validateContinuation(reqcb, useAuth = false) {
 	const clientContext = getClientContext(useAuth);
 	const result = reqcb();
 	const append = result?.onResponseReceivedCommands ?? result?.onResponseReceivedActions;
-	if(append && append.length > 0 && append[0].appendContinuationItemsAction)
-		return append[0].appendContinuationItemsAction.continuationItems;
+	if(append && append.length > 0 && append[0].appendContinuationItemsAction) {
+		const appendResults = append[0].appendContinuationItemsAction.continuationItems;
+		if(!appendResults) {
+			if(IS_TESTING)
+				console.log("Continuation found without items?", result);
+			return [];
+		}
+		else
+			return appendResults;
+	}
 	else if(!clientContext.INNERTUBE_CONTEXT.client.visitorData && result.responseContext?.visitorData) {
 		log("[validateContinuation] No visitor data set, found visitor data in response, retrying");
 		clientContext.INNERTUBE_CONTEXT.client.visitorData = result.responseContext.visitorData;
 		//Retry with visitorData
 		const reResult = reqcb();
 		log("[validateContinuation] retry result");
-		if(append && append.length > 0 && append[0].appendContinuationItemsAction)
-			return append[0].appendContinuationItemsAction.continuationItems;
+		if(append && append.length > 0 && append[0].appendContinuationItemsAction) {
+			const appendResults = append[0].appendContinuationItemsAction.continuationItems;
+			if(!appendResults) {
+				if(IS_TESTING)
+					console.log("Continuation found without items?", result);
+				return [];
+			}
+			else
+				return appendResults;
+		}
 		else
 			return [];
 	}
