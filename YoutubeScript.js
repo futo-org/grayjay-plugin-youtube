@@ -1122,7 +1122,7 @@ class YTLiveEventPager extends LiveEventPager {
 						const membershipRenderer = renderer.showItemEndpoint?.showLiveChatItemEndpoint?.renderer?.liveChatMembershipItemRenderer;
 						const msgObj = extractLiveMessage_Obj(membershipRenderer);
 						if(msgObj && msgObj.name)
-							events.push(new LiveEventDonation("Member", msgObj.name, msgObj.message, msgObj.thumbnail, 10));
+							events.push(new LiveEventDonation("Member", msgObj.name, msgObj.message, msgObj.thumbnail, (renderer.durationSec ?? 10) * 1000, paidMessageRenderer.bodyBackgroundColor ? "#" + Number(paidMessageRenderer.bodyBackgroundColor).toString(16) : null));
 					}
 					else if(obj.item?.liveChatTickerPaidMessageItemRenderer) {
 						const renderer = obj.item?.liveChatTickerPaidMessageItemRenderer
@@ -1130,7 +1130,7 @@ class YTLiveEventPager extends LiveEventPager {
 						const msgObj = extractLiveMessage_Obj(paidMessageRenderer);
 						const amount = extractText_String(renderer.amount ?? renderer.purchaseAmountText ?? paidMessageRenderer?.amount ?? paidMessageRenderer?.purchaseAmountText);
 						if(msgObj && msgObj.name)
-							events.push(new LiveEventDonation(amount, msgObj.name, msgObj.message, msgObj.thumbnail));
+							events.push(new LiveEventDonation(amount, msgObj.name, msgObj.message, msgObj.thumbnail, (renderer.durationSec ?? 10) * 1000, paidMessageRenderer.bodyBackgroundColor ? "#" + Number(paidMessageRenderer.bodyBackgroundColor).toString(16) : null));
 					}
 				}
 				else {
