@@ -32,6 +32,7 @@ const CIPHER_TEST_PREFIX = "/s/player/";
 const CIPHER_TEST_SUFFIX = "/player_ias.vflset/en_US/base.js";
 
 const PLATFORM = "YouTube";
+const PLATFORM_CLAIMTYPE = 2;
 
 const BROWSE_TRENDING = "FEtrending";
 const BROWSE_WHAT_TO_WATCH = "FEwhat_to_watch";
@@ -275,6 +276,17 @@ source.searchChannelContents = function(channelUrl, query, type, order, filters)
 		return new RichGridPager(tab, {}, USE_MOBILE_PAGES, true);
 	else
 		throw new ScriptException("No search tab found");
+}
+
+source.getChannelUrlByClaim = (claimType, claimValues) => {
+    const values = claimValueMap.values();
+    if(values.length == 0)
+        return null;
+    const atName = values.find(x=>x.startsWith("@"));
+    if(atName)
+        return URL_BASE + atName;
+    else
+        return URL_BASE + "/c/" + values[0];
 }
 
 //Video
@@ -631,7 +643,7 @@ source.getChannelContents = (url, type, order, filters) => {
 	const initialData = requestInitialData(url, false, useAuth);
 	const channel = extractChannel_PlatformChannel(initialData, url);
 	const contextData = {
-		authorLink: new PlatformAuthorLink(new PlatformID(PLATFORM, channel.id.value, config.id), channel.name, channel.url, channel.thumbnail)
+		authorLink: new PlatformAuthorLink(new PlatformID(PLATFORM, channel.id.value, config.id, PLATFORM_CLAIMTYPE), channel.name, channel.url, channel.thumbnail)
 	};
 	const tabs = extractPage_Tabs(initialData, contextData);
 	
@@ -1246,7 +1258,7 @@ class RichGridPager extends VideoPager {
 			const newData = validateContinuation(()=>requestBrowse({
 				continuation: this.continuation.token
 			}, !!this.useMobile, !!this.useAuth));
-			if(newData.length > 0) {
+			if(newData && newData.length > 0) {
 				const fakeRichGrid = {
 					contents: newData
 				};
@@ -1685,7 +1697,7 @@ function extractChannelListSubMenuAvatarRenderer_AuthorLink(renderer) {
 	if(!url || !name)
 		return null;
 	else
-		return new PlatformAuthorLink(new PlatformID(PLATFORM, null, config?.id), name, url, thumbnail);
+		return new PlatformAuthorLink(new PlatformID(PLATFORM, null, config?.id, PLATFORM_CLAIMTYPE), name, url, thumbnail);
 }
 /**
  * Extract Subscription channels from a submenu obtained from subscriptionsPage
@@ -1743,7 +1755,7 @@ function extractGuideEntry_AuthorLink(guideEntryRenderer) {
 	const url = guideEntryRenderer.navigationEndpoint?.browseEndpoint?.canonicalBaseUrl ?
 		URL_BASE + guideEntryRenderer.navigationEndpoint?.browseEndpoint?.canonicalBaseUrl : null;
 
-	return new PlatformAuthorLink(new PlatformID(PLATFORM, null, config.id), name, url, thumbnail);
+	return new PlatformAuthorLink(new PlatformID(PLATFORM, null, config.id, PLATFORM_CLAIMTYPE), name, url, thumbnail);
 }
 
 /**
@@ -1787,7 +1799,7 @@ function extractChannel_PlatformChannel(initialData, sourceUrl = null) {
 	const banner = (banners && banners.length > 0) ? banners.sort((a,b)=>Math.abs(a.width - bannerTargetWidth) - Math.abs(b.width - bannerTargetWidth))[0] : { url: "" };
 	
 	return new PlatformChannel({
-		id: new PlatformID(PLATFORM, headerRenderer.channelId, config.id),
+		id: new PlatformID(PLATFORM, headerRenderer.channelId, config.id, PLATFORM_CLAIMTYPE),
 		name: headerRenderer.title ?? "",
 		thumbnail: thumbnail.url,
 		banner: banner.url,
@@ -1850,7 +1862,7 @@ function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextDa
 		id: new PlatformID(PLATFORM, videoDetails.videoId, config.id),
 		name: videoDetails.title,
 		thumbnails: new Thumbnails(videoDetails.thumbnail?.thumbnails.map(x=>new Thumbnail(x.url, x.height)) ?? []),
-		author: new PlatformAuthorLink(new PlatformID(PLATFORM, videoDetails.channelId, config.id), videoDetails.author, URL_BASE + "/channel/" + videoDetails.channelId, null),
+		author: new PlatformAuthorLink(new PlatformID(PLATFORM, videoDetails.channelId, config.id, PLATFORM_CLAIMTYPE), videoDetails.author, URL_BASE + "/channel/" + videoDetails.channelId, null),
 		duration: parseInt(videoDetails.lengthSeconds),
 		viewCount: parseInt(videoDetails.viewCount),
 		url: contextData.url,
@@ -2088,7 +2100,7 @@ function extractVideoOwnerRenderer_AuthorLink(renderer) {
 	if(renderer.subscriberCountText)
 		subscribers = extractHumanNumber_Integer(extractText_String(renderer.subscriberCountText));
 	
-	return new PlatformAuthorLink(new PlatformID(PLATFORM, renderer?.navigationEndpoint?.browseEndpoint?.browseId, config.id), 
+	return new PlatformAuthorLink(new PlatformID(PLATFORM, renderer?.navigationEndpoint?.browseEndpoint?.browseId, config.id, PLATFORM_CLAIMTYPE),
 		extractRuns_String(renderer.title.runs),
 		extractRuns_Url(renderer.title.runs),
 		bestThumbnail,
@@ -2634,7 +2646,7 @@ function extractChannelRenderer_AuthorLink(channelRenderer) {
 
 	const subscribers = extractHumanNumber_Integer(extractText_String(channelRenderer.videoCountText));
 
-	return new PlatformAuthorLink(new PlatformID(PLATFORM, id, config.id), name, channelUrl, thumbUrl, subscribers);
+	return new PlatformAuthorLink(new PlatformID(PLATFORM, id, config.id, PLATFORM_CLAIMTYPE), name, channelUrl, thumbUrl, subscribers);
 }
 
 function extractRuns_AuthorLink(runs) {
@@ -2646,7 +2658,7 @@ function extractRuns_AuthorLink(runs) {
     const channelUrl = extractNavigationEndpoint_Url(runs[0]?.navigationEndpoint);
     const thumbUrl = null;
 
-	return new PlatformAuthorLink(new PlatformID(PLATFORM, id, config.id), name, channelUrl, thumbUrl ?? "");
+	return new PlatformAuthorLink(new PlatformID(PLATFORM, id, config.id, PLATFORM_CLAIMTYPE), name, channelUrl, thumbUrl ?? "");
 }
 
 function extractThumbnail_Thumbnails(thumbnail) {
@@ -2672,7 +2684,7 @@ function extractVideoWithContextRenderer_AuthorLink(videoRenderer) {
 	let channelUrl = videoRenderer.channelThumbnail?.channelThumbnailWithLinkRenderer?.navigationEndpoint?.browseEndpoint?.canonicalBaseUrl;
 	if(channelUrl) channelUrl = URL_BASE + channelUrl;
 
-	return new PlatformAuthorLink(new PlatformID(PLATFORM, id, config.id), name, channelUrl, thumbUrl);
+	return new PlatformAuthorLink(new PlatformID(PLATFORM, id, config.id, PLATFORM_CLAIMTYPE), name, channelUrl, thumbUrl);
 }
 function extractVideoRenderer_AuthorLink(videoRenderer) {
 	const id = videoRenderer.channelThumbnailSupportedRenderers.channelThumbnailWithLinkRenderer?.navigationEndpoint?.browseEndpoint?.browseId;
@@ -2681,7 +2693,7 @@ function extractVideoRenderer_AuthorLink(videoRenderer) {
 	const thumbUrl = channelIcon.thumbnail.thumbnails[0].url;
 	const channelUrl = extractRuns_Url(videoRenderer.ownerText.runs);
 
-	return new PlatformAuthorLink(new PlatformID(PLATFORM, id, config.id), name, channelUrl, thumbUrl);
+	return new PlatformAuthorLink(new PlatformID(PLATFORM, id, config.id, PLATFORM_CLAIMTYPE), name, channelUrl, thumbUrl);
 }
 function extractCommentRenderer_Comment(contextUrl, commentRenderer, replyCount, replyContinuation) {
 	const authorName = commentRenderer.authorText?.simpleText ?? "";
@@ -2692,7 +2704,7 @@ function extractCommentRenderer_Comment(contextUrl, commentRenderer, replyCount,
 	);
 	return new YTComment({
 		contextUrl: contextUrl,
-		author: new PlatformAuthorLink(new PlatformID(PLATFORM, null, config.id), authorName, URL_BASE + authorEndpoint, authorThumbnail),
+		author: new PlatformAuthorLink(new PlatformID(PLATFORM, null, config.id, PLATFORM_CLAIMTYPE), authorName, URL_BASE + authorEndpoint, authorThumbnail),
 		message: extractRuns_String(commentRenderer.contentText?.runs) ?? "",
 		rating: new RatingLikes(commentRenderer?.voteCount?.simpleText ? extractHumanNumber_Integer(commentRenderer.voteCount.simpleText) : 0),
 		date: (commentRenderer.publishedTimeText?.runs ? extractAgoTextRuns_Timestamp(commentRenderer.publishedTimeText.runs) : 0),
@@ -3189,16 +3201,32 @@ function validateContinuation(reqcb, useAuth = false) {
 	const clientContext = getClientContext(useAuth);
 	const result = reqcb();
 	const append = result?.onResponseReceivedCommands ?? result?.onResponseReceivedActions;
-	if(append && append.length > 0 && append[0].appendContinuationItemsAction)
-		return append[0].appendContinuationItemsAction.continuationItems;
+	if(append && append.length > 0 && append[0].appendContinuationItemsAction) {
+		const appendResults = append[0].appendContinuationItemsAction.continuationItems;
+		if(!appendResults) {
+			if(IS_TESTING)
+				console.log("Continuation found without items?", result);
+			return [];
+		}
+		else
+			return appendResults;
+	}
 	else if(!clientContext.INNERTUBE_CONTEXT.client.visitorData && result.responseContext?.visitorData) {
 		log("[validateContinuation] No visitor data set, found visitor data in response, retrying");
 		clientContext.INNERTUBE_CONTEXT.client.visitorData = result.responseContext.visitorData;
 		//Retry with visitorData
 		const reResult = reqcb();
 		log("[validateContinuation] retry result");
-		if(append && append.length > 0 && append[0].appendContinuationItemsAction)
-			return append[0].appendContinuationItemsAction.continuationItems;
+		if(append && append.length > 0 && append[0].appendContinuationItemsAction) {
+			const appendResults = append[0].appendContinuationItemsAction.continuationItems;
+			if(!appendResults) {
+				if(IS_TESTING)
+					console.log("Continuation found without items?", result);
+				return [];
+			}
+			else
+				return appendResults;
+		}
 		else
 			return [];
 	}

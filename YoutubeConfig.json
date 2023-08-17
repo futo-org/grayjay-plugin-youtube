@@ -73,5 +73,7 @@
 		"headersToFind": ["authorization"],
 		"cookiesToFind": ["SIDCC"],
 		"cookiesExclOthers": false
-	}
+	},
+
+	"supportedClaimTypes": [2]
 }
