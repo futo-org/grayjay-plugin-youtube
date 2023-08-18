@@ -284,10 +284,19 @@ source.getChannelUrlByClaim = (claimType, claimValues) => {
         return null;
     const atName = values.find(x=>x.startsWith("@"));
     if(atName)
-        return URL_BASE + atName;
+        return URL_BASE + "/" + atName;
     else
-        return URL_BASE + "/c/" + values[0];
+        return URL_BASE + "/channel/" + values[0];
 }
+source.getChannelTemplateByClaimMap = () => {
+    return {
+        //Youtube
+        2: { //TODO: Ideally these are turned around, requires verifier change..
+            0: URL_BASE + "/channel/{{CLAIMVALUE}}",
+            1: URL_BASE + "/{{CLAIMVALUE}}"
+        }
+    };
+};
 
 //Video
 source.isContentDetailsUrl = (url) => {
