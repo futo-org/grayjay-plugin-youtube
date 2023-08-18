@@ -291,9 +291,9 @@ source.getChannelUrlByClaim = (claimType, claimValues) => {
 source.getChannelTemplateByClaimMap = () => {
     return {
         //Youtube
-        2: { //TODO: Ideally these are turned around, requires verifier change..
-            0: URL_BASE + "/channel/{{CLAIMVALUE}}",
-            1: URL_BASE + "/{{CLAIMVALUE}}"
+        2: {
+            0: URL_BASE + "/{{CLAIMVALUE}}",
+            1: URL_BASE + "/channel/{{CLAIMVALUE}}",
         }
     };
 };
