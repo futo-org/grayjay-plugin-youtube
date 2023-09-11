@@ -279,24 +279,25 @@ source.searchChannelContents = function(channelUrl, query, type, order, filters)
 }
 
 source.getChannelUrlByClaim = (claimType, claimValues) => {
-    const values = claimValueMap.values();
-    if(values.length == 0)
-        return null;
-    const atName = values.find(x=>x.startsWith("@"));
-    if(atName)
-        return URL_BASE + "/" + atName;
-    else
-        return URL_BASE + "/channel/" + values[0];
-}
-source.getChannelTemplateByClaimMap = () => {
-    return {
-        //Youtube
-        2: {
-            0: URL_BASE + "/{{CLAIMVALUE}}",
-            1: URL_BASE + "/channel/{{CLAIMVALUE}}",
-        }
-    };
+	const values = claimValues.values();
+	if (values.length == 0)
+		return null;
+	const atName = values.find(x => x.startsWith("@"));
+	if (atName)
+		return URL_BASE + "/" + atName;
+	else
+		return URL_BASE + "/channel/" + values[0];
 };
+source.getChannelTemplateByClaimMap = () => {
+	return {
+		//Youtube
+		2: {
+			0: URL_BASE + "/{{CLAIMVALUE}}",
+			1: URL_BASE + "/channel/{{CLAIMVALUE}}",
+		}
+	};
+};
+
 
 //Video
 source.isContentDetailsUrl = (url) => {
@@ -1115,50 +1116,11 @@ class YTLiveEventPager extends LiveEventPager {
 		const actions = json.continuationContents?.liveChatContinuation?.actions;
 		if(IS_TESTING)
 			console.log("Live Chat Actions:", actions);
-		const events = [];
+		let events = [];
 		if(actions && actions.length > 0) {
-			let emojiMap = {};
-			for(let action of actions) {
-				if(action.addChatItemAction) {
-					const obj = action.addChatItemAction;
-					const renderer = obj.item?.liveChatTextMessageRenderer;
-					const msgObj = extractLiveMessage_Obj(renderer);
-
-					if(!msgObj)
-					    continue;
-
-					if(msgObj.emojis)
-						for(let emojiKey in msgObj.emojis)
-							emojiMap[emojiKey] = msgObj.emojis[emojiKey];
-
-					if(msgObj && msgObj.name && msgObj.message)
-						events.push(new LiveEventComment(msgObj.name, msgObj.message, msgObj.thumbnail, msgObj.colorName, msgObj.badges));
-				}
-				else if(action.ReplaceChatItemAction) {}
-				else if(action.RemoveChatItemAction) {}
-				else if(action.addLiveChatTickerItemAction) {
-					const obj = action.addLiveChatTickerItemAction;
-					if(obj.item?.liveChatTickerSponsorItemRenderer) {
-						const renderer = obj.item?.liveChatTickerSponsorItemRenderer;
-						const membershipRenderer = renderer.showItemEndpoint?.showLiveChatItemEndpoint?.renderer?.liveChatMembershipItemRenderer;
-						const msgObj = extractLiveMessage_Obj(membershipRenderer);
-						if(msgObj && msgObj.name)
-							events.push(new LiveEventDonation("Member", msgObj.name, msgObj.message, msgObj.thumbnail, (renderer.durationSec ?? 10) * 1000, paidMessageRenderer.bodyBackgroundColor ? "#" + Number(paidMessageRenderer.bodyBackgroundColor).toString(16) : null));
-					}
-					else if(obj.item?.liveChatTickerPaidMessageItemRenderer) {
-						const renderer = obj.item?.liveChatTickerPaidMessageItemRenderer
-						const paidMessageRenderer = renderer.showItemEndpoint?.showLiveChatItemEndpoint?.renderer?.liveChatPaidMessageRenderer;
-						const msgObj = extractLiveMessage_Obj(paidMessageRenderer);
-						const amount = extractText_String(renderer.amount ?? renderer.purchaseAmountText ?? paidMessageRenderer?.amount ?? paidMessageRenderer?.purchaseAmountText);
-						if(msgObj && msgObj.name)
-							events.push(new LiveEventDonation(amount, msgObj.name, msgObj.message, msgObj.thumbnail, (renderer.durationSec ?? 10) * 1000, paidMessageRenderer.bodyBackgroundColor ? "#" + Number(paidMessageRenderer.bodyBackgroundColor).toString(16) : null));
-					}
-				}
-				else {
-					const keys = Object.keys(action);
-					log("Unknown Event: " + keys.join(",") + JSON.stringify(action, null, "   "));
-				}
-			}
+			const actionResults = handleYoutubeLiveEvents(actions);
+			const emojiMap = actionResults.emojis;
+			events = actionResults.events;
 
 			let newEmojiCount = 0;
 			for(let kv in emojiMap) {
@@ -1182,6 +1144,85 @@ class YTLiveEventPager extends LiveEventPager {
 		return this;
 	}
 }
+function handleYoutubeLiveEvents(actions) {
+	let emojiMap = {};
+	let events = [];
+	for(let action of actions) {
+		try {
+			if(action.addChatItemAction) {
+				const obj = action.addChatItemAction;
+
+				const isPaid = !!obj.item?.liveChatPaidMessageRenderer
+
+				const renderer = (isPaid) ? obj.item?.liveChatPaidMessageRenderer : obj.item?.liveChatTextMessageRenderer;
+				const msgObj = extractLiveMessage_Obj(renderer);
+
+				if(!msgObj)
+					continue;
+
+				if(msgObj.emojis)
+					for(let emojiKey in msgObj.emojis)
+						emojiMap[emojiKey] = msgObj.emojis[emojiKey];
+
+				if(msgObj && msgObj.name && (msgObj.message || isPaid)) {
+					if(!isPaid)
+						events.push(new LiveEventComment(msgObj.name, msgObj.message, msgObj.thumbnail, msgObj.colorName, msgObj.badges));
+					else {
+						const amount = extractText_String(renderer.amount ?? renderer.purchaseAmountText ?? paidMessageRenderer?.amount ?? paidMessageRenderer?.purchaseAmountText);
+						events.push(new LiveEventDonation(amount, msgObj.name, msgObj.message ?? "", msgObj.thumbnail, 0, renderer.bodyBackgroundColor ? "#" + Number(renderer.bodyBackgroundColor).toString(16) : null));
+					}
+				}
+			}
+			else if(action.ReplaceChatItemAction) {}
+			else if(action.RemoveChatItemAction) {}
+			else if(action.addLiveChatTickerItemAction) {
+				const obj = action.addLiveChatTickerItemAction;
+				if(obj.item?.liveChatTickerSponsorItemRenderer) {
+					const renderer = obj.item?.liveChatTickerSponsorItemRenderer;
+					const membershipRenderer = renderer.showItemEndpoint?.showLiveChatItemEndpoint?.renderer?.liveChatMembershipItemRenderer;
+					const msgObj = extractLiveMessage_Obj(membershipRenderer);
+					if(msgObj && msgObj.name)
+						events.push(new LiveEventDonation("Member", msgObj.name, msgObj.message, msgObj.thumbnail, (renderer.durationSec ?? 10) * 1000, membershipRenderer.bodyBackgroundColor ? "#" + Number(membershipRenderer.bodyBackgroundColor).toString(16) : null));
+				}
+				else if(obj.item?.liveChatTickerPaidMessageItemRenderer) {
+					const renderer = obj.item?.liveChatTickerPaidMessageItemRenderer
+					const paidMessageRenderer = renderer.showItemEndpoint?.showLiveChatItemEndpoint?.renderer?.liveChatPaidMessageRenderer;
+					const msgObj = extractLiveMessage_Obj(paidMessageRenderer);
+					const amount = extractText_String(renderer.amount ?? renderer.purchaseAmountText ?? paidMessageRenderer?.amount ?? paidMessageRenderer?.purchaseAmountText);
+					if(msgObj && msgObj.name)
+						events.push(new LiveEventDonation(amount, msgObj.name, msgObj.message, msgObj.thumbnail, (renderer.durationSec ?? 10) * 1000, paidMessageRenderer.bodyBackgroundColor ? "#" + Number(paidMessageRenderer.bodyBackgroundColor).toString(16) : null));
+				}
+			}
+			else if(action.addBannerToLiveChatCommand) {
+				const bannerRenderer = action.addBannerToLiveChatCommand?.bannerRenderer?.liveChatBannerRenderer;
+				const redirectRenderer = bannerRenderer?.contents?.liveChatBannerRedirectRenderer;
+
+				if(bannerRenderer && redirectRenderer && bannerRenderer.bannerType == "LIVE_CHAT_BANNER_TYPE_CROSS_CHANNEL_REDIRECT") {
+					
+					const url = redirectRenderer.inlineActionButton?.buttonRenderer?.command?.commandMetadata?.webCommandMetadata?.url;
+					const name = redirectRenderer.bannerMessage?.runs?.find(x=>x.bold)?.text;
+					const thumbnails = redirectRenderer.authorPhoto?.thumbnails;
+					
+					if(url && name && thumbnails && thumbnails.length && thumbnails.length > 0)
+						events.push(new LiveEventRaid(URL_BASE + url, name, thumbnails[thumbnails.length - 1]?.url));
+				}
+			}
+			else {
+				const keys = Object.keys(action);
+				log("Unknown Event: " + keys.join(",") + JSON.stringify(action, null, "   "));
+			}
+		}
+		catch(ex) {
+			log("Failed Youtube live action parse due to [" + ex + "]: " + JSON.stringify(action, null, "   "));
+		}
+	}
+	return {
+		events: events,
+		emojis: emojiMap
+	};
+}
+source.handleYoutubeLiveEvents = handleYoutubeLiveEvents;
+
 function extractLiveMessage_Obj(obj) {
 	if(!obj)
 		return null;
@@ -1209,7 +1250,7 @@ function extractLiveMessage_Obj(obj) {
                 emojiMap[badgeName] = badgeImages[badgeImages.length - 1].url;
                 badges.push(badgeName);
 
-                if(badgeName.indexOf("Member") >= 0)
+                if(badgeName.toLowerCase().indexOf("member") >= 0)
                     isMember = true;
             }
         }
@@ -2109,7 +2150,7 @@ function extractVideoOwnerRenderer_AuthorLink(renderer) {
 	if(renderer.subscriberCountText)
 		subscribers = extractHumanNumber_Integer(extractText_String(renderer.subscriberCountText));
 	
-	return new PlatformAuthorLink(new PlatformID(PLATFORM, renderer?.navigationEndpoint?.browseEndpoint?.browseId, config.id, PLATFORM_CLAIMTYPE),
+	return new PlatformAuthorLink(new PlatformID(PLATFORM, renderer?.navigationEndpoint?.browseEndpoint?.browseId, config.id, PLATFORM_CLAIMTYPE), 
 		extractRuns_String(renderer.title.runs),
 		extractRuns_Url(renderer.title.runs),
 		bestThumbnail,
