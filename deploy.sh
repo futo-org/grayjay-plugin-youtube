@@ -17,7 +17,7 @@ echo "Purging Cloudflare cache..."
 curl -X POST "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/purge_cache" \
      -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
      -H "Content-Type: application/json" \
-     --data '{"files":["https://plugins.grayjay.app/Youtube", "https://plugins.grayjay.app/Youtube/youtube.png", "https://plugins.grayjay.app/Youtube/YoutubeConfig.json", "https://plugins.grayjay.app/Youtube/YoutubeScript.js"]}'
+     --data '{"files":["https://plugins.grayjay.app/Youtube/youtube.png", "https://plugins.grayjay.app/Youtube/YoutubeConfig.json", "https://plugins.grayjay.app/Youtube/YoutubeScript.js"]}'
 
 # Take site back online
 echo "Bringing site back online..."
