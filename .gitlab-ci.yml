@@ -6,4 +6,4 @@ deploy:
   script:
     - sh deploy.sh
   only:
-    - main
+    - master
