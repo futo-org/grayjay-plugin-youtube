@@ -7,9 +7,10 @@ touch $DOCUMENT_ROOT/maintenance.file
 
 # Swap over the content
 echo "Deploying content..."
-cp youtube.png $DOCUMENT_ROOT/
-cp YoutubeConfig.json $DOCUMENT_ROOT/
-cp YoutubeScript.js $DOCUMENT_ROOT/
+mkdir -p $DOCUMENT_ROOT/Youtube
+cp youtube.png $DOCUMENT_ROOT/Youtube
+cp YoutubeConfig.json $DOCUMENT_ROOT/Youtube
+cp YoutubeScript.js $DOCUMENT_ROOT/Youtube
 
 # Notify Cloudflare to wipe the CDN cache
 echo "Purging Cloudflare cache..."
