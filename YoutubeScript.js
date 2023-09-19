@@ -17,7 +17,7 @@ const URL_SUBSCRIPTIONS_M = "https://m.youtube.com/feed/subscriptions";
 const URL_PLAYLIST = "https://youtube.com/playlist?list=";
 const URL_PLAYLISTS_M = "https://m.youtube.com/feed/library";
 
-const URL_LIVE_CHAT_HTML = "https://www.youtube.com/live_chat";
+const URL_LIVE_CHAT_HTML = "https://www.youtube.com/live_chat?v=";
 const URL_LIVE_CHAT = "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat";
 
 const URL_WATCHTIME = "https://www.youtube.com/api/stats/watchtime";
@@ -427,13 +427,29 @@ source.getContentDetails = (url, useAuth) => {
 
 	return finalResult;
 };
+source.getLiveChatWindow = function(url) {
+	const id = extractVideoIDFromUrl(url);
+	if(!id)
+		throw new ScriptException("No valid id found");
 
+	const chatUrl = URL_LIVE_CHAT_HTML + id;
+
+	const chatHtmlResp = http.GET(chatUrl, {}, false);
+	if(!chatHtmlResp.isOk)
+		return null;
+	else {
+		return {
+			url: chatUrl,
+			removeElements: [ "yt-live-chat-header-renderer", "#ticker" ]
+		};
+	}
+}
 source.getLiveEvents = function(url) {
 	const id = extractVideoIDFromUrl(url);
 	if(!id)
 		throw new ScriptException("No valid id found");
 
-	const chatHtmlResp = http.GET(URL_LIVE_CHAT_HTML + "?v=" + id, {}, false);
+	const chatHtmlResp = http.GET(URL_LIVE_CHAT_HTML + id, {}, false);
 	if(!chatHtmlResp.isOk)
 		throw new ScriptException("Failed to get chat html");
 	const chatHtml = chatHtmlResp.body;
@@ -473,6 +489,9 @@ class YoutubePlaybackTracker extends PlaybackTracker {
 		
 		this.watchUrl = playerData.playbackTracking?.videostatsWatchtimeUrl?.baseUrl;
 		this.playbackUrl = playerData.playbackTracking?.videostatsPlaybackUrl?.baseUrl;
+		if(!this.playbackUrl || !this.watchUrl)
+			throw new ScriptException("Playback tracking unavailable");
+
 		this.playbackUrlBase = this.playbackUrl.substring(0, this.playbackUrl.indexOf("?"));
 		this.watchUrlBase = this.watchUrl.substring(0, this.watchUrl.indexOf("?"));
 		this.watchParams = parseQueryString(this.watchUrl);
@@ -1528,7 +1547,7 @@ function requestInitialData(url, useMobile = false, useAuth = false) {
 		const initialData = getInitialData(html);
 		return initialData;
 	}
-	else throw new ScriptException("Failed to request page [" + resp.code + "]");
+	else throw new ScriptException("Failed to request page [" + resp.code + "]\n" + url + "\n");
 }
 function requestClientConfig(useMobile = false, useAuth = false) {
 	let headers = {
@@ -1754,9 +1773,13 @@ function extractChannelListSubMenuAvatarRenderer_AuthorLink(renderer) {
  * @returns  {String[]} Urls
  */
 function extractChannelListSubMenuAvatarRenderer_URL(renderer) {
-	const url = renderer?.navigationEndpoint?.browseEndpoint?.canonicalBaseUrl ?
+	const canonicalUrl = renderer?.navigationEndpoint?.browseEndpoint?.canonicalBaseUrl ?
 		URL_BASE + renderer.navigationEndpoint.browseEndpoint.canonicalBaseUrl :
 		null;
+	const idUrl = renderer?.navigationEndpoint?.browseEndpoint?.browseId ?
+		URL_BASE + "/channel/" + renderer.navigationEndpoint.browseEndpoint.browseId :
+		null;
+	const url = idUrl ?? canonicalUrl;
 	if(!url)
 		return null;
 	else
@@ -1848,6 +1871,13 @@ function extractChannel_PlatformChannel(initialData, sourceUrl = null) {
 	const bannerTargetWidth = 1080;
 	const banner = (banners && banners.length > 0) ? banners.sort((a,b)=>Math.abs(a.width - bannerTargetWidth) - Math.abs(b.width - bannerTargetWidth))[0] : { url: "" };
 	
+	const idUrl = headerRenderer?.navigationEndpoint?.browseEndpoint?.browseId ?
+	    URL_BASE + "/channel/" + headerRenderer.navigationEndpoint.browseEndpoint.browseId :
+	    null;
+	const canonicalUrl = headerRenderer?.navigationEndpoint?.browseEndpoint?.canonicalBaseUrl ?
+	    URL_BASE + headerRenderer.navigationEndpoint.browseEndpoint.canonicalBaseUrl :
+	    null;
+
 	return new PlatformChannel({
 		id: new PlatformID(PLATFORM, headerRenderer.channelId, config.id, PLATFORM_CLAIMTYPE),
 		name: headerRenderer.title ?? "",
@@ -1855,7 +1885,8 @@ function extractChannel_PlatformChannel(initialData, sourceUrl = null) {
 		banner: banner.url,
 		subscribers: Math.max(0, extractHumanNumber_Integer(extractText_String(headerRenderer.subscriberCountText))),
 		description: "",
-		url: URL_BASE + headerRenderer.navigationEndpoint.browseEndpoint.canonicalBaseUrl,
+		url: idUrl,
+		urlAlternatives: [idUrl, canonicalUrl],
 		links: {}
 	});
 }
@@ -2093,10 +2124,11 @@ function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextDa
 				if(!video.datetime || video.datetime <= 0) {
 					let date = 0;
 					
+					if (date <= 0 && renderer.relativeDateText?.simpleText)
+						date = extractAgoText_Timestamp(renderer.relativeDateText.simpleText);
 					if(date <= 0 && renderer.dateText?.simpleText)
 						date = extractDate_Timestamp(renderer.dateText.simpleText);
-					if(date <= 0 && renderer.relativeDateText?.simpleText)
-						date = extractAgoText_Timestamp(renderer.relativeDateText.simpleText);
+
 					video.datetime = date;
 				}
 			},
@@ -2150,9 +2182,10 @@ function extractVideoOwnerRenderer_AuthorLink(renderer) {
 	if(renderer.subscriberCountText)
 		subscribers = extractHumanNumber_Integer(extractText_String(renderer.subscriberCountText));
 	
-	return new PlatformAuthorLink(new PlatformID(PLATFORM, renderer?.navigationEndpoint?.browseEndpoint?.browseId, config.id, PLATFORM_CLAIMTYPE), 
+	const id = renderer?.navigationEndpoint?.browseEndpoint?.browseId;
+	return new PlatformAuthorLink(new PlatformID(PLATFORM, id, config.id, PLATFORM_CLAIMTYPE), 
 		extractRuns_String(renderer.title.runs),
-		extractRuns_Url(renderer.title.runs),
+		(!id) ? extractRuns_Url(renderer.title.runs) : URL_BASE + "/channel/" + id,
 		bestThumbnail,
 		subscribers);
 }
@@ -2537,6 +2570,10 @@ function extractVideoWithContextRenderer_Video(videoRenderer, contextData) {
 		x.thumbnailOverlayTimeStatusRenderer?.accessibility?.accessibilityData?.label == "LIVE");
 	let isLive = liveBadges != null && liveBadges.length > 0;
 
+	let plannedDate = null;
+	if(videoRenderer.upcomingEventData?.startTime)
+		plannedDate = parseInt(videoRenderer.upcomingEventData.startTime);
+
 	//if(!isLive && !videoRenderer.publishedTimeText?.simpleText)
 	//	return  null; //Not a normal video
 
@@ -2557,20 +2594,20 @@ function extractVideoWithContextRenderer_Video(videoRenderer, contextData) {
 
 	const title = (videoRenderer.headline) ? extractText_String(videoRenderer.headline) : extractText_String(videoRenderer.title);
 
-	if(isLive)
+	if (isLive) {
 		return new PlatformVideo({
 			id: new PlatformID(PLATFORM, videoRenderer.videoId, config.id),
 			name: title,
 			thumbnails: extractThumbnail_Thumbnails(videoRenderer.thumbnail),
 			author: author,
-			uploadDate: parseInt(new Date().getTime()/1000),
+			uploadDate: plannedDate ?? parseInt(new Date().getTime() / 1000),
 			duration: 0,
 			viewCount: viewCount,
 			url: URL_BASE + "/watch?v=" + videoRenderer.videoId,
 			isLive: true,
 			extractType: "VideoWithContext"
 		});
-	else
+	} else {
 		return new PlatformVideo({
 			id: new PlatformID(PLATFORM, videoRenderer.videoId, config.id),
 			name: title,
@@ -2583,6 +2620,7 @@ function extractVideoWithContextRenderer_Video(videoRenderer, contextData) {
 			isLive: false,
 			extractType: "VideoWithContext"
 		});
+	}
 }
 function extractVideoRenderer_Video(videoRenderer, contextData) {
 
@@ -2733,7 +2771,7 @@ function extractVideoWithContextRenderer_AuthorLink(videoRenderer) {
 	const thumbUrl = channelThumbs && channelThumbs.length > 0 ? channelThumbs[0].url : null;
 	let channelUrl = videoRenderer.channelThumbnail?.channelThumbnailWithLinkRenderer?.navigationEndpoint?.browseEndpoint?.canonicalBaseUrl;
 	if(channelUrl) channelUrl = URL_BASE + channelUrl;
-
+	if (id) channelUrl = URL_BASE + "/channel/" + id;
 	return new PlatformAuthorLink(new PlatformID(PLATFORM, id, config.id, PLATFORM_CLAIMTYPE), name, channelUrl, thumbUrl);
 }
 function extractVideoRenderer_AuthorLink(videoRenderer) {
@@ -2741,7 +2779,7 @@ function extractVideoRenderer_AuthorLink(videoRenderer) {
 	const name = extractRuns_String(videoRenderer.ownerText.runs);
 	const channelIcon = videoRenderer.channelThumbnailSupportedRenderers.channelThumbnailWithLinkRenderer;
 	const thumbUrl = channelIcon.thumbnail.thumbnails[0].url;
-	const channelUrl = extractRuns_Url(videoRenderer.ownerText.runs);
+	const channelUrl = (!id) ? extractRuns_Url(videoRenderer.ownerText.runs) : URL_BASE + "/channel/" + id;
 
 	return new PlatformAuthorLink(new PlatformID(PLATFORM, id, config.id, PLATFORM_CLAIMTYPE), name, channelUrl, thumbUrl);
 }
@@ -2828,7 +2866,9 @@ function extractNavigationEndpoint_Url(navEndpoint, baseUrl) {
     if(!baseUrl)
         baseUrl = URL_BASE;
     if(!navEndpoint)
-        return null;
+		return null;
+	if(navEndpoint?.browseEndpoint?.browseId && navEndpoint?.browseEndpoint?.canonicalBaseUrl && navEndpoint.browseEndpoint.canonicalBaseUrl.startsWith("/@"))
+		return baseUrl + "/channel/" + navEndpoint?.browseEndpoint?.browseId;
     if(navEndpoint?.browseEndpoint?.canonicalBaseUrl)
         return baseUrl + navEndpoint?.browseEndpoint?.canonicalBaseUrl;
     if(navEndpoint.commandMetadata?.webCommandMetadata?.url)
