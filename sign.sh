@@ -6,6 +6,7 @@ CONFIG_FILE_PATH=$2
 
 # Decode and save the private key to a temporary file
 echo "$SIGNING_PRIVATE_KEY" | base64 -d > tmp_private_key.pem
+echo "SIGNING_PRIVATE_KEY (length): ${#SIGNING_PRIVATE_KEY}"
 echo "SIGNING_PRIVATE_KEY: ${SIGNING_PRIVATE_KEY:0:20}..."
 
 # Validate private key
