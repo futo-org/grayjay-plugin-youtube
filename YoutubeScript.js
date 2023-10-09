@@ -418,15 +418,30 @@ source.getContentDetails = (url, useAuth) => {
 	}
 
 	const finalResult = videoDetails;
+	finalResult.__initialData = initialData;
 	if(!!_settings["youtubeActivity"] && useLogin) {
 		finalResult.__playerData = initialPlayerData;
 		finalResult.getPlaybackTracker = function(url) {
 			return source.getPlaybackTracker(url, initialPlayerData)
 		};
 	}
+	finalResult.getContentChapters = function() {
+		source.getContentChapters(url, finalResult.__initialData);
+	};
 
 	return finalResult;
 };
+source.getContentChapters = function(url, initialData) {
+	if(initialData == null) {
+		const html = requestPage(url);
+		initialData = getInitialData(html);
+	}
+	const rawObjects = initialData?.playerOverlays?.playerOverlayRenderer?.decoratedPlayerBarRenderer?.playerBar?.multiMarkersPlayerBarRenderer?.markersMap;
+	if(!rawObjects || rawObjects.length == 0)
+		return null;
+	
+}
+
 source.getLiveChatWindow = function(url) {
 	const id = extractVideoIDFromUrl(url);
 	if(!id)
@@ -3410,6 +3425,24 @@ function decryptN(encryptedN, jsUrl) {
 		throw new ScriptException("N Decryptor was not available [" + jsUrl + "]");
 	return _nDecrypt[jsUrl](encryptedN);
 }
+function testCipher(hash) {
+	const jsUrl = CIPHER_TEST_PREFIX + hash + CIPHER_TEST_SUFFIX;
+	try{
+		const result = prepareCipher(jsUrl);
+		clearCipher(jsUrl);
+		return {
+			success: result,
+			exception: ""
+		};
+	}
+	catch(ex) {
+		return {
+			success: false,
+			exception: ex
+		};
+	}
+}
+source.testCipher = testCipher;
 function testCiphers() {
 	let testResults = [];
 	for(hash of CIPHER_TEST_HASHES) {
