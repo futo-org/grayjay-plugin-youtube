@@ -11,6 +11,7 @@ mkdir -p $DOCUMENT_ROOT/Youtube
 cp youtube.png $DOCUMENT_ROOT/Youtube
 cp YoutubeConfig.json $DOCUMENT_ROOT/Youtube
 cp YoutubeScript.js $DOCUMENT_ROOT/Youtube
+sh sign.sh $DOCUMENT_ROOT/Youtube/YoutubeScript.js $DOCUMENT_ROOT/Youtube/YoutubeConfig.json
 
 # Notify Cloudflare to wipe the CDN cache
 echo "Purging Cloudflare cache for zone $CLOUDFLARE_ZONE_ID..."
