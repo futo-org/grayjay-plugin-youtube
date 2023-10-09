@@ -2098,6 +2098,11 @@ function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextDa
 			})?.filter(x=>x != null) ?? []
 	};
 
+	//Adds HLS stream if any other format is not yet available, mostly relevant for recently ended livestreams.
+	if(video.video.videoSources !== null && video.video.videoSources.length == 0 && initialPlayerData.streamingData.hlsManifestUrl)
+	    video.video.videoSources.push(new HLSSource({url: initialPlayerData.streamingData.hlsManifestUrl}));
+
+
 	//Add additional/better details
 	for(let i = 0; i < contentsContainer.contents.length; i++) {
 		const content = contentsContainer.contents[i];
