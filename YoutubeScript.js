@@ -144,8 +144,15 @@ source.enable = (conf, settings, saveStateStr) => {
             batchReq = batchReq.GET(URL_CONTEXT_M, { "User-Agent": USER_AGENT_TABLET, "Accept-Language": "en-US" }, true);
         const batchResp = batchReq.execute();
 
-        if(!batchResp[0].isOk) throw new ScriptException("Failed to request context");
-        if(isLoggedIn && !batchResp[1].isOk) throw new ScriptException("Failed to request context");
+		console.log("batchResp", batchResp);
+		if (!batchResp[0].isOk) {
+			if (batchResp[0].code === 429 && batchResp[0].body.includes("captcha")) {
+				throw new CaptchaRequiredException(batchResp[0].url, batchResp[0].body);
+			}
+
+			throw new ScriptException("Failed to request context enable !batchResp[0].isOk");
+		}
+        if(isLoggedIn && !batchResp[1].isOk) throw new ScriptException("Failed to request context enable isLoggedIn && !batchResp[1].isOk");
 
         _clientContext = getClientConfig(batchResp[0].body)//requestClientConfig(false);
         if(isLoggedIn) {
@@ -1572,7 +1579,7 @@ function requestClientConfig(useMobile = false, useAuth = false) {
 		headers["User-Agent"] = USER_AGENT_TABLET;
 
 	const resp = http.GET(!useMobile ? URL_CONTEXT : URL_CONTEXT_M, headers, useAuth);
-	if(!resp.isOk) throw new ScriptException("Failed to request context");
+	if(!resp.isOk) throw new ScriptException("Failed to request context requestClientConfig");
 	return getClientConfig(resp.body);
 }
 function requestIOSStreamingData(videoId) {
