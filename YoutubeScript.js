@@ -145,13 +145,10 @@ source.enable = (conf, settings, saveStateStr) => {
         const batchResp = batchReq.execute();
 
 		console.log("batchResp", batchResp);
-		if (!batchResp[0].isOk) {
-			if (batchResp[0].code === 429 && batchResp[0].body.includes("captcha")) {
-				throw new CaptchaRequiredException(batchResp[0].url, batchResp[0].body);
-			}
-
+		throwIfCaptcha(batchResp[0])
+		if (!batchResp[0].isOk)
 			throw new ScriptException("Failed to request context enable !batchResp[0].isOk");
-		}
+
         if(isLoggedIn && !batchResp[1].isOk) throw new ScriptException("Failed to request context enable isLoggedIn && !batchResp[1].isOk");
 
         _clientContext = getClientConfig(batchResp[0].body)//requestClientConfig(false);
@@ -332,6 +329,7 @@ source.getContentDetails = (url, useAuth) => {
 		batch.GET(URL_YOUTUBE_DISLIKES + videoId, {}, false);
 	const resps = batch.execute();
 
+    throwIfCaptcha(resps[0]);
 	if(!resps[0].isOk)
 		throw new ScriptException("Failed to request page [" + resps[0].code + "]");
 
@@ -990,6 +988,13 @@ source.getUserSubscriptions = function() {
 
 //#endregion
 
+function throwIfCaptcha(resp) {
+    if (resp != null && resp.code === 429 && resp.body != null && resp.body.includes("captcha")) {
+        throw new CaptchaRequiredException(resp.url, resp.body);
+    }
+}
+
+
 function extractVideoIDFromUrl(url) {
 	let match = url.match(REGEX_VIDEO_URL_DESKTOP);
 	if(match)
@@ -1564,6 +1569,7 @@ function requestInitialData(url, useMobile = false, useAuth = false) {
 		headers["User-Agent"] = USER_AGENT_TABLET;
 
 	const resp = http.GET(url, headers, useAuth);
+	throwIfCaptcha(resp);
 	if(resp.isOk) {
 		const html = resp.body;
 		const initialData = getInitialData(html);
