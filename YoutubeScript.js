@@ -690,6 +690,8 @@ source.getChannelContents = (url, type, order, filters) => {
 		log("USING AUTH FOR CHANNEL");
 
 	const initialData = requestInitialData(url, false, useAuth);
+	if(!initialData)
+	    throw new ScriptException("No channel data found for: " + url);
 	const channel = extractChannel_PlatformChannel(initialData, url);
 	const contextData = {
 		authorLink: new PlatformAuthorLink(new PlatformID(PLATFORM, channel.id.value, config.id, PLATFORM_CLAIMTYPE), channel.name, channel.url, channel.thumbnail)
@@ -1884,10 +1886,10 @@ function extractSearch_SearchResults(data, contextData) {
  * @returns {PlatformChannel}
  */
 function extractChannel_PlatformChannel(initialData, sourceUrl = null) {
-	const headerRenderer = initialData.header?.c4TabbedHeaderRenderer;
+	const headerRenderer = initialData?.header?.c4TabbedHeaderRenderer;
 	if(!headerRenderer) {
 		log("Missing header renderer in structure: (" + sourceUrl + ")\n" + JSON.stringify(initialData, null, "   "));
-		throw new ScriptException("No header renderer");
+		throw new ScriptException("No header renderer for " + sourceUrl);
 	}
 
 
