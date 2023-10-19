@@ -1559,6 +1559,8 @@ function requestPage(url, headers, useAuth = false) {
 	headers = headers ?? {};
 	const headersUsed = Object.assign(headers, {"Accept-Language": "en-US"});
 	const resp = http.GET(url, headersUsed, useAuth);
+	throwIfCaptcha(resp);
+
 	if(resp.isOk)
 		return resp.body;
 	else throw new ScriptException("Failed to request page [" + resp.code + "]");
