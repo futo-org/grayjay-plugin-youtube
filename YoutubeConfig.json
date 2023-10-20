@@ -7,7 +7,7 @@
 	"sourceUrl": "https://plugins.grayjay.app/Youtube/YoutubeConfig.json",
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
-	"version": 128,
+	"version": 131,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 
@@ -26,6 +26,7 @@
 		"www.youtu.be",
 		"m.youtu.be",
 		"s.youtube.com",
+		"consent.youtube.com",
 		"suggestqueries-clients6.youtube.com",
 		"youtubei.googleapis.com",
 		"returnyoutubedislikeapi.com"
@@ -77,7 +78,8 @@
 	
 	"authentication": {
 		"userAgent": "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.5481.153 Mobile Safari/537.36",
-		"loginUrl": "https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3Dhttps%253A%252F%252Fwww.youtube.com%252F&hl=en&ec=65620",
+		"completionUrl": "https://m.youtube.com/youtubei/v1/guide?*",
+		"loginUrl": "https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3Dhttps%253A%252F%252Fwww.youtube.com%252Fchannel_switcher&hl=en&ec=65620",
 		"headersToFind": ["authorization"],
 		"domainHeadersToFind": {
 			".youtube.com": ["authorization"]

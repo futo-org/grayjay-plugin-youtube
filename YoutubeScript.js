@@ -654,6 +654,8 @@ source.isChannelUrl = (url) => {
 };
 source.getChannel = (url) => {
 	const initialData = requestInitialData(url);
+	if(!initialData)
+	    throw new ScriptException("No channel data found for: " + url);
 	return extractChannel_PlatformChannel(initialData, url);
 };
 
@@ -669,6 +671,7 @@ source.getChannelContents = (url, type, order, filters) => {
 	switch(type) {
 		case undefined:
 		case null:
+		case "":
 		case Type.Feed.Videos:
 			targetTab = "Videos";
 			url = url + URL_CHANNEL_VIDEOS;
@@ -1575,7 +1578,23 @@ function requestInitialData(url, useMobile = false, useAuth = false) {
 	const resp = http.GET(url, headers, useAuth);
 	throwIfCaptcha(resp);
 	if(resp.isOk) {
-		const html = resp.body;
+		let html = resp.body;
+
+		if(html.indexOf("<form action=\"https://consent.youtube.com/save\"") > 0) {
+		    log("Consent form required");
+		    const consentData = "gl=US&m=0&app=0&pc=yt&continue=" + encodeURIComponent(url) + "&x=6&bl=boq_identityfrontenduiserver_20231017.04_p0&hl=en&src=1&cm=2&set_eom=true";
+		    const respConsent = http.POST("https://consent.youtube.com/save", consentData, { "Content-Type": "application/x-www-form-urlencoded" }, useAuth);
+            throwIfCaptcha(respConsent);
+		    if(respConsent.isOk) {
+                const body = respConsent.body;
+                if(respConsent.body.indexOf("<form action=\"https://consent.youtube.com/save\"") > 0)
+                    throw new CriticalException("Failed to refuse Google consent [" + respConsent.code + "]")
+                else
+                    html = respConsent.body;
+		    }
+		    else throw new CriticalException("Failed to refuse Google consent [" + resp.code + "]");
+		}
+
 		const initialData = getInitialData(html);
 		return initialData;
 	}
@@ -1732,14 +1751,42 @@ function requestTvHtml5EmbedStreamingData(videoId, sts) {
 //#region Page Extraction
 function getInitialData(html, useAuth = false) {
 	const clientContext = getClientContext(useAuth);
+
+	//TODO: Fix regex instead of this temporary workaround.
+	/*
+	const startIndex = html.indexOf("var ytInitialData = ");
+	const endIndex = html.indexOf(";</script>", startIndex);
+	if(startIndex > 0 && endIndex > 0) {
+	    const raw = html.substring(startIndex + 20, endIndex);
+	    const initialDataRaw = raw.startsWith("'") && raw.endsWith("'") ?
+            decodeHexEncodedString(raw.substring(1, raw.length - 1))
+                //TODO: Find proper decoding strat
+                .replaceAll("\\\\\"", "\\\"") :
+            raw;
+		let initialData = null;
+		try{
+			initialData = JSON.parse(initialDataRaw);
+		}
+		catch(ex) {
+			console.log("Failed to parse initial data: ", initialDataRaw);
+			throw ex;
+		}
+		if(clientContext?.INNERTUBE_CONTEXT && !clientContext.INNERTUBE_CONTEXT.client.visitorData &&
+			initialData.responseContext?.webResponseContextExtensionData?.ytConfigData?.visitorData) {
+				clientContext.INNERTUBE_CONTEXT.client.visitorData = initialData.responseContext?.webResponseContextExtensionData?.ytConfigData?.visitorData
+			log("Found new visitor (auth) data: " + clientContext.INNERTUBE_CONTEXT.client.visitorData);
+		}
+		return initialData;
+	}*/
+
 	const match = html.match(REGEX_INITIAL_DATA);
 	if(match) {
-		const initialDataRaw = match[1].startsWith("'") && match[1].endsWith("'") ? 
+		const initialDataRaw = match[1].startsWith("'") && match[1].endsWith("'") ?
 			decodeHexEncodedString(match[1].substring(1, match[1].length - 1))
 				//TODO: Find proper decoding strat
 				.replaceAll("\\\\\"", "\\\"") : 
 			match[1];
-		let initialData = "null";
+		let initialData = null;
 		try{
 			initialData = JSON.parse(initialDataRaw);
 		}
@@ -1756,6 +1803,9 @@ function getInitialData(html, useAuth = false) {
 		}
 		return initialData;
 	}
+	//if(initialData == null)
+	//    log(html);
+
 	return null;
 }
 function getInitialPlayerData(html) {
@@ -2257,7 +2307,7 @@ function extractTwoColumnWatchNextResultContents_CommentsPager(contextUrl, conte
 	}
 	if(!commentsToken)
 		return new CommentPager([], false);
-	return requestCommentPager(contextUrl, commentsToken);
+	return requestCommentPager(contextUrl, commentsToken) ??  new CommentPager([], false);
 }
 function requestCommentPager(contextUrl, continuationToken) {
 	const data = requestNext({
