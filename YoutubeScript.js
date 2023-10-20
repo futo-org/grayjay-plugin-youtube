@@ -1583,7 +1583,12 @@ function requestInitialData(url, useMobile = false, useAuth = false) {
 		if(html.indexOf("<form action=\"https://consent.youtube.com/save\"") > 0) {
 		    log("Consent form required");
 		    const consentData = "gl=US&m=0&app=0&pc=yt&continue=" + encodeURIComponent(url) + "&x=6&bl=boq_identityfrontenduiserver_20231017.04_p0&hl=en&src=1&cm=2&set_eom=true";
-		    const respConsent = http.POST("https://consent.youtube.com/save", consentData, { "Content-Type": "application/x-www-form-urlencoded" }, useAuth);
+		    const respConsent = http.POST("https://consent.youtube.com/save", consentData,
+		    {
+		        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
+		        "Accept-Language": "en-US",
+		        "Content-Type": "application/x-www-form-urlencoded"
+		    }, useAuth);
             throwIfCaptcha(respConsent);
 		    if(respConsent.isOk) {
                 const body = respConsent.body;
