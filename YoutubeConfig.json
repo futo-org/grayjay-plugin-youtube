@@ -7,7 +7,7 @@
 	"sourceUrl": "https://plugins.grayjay.app/Youtube/YoutubeConfig.json",
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
-	"version": 132,
+	"version": 133,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 
@@ -29,7 +29,9 @@
 		"consent.youtube.com",
 		"suggestqueries-clients6.youtube.com",
 		"youtubei.googleapis.com",
-		"returnyoutubedislikeapi.com"
+		"returnyoutubedislikeapi.com",
+		"www.google.com",
+		"google.com"
 	],
 
 	"settings": [
