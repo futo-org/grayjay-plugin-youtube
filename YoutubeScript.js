@@ -437,14 +437,40 @@ source.getContentDetails = (url, useAuth) => {
 	return finalResult;
 };
 source.getContentChapters = function(url, initialData) {
+    //return [];
 	if(initialData == null) {
 		const html = requestPage(url);
 		initialData = getInitialData(html);
 	}
-	const rawObjects = initialData?.playerOverlays?.playerOverlayRenderer?.decoratedPlayerBarRenderer?.playerBar?.multiMarkersPlayerBarRenderer?.markersMap;
+	let rawObjects = initialData?.playerOverlays?.playerOverlayRenderer?.decoratedPlayerBarRenderer;
+	if(rawObjects.decoratedPlayerBarRenderer)
+	    rawObjects = rawObjects.decoratedPlayerBarRenderer?.playerBar?.multiMarkersPlayerBarRenderer?.markersMap;
+	else
+	    rawObjects = rawObjects.playerBar?.multiMarkersPlayerBarRenderer?.markersMap;
+
 	if(!rawObjects || rawObjects.length == 0)
-		return null;
-	
+		return [];
+
+    const chapters = rawObjects.find(x=>x.key == "DESCRIPTION_CHAPTERS");
+    if(chapters?.value?.chapters == null)
+        return [];
+
+    let result = [];
+    const validChapters = chapters.value.chapters.filter(x=> x.chapterRenderer &&  x.chapterRenderer.title && (x.chapterRenderer.timeRangeStartMillis || x.chapterRenderer.timeRangeStartMillis === 0))
+    for(let i = 0; i < validChapters.length; i++) {
+        const chapter = validChapters[i]?.chapterRenderer;
+        const chapterNext = (i + 1 < validChapters.length) ? validChapters[i + 1]?.chapterRenderer : null;
+
+        const resultChapter = {
+            name: extractText_String(chapter.title),
+            timeStart: parseInt(chapter.timeRangeStartMillis / 1000),
+            timeEnd: (chapterNext?.timeRangeStartMillis) ? parseInt(chapterNext.timeRangeStartMillis / 1000) : 999999, //Easier than re-parsing video end,
+            type: Type.Chapter.NORMAL
+        };
+        result.push(resultChapter);
+    }
+
+    return result;
 }
 
 source.getLiveChatWindow = function(url) {
