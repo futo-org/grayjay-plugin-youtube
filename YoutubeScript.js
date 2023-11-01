@@ -443,7 +443,7 @@ source.getContentChapters = function(url, initialData) {
 		initialData = getInitialData(html);
 	}
 	let rawObjects = initialData?.playerOverlays?.playerOverlayRenderer?.decoratedPlayerBarRenderer;
-	if(rawObjects.decoratedPlayerBarRenderer)
+	if(rawObjects?.decoratedPlayerBarRenderer)
 	    rawObjects = rawObjects.decoratedPlayerBarRenderer?.playerBar?.multiMarkersPlayerBarRenderer?.markersMap;
 	else
 	    rawObjects = rawObjects.playerBar?.multiMarkersPlayerBarRenderer?.markersMap;
@@ -451,7 +451,7 @@ source.getContentChapters = function(url, initialData) {
 	if(!rawObjects || rawObjects.length == 0)
 		return [];
 
-    const chapters = rawObjects.find(x=>x.key == "DESCRIPTION_CHAPTERS");
+    const chapters = rawObjects.find(x=>x.key == "DESCRIPTION_CHAPTERS") ?? rawObjects.find(x=>x.key == "AUTO_CHAPTERS");
     if(chapters?.value?.chapters == null)
         return [];
 

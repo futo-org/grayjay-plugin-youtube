@@ -7,7 +7,7 @@
 	"sourceUrl": "https://plugins.grayjay.app/Youtube/YoutubeConfig.json",
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
-	"version": 134,
+	"version": 135,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 
@@ -15,7 +15,7 @@
 	"scriptPublicKey": "",
 	"packages": ["Http", "Utilities"],
 
-	"subscriptionRateLimit": 250,
+	"subscriptionRateLimit": 140,
 	
 	"allowEval": false,
 	"allowUrls": [
