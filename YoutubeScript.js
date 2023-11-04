@@ -369,6 +369,8 @@ source.getContentDetails = (url, useAuth) => {
 	const videoDetails = extractVideoPage_VideoDetails(initialData, initialPlayerData, {
 		url: url
 	}, jsUrl);
+	if(videoDetails == null)
+	    return new UnavailableException("No video found");
 
 	if(!videoDetails.live && 
 		(videoDetails.video?.videoSources == null || videoDetails.video.videoSources.length == 0) &&
