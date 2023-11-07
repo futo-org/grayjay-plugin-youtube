@@ -17,7 +17,7 @@ const URL_SUBSCRIPTIONS_M = "https://m.youtube.com/feed/subscriptions";
 const URL_PLAYLIST = "https://youtube.com/playlist?list=";
 const URL_PLAYLISTS_M = "https://m.youtube.com/feed/library";
 
-const URL_LIVE_CHAT_HTML = "https://www.youtube.com/live_chat?v=";
+const URL_LIVE_CHAT_HTML = "https://www.youtube.com/live_chat";
 const URL_LIVE_CHAT = "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat";
 
 const URL_WATCHTIME = "https://www.youtube.com/api/stats/watchtime";
@@ -474,13 +474,44 @@ source.getContentChapters = function(url, initialData) {
 
     return result;
 }
+function getVideoDetailsHtml(url, useLogin) {
+	const shouldUseLogin = useLogin && bridge.isLoggedIn();
 
+	const headersUsed = (shouldUseLogin) ? getAuthContextHeaders(false) : {};
+	headersUsed["Accept-Language"] = "en-US";
+
+	const result = http.GET(url, headersUsed, shouldUseLogin);
+	if(result.isOk)
+	    return result.body;
+	else
+	    throw new ScriptException("Failed to get video details [" + url + "] (" + result.code + ")");
+}
 source.getLiveChatWindow = function(url) {
 	const id = extractVideoIDFromUrl(url);
 	if(!id)
 		throw new ScriptException("No valid id found");
 
-	const chatUrl = URL_LIVE_CHAT_HTML + id;
+	let chatUrl = URL_LIVE_CHAT_HTML + "?v=" + id;
+    if(bridge.isLoggedIn()) {
+        try {
+            //Try live version
+            const html = getVideoDetailsHtml(url, true);
+            const initialData = getInitialData(html)
+
+            const continuations = initialData?.contents?.twoColumnWatchNextResults?.conversationBar?.liveChatRenderer?.continuations;
+            if(continuations) {
+                const continuation = continuations.find(x=>x.reloadContinuationData?.continuation);
+                if(continuation) {
+                    chatUrl = URL_LIVE_CHAT_HTML + "?continuation=" + continuation.reloadContinuationData?.continuation;
+
+                }
+            }
+        }
+        catch(ex) {
+            log("Failed to get live chat window continuation, fallback to standard\n" + ex)
+        }
+    }
+
 
 	const chatHtmlResp = http.GET(chatUrl, {}, false);
 	if(!chatHtmlResp.isOk)
@@ -497,7 +528,7 @@ source.getLiveEvents = function(url) {
 	if(!id)
 		throw new ScriptException("No valid id found");
 
-	const chatHtmlResp = http.GET(URL_LIVE_CHAT_HTML + id, {}, false);
+	const chatHtmlResp = http.GET(URL_LIVE_CHAT_HTML + "?v=" + id, {}, false);
 	if(!chatHtmlResp.isOk)
 		throw new ScriptException("Failed to get chat html");
 	const chatHtml = chatHtmlResp.body;
@@ -2058,7 +2089,7 @@ function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextDa
 		id: new PlatformID(PLATFORM, videoDetails.videoId, config.id),
 		name: videoDetails.title,
 		thumbnails: new Thumbnails(videoDetails.thumbnail?.thumbnails.map(x=>new Thumbnail(x.url, x.height)) ?? []),
-		author: new PlatformAuthorLink(new PlatformID(PLATFORM, videoDetails.channelId, config.id, PLATFORM_CLAIMTYPE), videoDetails.author, URL_BASE + "/channel/" + videoDetails.channelId, null),
+		author: new PlatformAuthorLink(new PlatformID(PLATFORM, videoDetails.channelId, config.id, PLATFORM_CLAIMTYPE), videoDetails.author, URL_BASE + "/channel/" + videoDetails.channelId, null, null),
 		duration: parseInt(videoDetails.lengthSeconds),
 		viewCount: parseInt(videoDetails.viewCount),
 		url: contextData.url,
@@ -2294,6 +2325,12 @@ function toSRTTime(sec, withDot) {
 }
 
 function extractVideoOwnerRenderer_AuthorLink(renderer) {
+	const id = renderer?.navigationEndpoint?.browseEndpoint?.browseId;
+    const url = (!id) ? extractRuns_Url(renderer.title.runs) : URL_BASE + "/channel/" + id;
+
+    const hasMembership = !!(renderer?.membershipButton?.buttonRenderer)
+    let membershipUrl = (hasMembership) ? url + "/join" : null;
+
 	let bestThumbnail = null;
 	if(renderer.thumbnail?.thumbnails)
 		bestThumbnail = renderer.thumbnail.thumbnails[renderer.thumbnail.thumbnails.length - 1].url;
@@ -2301,13 +2338,12 @@ function extractVideoOwnerRenderer_AuthorLink(renderer) {
 	let subscribers = null;
 	if(renderer.subscriberCountText)
 		subscribers = extractHumanNumber_Integer(extractText_String(renderer.subscriberCountText));
-	
-	const id = renderer?.navigationEndpoint?.browseEndpoint?.browseId;
+
 	return new PlatformAuthorLink(new PlatformID(PLATFORM, id, config.id, PLATFORM_CLAIMTYPE), 
 		extractRuns_String(renderer.title.runs),
-		(!id) ? extractRuns_Url(renderer.title.runs) : URL_BASE + "/channel/" + id,
+		url,
 		bestThumbnail,
-		subscribers);
+		subscribers, membershipUrl);
 }
 function extractTwoColumnWatchNextResultContents_CommentsPager(contextUrl, contents) {
 	//Add additional/better details
