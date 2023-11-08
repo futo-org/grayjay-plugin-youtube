@@ -7,7 +7,7 @@
 	"sourceUrl": "https://plugins.grayjay.app/Youtube/YoutubeConfig.json",
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
-	"version": 139,
+	"version": 145,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 
@@ -29,9 +29,10 @@
 		"consent.youtube.com",
 		"suggestqueries-clients6.youtube.com",
 		"youtubei.googleapis.com",
-		"returnyoutubedislikeapi.com",
 		"www.google.com",
-		"google.com"
+		"google.com",
+		"returnyoutubedislikeapi.com",
+		"sponsor.ajay.app"
 	],
 
 	"settings": [
@@ -47,14 +48,16 @@
 			"name": "Use Login for Channels",
 			"description": "Use authenticated client for channel (videos) requests. (eg. for member videos)",
 			"type": "Boolean",
-			"default": "false"
+			"default": "false",
+			"warningDialog": "Known bug: if your Youtube language is not English, this will cause wrong dates."
 		},
 		{
 			"variable": "authDetails",
 			"name": "Use Login for video details",
 			"description": "Use authenticated client for video requests. (eg. for member videos)",
 			"type": "Boolean",
-			"default": "false"
+			"default": "false",
+			"warningDialog": "Known bug: if your Youtube language is not English, this will cause wrong dates."
 		},
 		{
 			"variable": "youtubeActivity",
@@ -69,6 +72,37 @@
 			"description": "Allow watching of age restricted videos",
 			"type": "Boolean",
 			"default": "false"
+		},
+		{
+			"variable": "sponsorBlockHeader",
+			"name": "SponsorBlock",
+			"description": "This is NOT Adblock. SponsorBlock allows you to (automatically) skip in-video sponsor segments.\nIt will harm creators.\n\nFUTO does not endorse SponsorBlock.",
+			"type": "Header"
+		},
+		{
+			"variable": "sponsorBlock",
+			"name": "Enable",
+			"description": "If enabled support creators in other ways.\nDo not freeload.",
+			"type": "Boolean",
+			"default": "false",
+			"warningDialog": "SponsorBlock will harm creators.\nDo not freeload, support creators in other ways."
+		},
+		{
+			"variable": "sponsorBlockNoVotes",
+			"name": "Allow No Vote Segments",
+			"description": "Allow segments without votes, this may cause questionable video skips.",
+			"type": "Boolean",
+			"default": "false",
+			"dependency": "sponsorBlock"
+		},
+		{
+			"variable": "sponsorBlockType",
+			"name": "Skip Type",
+			"description": "Change skip behavior for SponsorBlock. Automatic may cause unexpected skipping for some users, and thus not recommended.",
+			"type": "Dropdown",
+			"default": "0",
+			"dependency": "sponsorBlock",
+			"options": ["Manual", "Automatic"]
 		}
 	],
 

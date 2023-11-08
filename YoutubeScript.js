@@ -25,6 +25,7 @@ const URL_WATCHTIME = "https://www.youtube.com/api/stats/watchtime";
 const URL_PLAYER = "https://youtubei.googleapis.com/youtubei/v1/player";
 
 const URL_YOUTUBE_DISLIKES = "https://returnyoutubedislikeapi.com/votes?videoId=";
+const URL_YOUTUBE_SPONSORBLOCK = "https://sponsor.ajay.app/api/skipSegments?videoID=";
 
 //Newest to oldest
 const CIPHER_TEST_HASHES = ["4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
@@ -440,10 +441,123 @@ source.getContentDetails = (url, useAuth) => {
 };
 source.getContentChapters = function(url, initialData) {
     //return [];
+
+    const videoId = extractVideoIDFromUrl(url);
+
+    let sbResp = null;
+    const sbChapters = [];
+
 	if(initialData == null) {
-		const html = requestPage(url);
-		initialData = getInitialData(html);
+		const reqs = http.batch()
+		    .GET(url, getRequestHeaders({}), false);
+
+        if(_settings["sponsorBlock"] && videoId)
+            reqs.GET(URL_YOUTUBE_SPONSORBLOCK + videoId, {}, false);
+
+        const resps = reqs.execute();
+
+		if(resps[0].isOk && throwIfCaptcha(resps[0]))
+		    initialData = getInitialData(resps[0].body);
+		else
+		    throw ScriptException("Failed to get chapters (" + resps[0].code + ")");
+
+        if(_settings["sponsorBlock"] && videoId)
+            sbResp = resps[1];
 	}
+	else if(_settings["sponsorBlock"] && videoId)
+	    sbResp = http.GET(URL_YOUTUBE_SPONSORBLOCK + videoId, {}, false);
+
+	if(sbResp && sbResp.isOk) {
+	    try {
+	        const allowNoVoteSkip = !!(_settings["sponsorBlockNoVotes"]);
+	        const skipType = (_settings["sponsorBlockType"]) ? Type.Chapter.SKIP : Type.Chapter.SKIPPABLE;
+	        const sbData = JSON.parse(sbResp.body);
+	        for(let block of sbData) {
+	            if(block.actionType == "skip" &&
+	                block.segment && block.segment.length == 2 &&
+	                (allowNoVoteSkip || block.votes >= 1)) {
+	                sbChapters.push({
+	                    name: block.category,
+	                    timeStart: parseInt(block.segment[0]),
+	                    timeEnd: parseInt(block.segment[1]),
+	                    type: skipType
+	                });
+	            }
+	        }
+	    }
+	    catch(ex) {
+	        //SB Failed
+	        log("SB Failed (" + sbResp.code + "): " + ex);
+	    }
+	}
+
+	let videoChapters = [];
+	try {
+	    videoChapters = extractVideoChapters(initialData) ?? [];
+	}
+	catch(ex) {
+	    //Chapters failed
+	}
+
+    //Merge chapters
+	if(videoChapters.length > 0 && sbChapters.length > 0)
+	    return mergeSBChapters(videoChapters, sbChapters);
+	else if(videoChapters.length > 0)
+	    return videoChapters;
+	else if(sbChapters.length > 0)
+	    return sbChapters;
+	else
+	    return [];
+}
+function mergeSBChapters(videoChapters, sbChapters) {
+    let newChapters = [];
+	for(let videoChapter of videoChapters) {
+	    const sponsors = sbChapters.filter(x=>
+	        x.timeStart >= videoChapter.timeStart &&
+	        x.timeEnd <= videoChapter.timeEnd);
+	    if(sponsors.length > 0) {
+	        let startTime = videoChapter.timeStart;
+	        let skip = false;
+	        for(let sponsorI = 0; sponsorI < sponsors.length && !skip; sponsorI++) {
+	            const sponsor = sponsors[sponsorI];
+	            const nextSponsor = (sponsorI + 1 < sponsors.length) ? sponsors[sponsorI + 1] : null;
+
+                const videoChapterBefore = {
+                    name: videoChapter.name,
+                    timeStart: startTime,
+                    timeEnd: sponsor.timeStart,
+                    type: videoChapter.type
+                };
+                const videoChapterAfter = {
+                    name: videoChapter.name,
+                    timeStart: sponsor.timeEnd,
+                    timeEnd: (nextSponsor != null) ? nextSponsor.timeStart :  videoChapter.timeEnd,
+                    type: videoChapter.type
+                };
+
+                if(sponsor.timeStart <= startTime && sponsor.timeEnd <= videoChapter.timeEnd) {
+                    newChapters.push(sponsor);
+                    skip = true;
+                }
+                else if(sponsor.timeStart <= startTime) {
+                    newChapters.push(sponsor);
+                    newChapters.push(videoChapterAfter);
+                    startTime = videoChapterAfter.timeEnd;
+                }
+                else {
+                    newChapters.push(videoChapterBefore);
+                    newChapters.push(sponsor);
+                    newChapters.push(videoChapterAfter);
+                    startTime = videoChapterAfter.timeEnd;
+                }
+	        }
+	    }
+	    else
+	        newChapters.push(videoChapter);
+    }
+    return newChapters;
+}
+function extractVideoChapters(initialData) {
 	let rawObjects = initialData?.playerOverlays?.playerOverlayRenderer?.decoratedPlayerBarRenderer;
 	if(rawObjects?.decoratedPlayerBarRenderer)
 	    rawObjects = rawObjects.decoratedPlayerBarRenderer?.playerBar?.multiMarkersPlayerBarRenderer?.markersMap;
@@ -1056,6 +1170,7 @@ function throwIfCaptcha(resp) {
     if (resp != null && resp.code === 429 && resp.body != null && resp.body.includes("captcha")) {
         throw new CaptchaRequiredException(resp.url, resp.body);
     }
+    return true;
 }
 
 
@@ -1619,10 +1734,12 @@ function requestSearchContinuation(continuation, useAuth = false) {
 	return JSON.parse(resp.body);
 }
 
+function getRequestHeaders(additionalHeaders) {
+	const headers = additionalHeaders ?? {};
+	return Object.assign(headers, {"Accept-Language": "en-US"});
+}
 function requestPage(url, headers, useAuth = false) {
-	headers = headers ?? {};
-	const headersUsed = Object.assign(headers, {"Accept-Language": "en-US"});
-	const resp = http.GET(url, headersUsed, useAuth);
+	const resp = http.GET(url, getRequestHeaders(headers), useAuth);
 	throwIfCaptcha(resp);
 
 	if(resp.isOk)
