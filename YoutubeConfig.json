@@ -7,7 +7,7 @@
 	"sourceUrl": "https://plugins.grayjay.app/Youtube/YoutubeConfig.json",
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
-	"version": 145,
+	"version": 146,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 
@@ -76,7 +76,7 @@
 		{
 			"variable": "sponsorBlockHeader",
 			"name": "SponsorBlock",
-			"description": "This is NOT Adblock. SponsorBlock allows you to (automatically) skip in-video sponsor segments.\nIt will harm creators.\n\nFUTO does not endorse SponsorBlock.",
+			"description": "This is NOT Adblock. SponsorBlock allows you to (automatically) skip in-video sponsor segments.\nIt will harm creators.\n\nFUTO thinks you should only use SponsorBlock if you've paid creators directly",
 			"type": "Header"
 		},
 		{
