@@ -25,11 +25,5 @@ echo "PUBLIC_KEY: $PUBLIC_KEY"
 # Remove temporary key files
 rm tmp_private_key.pem
 
-# Read existing Config JSON into variable
-CONFIG_JSON=$(cat $CONFIG_FILE_PATH)
-
 # Update "scriptSignature" and "scriptPublicKey" fields in Config JSON
-UPDATED_CONFIG_JSON=$(echo "$CONFIG_JSON" | jq --arg signature "$SIGNATURE" --arg publicKey "$PUBLIC_KEY" '. + {scriptSignature: $signature, scriptPublicKey: $publicKey}')
-
-# Write updated JSON back to Config JSON file
-echo "$UPDATED_CONFIG_JSON" > $CONFIG_FILE_PATH
+cat $CONFIG_FILE_PATH | jq --arg signature "$SIGNATURE" --arg publicKey "$PUBLIC_KEY" '. + {scriptSignature: $signature, scriptPublicKey: $publicKey}' > temp_config.json && mv temp_config.json $CONFIG_FILE_PATH
