@@ -323,6 +323,7 @@ source.getContentDetails = (url, useAuth) => {
 
 	const headersUsed = (useLogin) ? getAuthContextHeaders(false) : {};
 	headersUsed["Accept-Language"] = "en-US";
+	headersUsed["Cookie"] = "PREF=hl=en&gl=US"
 
 	const batch = http.batch().GET(url, headersUsed, useLogin);
 		
@@ -1747,9 +1748,10 @@ function requestPage(url, headers, useAuth = false) {
 	else throw new ScriptException("Failed to request page [" + resp.code + "]");
 }
 function requestInitialData(url, useMobile = false, useAuth = false) {
-	let headers = {"Accept-Language": "en-US" };
+	let headers = {"Accept-Language": "en-US", "Cookie": "PREF=hl=en&gl=US" };
 	if(useMobile)
 		headers["User-Agent"] = USER_AGENT_TABLET;
+
 
 	const resp = http.GET(url, headers, useAuth);
 	throwIfCaptcha(resp);
