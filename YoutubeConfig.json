@@ -48,16 +48,14 @@
 			"name": "Use Login for Channels",
 			"description": "Use authenticated client for channel (videos) requests. (eg. for member videos)",
 			"type": "Boolean",
-			"default": "false",
-			"warningDialog": "Known bug: if your Youtube language is not English, this will cause wrong dates."
+			"default": "false"
 		},
 		{
 			"variable": "authDetails",
 			"name": "Use Login for video details",
 			"description": "Use authenticated client for video requests. (eg. for member videos)",
 			"type": "Boolean",
-			"default": "false",
-			"warningDialog": "Known bug: if your Youtube language is not English, this will cause wrong dates."
+			"default": "false"
 		},
 		{
 			"variable": "youtubeActivity",
