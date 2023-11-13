@@ -47,6 +47,7 @@ const REGEX_VIDEO_URL_SHARE = new RegExp("https://youtu\\.be/(.*)");
 const REGEX_VIDEO_URL_SHARE_LIVE = new RegExp("https://(.*\\.)?youtube\\.com/live/(.*)");
 const REGEX_VIDEO_URL_SHORT = new RegExp("https://(.*\\.)?youtube\\.com/shorts/(.*)");
 
+const REGEX_VIDEO_CHANNEL_URL_ID = new RegExp("https://(.*\\.)?youtube\\.com/channel/(.*)");
 const REGEX_VIDEO_CHANNEL_URL = new RegExp("https://(.*\\.)?youtube\\.com/channel/.*");
 const REGEX_VIDEO_CHANNEL_URL2 = new RegExp("https://(.*\\.)?youtube\\.com/user/.*");
 const REGEX_VIDEO_CHANNEL_URL3 =  new RegExp("https://(.*\\.)?youtube\\.com/@.*");
@@ -835,12 +836,31 @@ source.getChannel = (url) => {
 
 source.getChannelCapabilities = () => {
 	return {
-		types: [Type.Feed.Videos, Type.Feed.Streams],
+		types: [Type.Feed.Videos, Type.Feed.Streams],// (_settings?.useRSSFeed) ? Type.Feed.Subscriptions : null].filter(x=>x != null),
 		sorts: [Type.Order.Chronological, "Popular"]
 	};
 }
+/*
+		{
+			"variable": "useSubscriptionsRSS",
+			"name": "Use RSS for Subscriptions",
+			"description": "If you have lots of subscriptions (>100) this might improve the experience due to less rate-limiting. Less history and data might be worse.",
+			"type": "Boolean",
+			"default": "false",
+			"warningDialog": "This setting is mostly intended for people with > 100 subscriptions. Less history and data might be worse"
+		},
+*/
 source.getChannelContents = (url, type, order, filters) => {
 	let targetTab = null;
+
+/*
+    if(type == Type.Feed.Subscriptions) {
+        const id = extractChannelIDFromUrl(url);
+        if(id)
+            return new VideoPager(requestChannelVideosRSS(id), false);
+        else
+            type = null;
+    }*/
 
 	switch(type) {
 		case undefined:
@@ -1174,7 +1194,12 @@ function throwIfCaptcha(resp) {
     return true;
 }
 
-
+function extractChannelIDFromUrl(url) {
+    let match = url.match(REGEX_VIDEO_CHANNEL_URL_ID);
+    if(match)
+        return removeQuery(match[2]);
+    return null;
+}
 function extractVideoIDFromUrl(url) {
 	let match = url.match(REGEX_VIDEO_URL_DESKTOP);
 	if(match)
@@ -1628,6 +1653,45 @@ class SearchItemSectionPlaylistPager extends ChannelPager {
 //#endregion
 
 //#region Requests
+const CHANNEL_CONTENT_RSS_URL = "https://www.youtube.com/feeds/videos.xml?channel_id=";
+function requestChannelVideosRSS(id) {
+    return [];
+    /*
+    const url = CHANNEL_CONTENT_RSS_URL + id;
+    const resp = http.GET(url, {});
+
+    if(resp.isOk) {
+        const xmlRoot = domParser.parseFromString(resp.body);
+        const items = xmlRoot.getElementsByTagName("entry");
+        if(IS_TESTING)
+            console.log(items[0].outerHTML);
+
+        let content = [];
+        for(let entry of items) {
+            try {
+                content.push(new PlatformVideo({
+                    id: new PlatformID(PLATFORM, videoRenderer.videoId, config.id),
+                    name: title,
+                    thumbnails: extractThumbnail_Thumbnails(videoRenderer.thumbnail),
+                    author: author,
+                    uploadDate: parseInt(extractAgoText_Timestamp(extractText_String(videoRenderer.publishedTimeText))),
+                    duration: extractHumanTime_Seconds(extractText_String(videoRenderer.lengthText)),
+                    viewCount: viewCount,
+                    url: URL_BASE + "/watch?v=" + videoRenderer.videoId,
+                    isLive: false
+                }));
+            }
+            catch(ex) {
+                //Failed to parse
+
+            }
+        }
+    }
+    else
+        throw new ScriptException("Failed to get RSS [" + url + "] (" + resp.code + ")");
+    */
+}
+
 function getAuthContextHeaders(useMobile = false, contentType = null) {
 	const clientContext = getClientContext(true);
 	const result = {

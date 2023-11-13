@@ -13,7 +13,7 @@
 
 	"scriptSignature": "",
 	"scriptPublicKey": "",
-	"packages": ["Http", "Utilities"],
+	"packages": ["Http", "Utilities", "DOMParser"],
 
 	"subscriptionRateLimit": 140,
 	
