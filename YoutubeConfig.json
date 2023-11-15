@@ -7,7 +7,7 @@
 	"sourceUrl": "https://plugins.grayjay.app/Youtube/YoutubeConfig.json",
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
-	"version": 148,
+	"version": 150,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 
@@ -37,13 +37,6 @@
 
 	"settings": [
 		{
-			"variable": "youtubeDislikes",
-			"name": "Return YoutubeDislike",
-			"description": "Use Return YoutubeDislike to provide dislikes for videos",
-			"type": "Boolean",
-			"default": "false"
-		},
-		{
 			"variable": "authChannels",
 			"name": "Use Login for Channels",
 			"description": "Use authenticated client for channel (videos) requests. (eg. for member videos)",
@@ -72,9 +65,22 @@
 			"default": "false"
 		},
 		{
+			"variable": "youtubeDislikerHeader",
+			"name": "Return Youtube Dislike",
+			"description": "This is a third-party database of video dislikes that combines historic data, crowd-sourced data, and estimations, and may not be accurate.\n\n(Using https://returnyoutubedislike.com)",
+			"type": "Header"
+		},
+		{
+			"variable": "youtubeDislikes",
+			"name": "Enable",
+			"description": "Use Return YoutubeDislike to provide dislikes for videos",
+			"type": "Boolean",
+			"default": "false"
+		},
+		{
 			"variable": "sponsorBlockHeader",
 			"name": "SponsorBlock",
-			"description": "This is NOT Adblock. SponsorBlock allows you to (automatically) skip in-video sponsor segments.\nIt will harm creators.\n\nFUTO respects your decision to use SponsorBlock. But only if you're supprting creators in other ways.",
+			"description": "This is NOT Adblock. SponsorBlock allows you to (automatically) skip in-video sponsor segments.\nIt will harm creators.\n\n(Using https://sponsor.ajay.app)\n\nFUTO respects your decision to use SponsorBlock. But only if you're supprting creators in other ways.",
 			"type": "Header"
 		},
 		{
