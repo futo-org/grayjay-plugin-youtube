@@ -2384,6 +2384,30 @@ function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextDa
 
 									}
 								}
+							},
+							segmentedLikeDislikeButtonViewModel(renderer) {
+							    if(IS_TESTING)
+							        console.log("Found new likes model:", renderer);
+							    let likeButtonViewModel = renderer?.likeButtonViewModel;
+							    if(likeButtonViewModel.likeButtonViewModel) //Youtube double nested, not sure if a bug on their end which may be removed
+							        likeButtonViewModel = likeButtonViewModel.likeButtonViewModel;
+							    let toggleButtonViewModel = likeButtonViewModel?.toggleButtonViewModel;
+							    if(toggleButtonViewModel.toggleButtonViewModel) //Youtube double nested, not sure if a bug on their end which may be removed
+							        toggleButtonViewModel = toggleButtonViewModel.toggleButtonViewModel;
+
+							    const buttonViewModel = toggleButtonViewModel?.defaultButtonViewModel?.buttonViewModel;
+							    if(buttonViewModel?.title) {
+							        let num = parseInt(buttonViewModel.title);
+							        if(!isNaN(num))
+							            video.rating = new RatingLikes(num);
+                                    num = extractHumanNumber_Integer(buttonViewModel.title);
+                                    if(!isNaN(num) && num >= 0)
+                                        video.rating = new RatingLikes(num);
+                                    else
+                                        throw new ScriptException("Found unknown likes model, please report to dev:\n" + JSON.stringify(buttonViewModel.title));
+							    }
+							    else
+							        log("UNKNOWN LIKES MODEL:\n" + JSON.stringify(renderer, null, "   "));
 							}
 						});
 					});
