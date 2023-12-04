@@ -323,6 +323,7 @@ source.getContentDetails = (url, useAuth) => {
 
 	const headersUsed = (useLogin) ? getAuthContextHeaders(false) : {};
 	headersUsed["Accept-Language"] = "en-US";
+	headersUsed["Cookie"] = "PREF=hl=en&gl=US"
 
 	const batch = http.batch().GET(url, headersUsed, useLogin);
 		
@@ -478,8 +479,8 @@ source.getContentChapters = function(url, initialData) {
 	                (allowNoVoteSkip || block.votes >= 1)) {
 	                sbChapters.push({
 	                    name: block.category,
-	                    timeStart: parseInt(block.segment[0]),
-	                    timeEnd: parseInt(block.segment[1]),
+	                    timeStart: parseFloat(block.segment[0]),
+	                    timeEnd: parseFloat(block.segment[1]),
 	                    type: skipType
 	                });
 	            }
@@ -514,7 +515,7 @@ function mergeSBChapters(videoChapters, sbChapters) {
 	for(let videoChapter of videoChapters) {
 	    const sponsors = sbChapters.filter(x=>
 	        x.timeStart >= videoChapter.timeStart &&
-	        x.timeEnd <= videoChapter.timeEnd);
+	        x.timeStart <= videoChapter.timeEnd);
 	    if(sponsors.length > 0) {
 	        let startTime = videoChapter.timeStart;
 	        let skip = false;
@@ -547,8 +548,11 @@ function mergeSBChapters(videoChapters, sbChapters) {
                 else {
                     newChapters.push(videoChapterBefore);
                     newChapters.push(sponsor);
-                    newChapters.push(videoChapterAfter);
-                    startTime = videoChapterAfter.timeEnd;
+                    if(videoChapterAfter.timeStart < videoChapterAfter.timeEnd) {
+                        newChapters.push(videoChapterAfter);
+                        startTime = videoChapterAfter.timeEnd;
+                    }
+                    else startTime = videoChapterAfter.timeStart;
                 }
 	        }
 	    }
@@ -1747,9 +1751,10 @@ function requestPage(url, headers, useAuth = false) {
 	else throw new ScriptException("Failed to request page [" + resp.code + "]");
 }
 function requestInitialData(url, useMobile = false, useAuth = false) {
-	let headers = {"Accept-Language": "en-US" };
+	let headers = {"Accept-Language": "en-US", "Cookie": "PREF=hl=en&gl=US" };
 	if(useMobile)
 		headers["User-Agent"] = USER_AGENT_TABLET;
+
 
 	const resp = http.GET(url, headers, useAuth);
 	throwIfCaptcha(resp);
