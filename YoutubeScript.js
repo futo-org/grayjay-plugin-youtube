@@ -1,6 +1,7 @@
 const URL_BASE = "https://www.youtube.com";
 const URL_BASE_M = "https://m.youtube.com";
 const URL_HOME = "https://www.youtube.com";
+const URL_TRENDING = "https://www.youtube.com/feed/trending";
 const URL_CONTEXT = "https://www.youtube.com";
 const URL_CONTEXT_M = "https://m.youtube.com";
 
@@ -210,8 +211,22 @@ source.getHome = () => {
 	const tabs = extractPage_Tabs(initialData);
 	if(tabs.length == 0)
 		throw new ScriptException("No tabs found..");
+    if(tabs[0].videos.length > 0)
+	    return new RichGridPager(tabs[0], {}, USE_MOBILE_PAGES, true);
+    else
+        return source.getTrending();
+};
+
+source.getTrending = () => {
+    let initialData = requestInitialData(URL_TRENDING, USE_MOBILE_PAGES, false);
+    if(IS_TESTING)
+        console.log("getTrending initialData", initialData);
+	const tabs = extractPage_Tabs(initialData);
+	if(tabs.length == 0)
+		throw new ScriptException("No tabs found..");
 	return new RichGridPager(tabs[0], {}, USE_MOBILE_PAGES, true);
 };
+
 
 //Search
 source.searchSuggestions = (query) => {
@@ -1542,6 +1557,18 @@ class RichGridPager extends VideoPager {
 					contents: newData
 				};
 				const newItemSection = extractRichGridRenderer_Shelves(fakeRichGrid, this.context);
+
+				if(newItemSection.videos && newItemSection.videos.length == 0 && newItemSection.shelves && newItemSection.shelves.length > 0) {
+				    if(IS_TESTING)
+				        console.log("No videos in root found, checking shelves", newItemSection);
+				    let vids = [];
+				    for(let i = 0; i < newItemSection.shelves.length; i++) {
+				        const shelf = newItemSection.shelves[i];
+                        vids = vids.concat(shelf.videos);
+				    }
+				    newItemSection.videos = vids;
+				}
+
 				if(newItemSection.videos)
 					return new RichGridPager(newItemSection, this.context, this.useMobile, this.useAuth);
 			}
@@ -2664,8 +2691,8 @@ function extractTwoColumnBrowseResultsRenderer_Tabs(renderer, contextData) {
 function extractRichGridRenderer_Shelves(richGridRenderer, contextData) {
 	const contents = richGridRenderer.contents;
 
-	const shelves = [];
-	const videos = [];
+	let shelves = [];
+	let videos = [];
 
 	let continuation = null;
 
@@ -2680,6 +2707,14 @@ function extractRichGridRenderer_Shelves(richGridRenderer, contextData) {
 			},
 			continuationItemRenderer(renderer) {
 				continuation = extractContinuationItemRenderer_Continuation(renderer, contextData);
+			},
+			itemSectionRenderer(renderer) {
+		        const items = extractItemSectionRenderer_Shelves(renderer);
+
+		        if(items.shelves)
+		            shelves = shelves.concat(items.shelves);
+		        if(items.videos)
+		            videos = videos.concat(items.videos);
 			},
 			default(name) {
 				log("Unknown shelf/section renderer in extractRichGridRenderer_Shelves: " + name);
@@ -2760,6 +2795,11 @@ function extractItemSectionRenderer_Shelves(itemSectionRenderer, contextData) {
 			    if(playlist)
 			        playlists.push(playlist);
 			},
+			shelfRenderer(renderer) {
+			    const shelf = extractShelfRenderer_Shelf(renderer);
+			    if(shelf)
+				    shelves.push(shelf);
+			},
 			default() {
 				const video = switchKeyVideo(item, contextData);
 				if(video)
@@ -2814,7 +2854,19 @@ function switchKeyVideo(content, contextData) {
 
 //#region Element Extractors
 function extractShelfRenderer_Shelf(shelfRenderer, contextData) {
-	throw new ScriptException("Not implemented");
+    let name = extractText_String(shelfRenderer.title);
+    return switchKey(shelfRenderer.content, {
+        expandedShelfContentsRenderer(renderer) {
+            return {
+                name: name,
+                type: "Shelf",
+                videos: switchKeyVideos(renderer.items)
+            };
+        },
+        default() {
+            return null;
+        }
+    });
 }
 function extractContinuationItemRenderer_Continuation(continuationItemRenderer) {
 	return  {
