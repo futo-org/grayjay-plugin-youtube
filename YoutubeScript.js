@@ -2435,6 +2435,8 @@ function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextDa
                                     num = extractHumanNumber_Integer(buttonViewModel.title);
                                     if(!isNaN(num) && num >= 0)
                                         video.rating = new RatingLikes(num);
+                                    else if(buttonViewModel.title?.toLowerCase() == "like")
+                                        video.rating = new RatingLikes(0);
                                     else
                                         throw new ScriptException("Found unknown likes model, please report to dev:\n" + JSON.stringify(buttonViewModel.title));
 							    }
