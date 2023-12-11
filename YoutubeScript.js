@@ -47,6 +47,8 @@ const REGEX_VIDEO_URL_DESKTOP = new RegExp("https://(.*\\.)?youtube\\.com/watch.
 const REGEX_VIDEO_URL_SHARE = new RegExp("https://youtu\\.be/(.*)");
 const REGEX_VIDEO_URL_SHARE_LIVE = new RegExp("https://(.*\\.)?youtube\\.com/live/(.*)");
 const REGEX_VIDEO_URL_SHORT = new RegExp("https://(.*\\.)?youtube\\.com/shorts/(.*)");
+const REGEX_VIDEO_URL_CLIP = new RegExp("https://(.*\\.)?youtube\\.com/clip/(.*)[?]?");
+const REGEX_VIDEO_URL_EMBED = new RegExp("https://(.*\\.)?youtube\\.com/embed/([^?]+)");
 
 const REGEX_VIDEO_CHANNEL_URL = new RegExp("https://(.*\\.)?youtube\\.com/channel/.*");
 const REGEX_VIDEO_CHANNEL_URL2 = new RegExp("https://(.*\\.)?youtube\\.com/user/.*");
@@ -321,12 +323,12 @@ source.getChannelTemplateByClaimMap = () => {
 
 //Video
 source.isContentDetailsUrl = (url) => {
-	return REGEX_VIDEO_URL_DESKTOP.test(url) || REGEX_VIDEO_URL_SHARE.test(url) || REGEX_VIDEO_URL_SHARE_LIVE.test(url) || REGEX_VIDEO_URL_SHORT.test(url);
+	return REGEX_VIDEO_URL_DESKTOP.test(url) || REGEX_VIDEO_URL_SHARE.test(url) || REGEX_VIDEO_URL_SHARE_LIVE.test(url) || REGEX_VIDEO_URL_SHORT.test(url) || REGEX_VIDEO_URL_CLIP.test(url) || REGEX_VIDEO_URL_EMBED.test(url);
 };
 source.getContentDetails = (url, useAuth) => {
 	useAuth = !!_settings?.authDetails || !!useAuth;
 
-    url = convertIfShortUrl(url);
+    url = convertIfOtherUrl(url);
 
 	const clientContext = getClientContext(false);
 
@@ -815,7 +817,7 @@ function constructUrl(base, queryParams) {
 }
 
 source.getComments = (url) => {
-    url = convertIfShortUrl(url);
+    url = convertIfOtherUrl(url);
 
 	const html = requestPage(url);
 	const initialData = getInitialData(html);
@@ -3158,6 +3160,21 @@ function extractCommentRenderer_Comment(contextUrl, commentRenderer, replyCount,
 }
 //#endregion
 
+function convertIfOtherUrl(url) {
+    url = convertIfShortUrl(url);
+    url = convertIfEmbedUrl(url);
+    return url;
+}
+function convertIfEmbedUrl(url) {
+    const embedMatch = url.match(REGEX_VIDEO_URL_EMBED);
+    if(embedMatch && embedMatch.length == 3) {
+        let id = embedMatch[2];
+        if(id.indexOf("?") > 0)
+            id = id.substring(0, id.indexOf("?"));
+        url = URL_BASE + "/watch?v=" + id;
+    }
+    return url;
+}
 function convertIfShortUrl(url) {
     const shortMatch = url.match(REGEX_VIDEO_URL_SHORT);
     if(shortMatch && shortMatch.length == 3) {
