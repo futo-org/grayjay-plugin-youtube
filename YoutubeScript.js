@@ -3597,9 +3597,15 @@ function ytLangIdToLanguage(id) {
 	if(!id)
 		return Language.UNKNOWN;
 	const langParts = id?.split(".");
-	const langPart = (langParts && langParts.length > 0) ? langParts[0] : "";
+	let langPart = (langParts && langParts.length > 0) ? langParts[0] : "";
 	if(ytLangMap[langPart])
-		return ytLangMap[langPart];
+	    return ytLangMap[langPart]; //Backwards compat
+	if(langPart.indexOf("-") > 0)
+	   langPart = langPart.split("-")[0].trim();
+	if(ytLangMap[langPart])
+	    return ytLangMap[langPart]; //Backwards compat
+	if(langPart && langPart.length > 0)
+	    return langPart.trim();
 	return Language.UNKNOWN;
 }
 
