@@ -459,6 +459,44 @@ source.getContentDetails = (url, useAuth) => {
 };
 source.getContentChapters = function(url, initialData) {
     //return [];
+    if(REGEX_VIDEO_URL_CLIP.test(url)) {
+		const videoPage = http.GET(url, getRequestHeaders({}), false);
+
+		if(videoPage.isOk && throwIfCaptcha(videoPage)) {
+		    const initialData = getInitialData(videoPage.body);
+		    const playerData = getInitialPlayerData(videoPage.body);
+
+		    console.log("Clip data", playerData?.clipConfig);
+		    const clipConfig = playerData?.clipConfig;
+		    if(clipConfig?.endTimeMs && clipConfig?.startTimeMs) {
+		        const startTime = parseInt(clipConfig.startTimeMs) / 1000;
+		        const endTime = parseInt(clipConfig.endTimeMs) / 1000;
+		        return [
+		            {
+                        name: "Non-Clip",
+                        timeStart: 0,
+                        timeEnd: startTime,
+                        type: Type.Chapter.SKIPPABLE
+                    },
+		            {
+                        name: "Clip",
+                        timeStart: startTime,
+                        timeEnd: endTime,
+                        type: Type.Chapter.NORMAL
+                    },
+		            {
+                        name: "Non-Clip",
+                        timeStart: endTime,
+                        timeEnd: 99999999,
+                        type: Type.Chapter.SKIPPABLE
+                    },
+		        ];
+		    }
+		    else
+		        return [];
+		}
+		else return [];
+    }
 
     const videoId = extractVideoIDFromUrl(url);
 
