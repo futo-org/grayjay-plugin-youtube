@@ -2600,8 +2600,10 @@ function requestCommentPager(contextUrl, continuationToken) {
 	if(IS_TESTING)
 	    console.log("data", data);
 	const endpoints = data?.onResponseReceivedCommands ?? data?.onResponseReceivedActions ?? data?.onResponseReceivedEndpoints;
-	if(!endpoints)
-		return null;
+	if(!endpoints) {
+	    log("Comment object:\n" + JSON.stringify(data, null, "   "));
+	    throw new ScriptException("No comment endpoints provided by Youtube");
+	}
 	for(let i = 0; i < endpoints.length; i++) {
 		const endpoint = endpoints[i];
 		const continuationItems = endpoint.reloadContinuationItemsCommand?.continuationItems ??
@@ -2642,7 +2644,8 @@ function requestCommentPager(contextUrl, continuationToken) {
 			}
 		}
 	}
-	return null;
+	log("Comment object:\n" + JSON.stringify(data, null, "   "));
+	throw new ScriptException("No valid comment endpoint provided by Youtube");
 }
 
 function extractSingleColumnBrowseResultsRenderer_Tabs(renderer, contextData) {
