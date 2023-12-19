@@ -452,7 +452,7 @@ source.getContentDetails = (url, useAuth) => {
 		};
 	}
 	finalResult.getContentChapters = function() {
-		source.getContentChapters(url, finalResult.__initialData);
+		return source.getContentChapters(url, finalResult.__initialData);
 	};
 
 	return finalResult;
@@ -548,8 +548,22 @@ source.getContentChapters = function(url, initialData) {
 	}
 
 	let videoChapters = [];
+
+    const queryParams = parseQueryString(url);
+    if(Type.Chapter.SKIPONCE && queryParams["t"]) {
+        const initialSkip = parseInt(queryParams["t"]);
+        if(!isNaN(initialSkip)) {
+            videoChapters.push({
+                name: "InitialSkip",
+                timeStart: parseFloat(-1),
+                timeEnd: parseFloat(initialSkip),
+                type: Type.Chapter.SKIPONCE
+            });
+        }
+    }
+
 	try {
-	    videoChapters = extractVideoChapters(initialData) ?? [];
+	    videoChapters = videoChapters.concat(extractVideoChapters(initialData) ?? []);
 	}
 	catch(ex) {
 	    //Chapters failed
