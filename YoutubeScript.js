@@ -2203,41 +2203,95 @@ function extractSearch_SearchResults(data, contextData) {
  * @returns {PlatformChannel}
  */
 function extractChannel_PlatformChannel(initialData, sourceUrl = null) {
-	const headerRenderer = initialData?.header?.c4TabbedHeaderRenderer;
-	if(!headerRenderer) {
-		log("Missing header renderer in structure: (" + sourceUrl + ")\n" + JSON.stringify(initialData, null, "   "));
-		throw new ScriptException("No header renderer for " + sourceUrl);
-	}
+    if(initialData?.header?.c4TabbedHeaderRenderer) {
+        const headerRenderer = initialData?.header?.c4TabbedHeaderRenderer;
+
+        if(IS_TESTING)
+            console.log("Initial Data", initialData);
+
+        const thumbnailTargetWidth = 200;
+        const thumbnails = headerRenderer.avatar?.thumbnails;
+        const thumbnail = (thumbnails && thumbnails.length > 0) ? thumbnails.sort((a,b)=>Math.abs(a.width - thumbnailTargetWidth) - Math.abs(b.width - thumbnailTargetWidth))[0] : { url: "" };
+        const banners = headerRenderer.banner?.thumbnails;
+        const bannerTargetWidth = 1080;
+        const banner = (banners && banners.length > 0) ? banners.sort((a,b)=>Math.abs(a.width - bannerTargetWidth) - Math.abs(b.width - bannerTargetWidth))[0] : { url: "" };
+
+        const idUrl = headerRenderer?.navigationEndpoint?.browseEndpoint?.browseId ?
+            URL_BASE + "/channel/" + headerRenderer.navigationEndpoint.browseEndpoint.browseId :
+            null;
+        const canonicalUrl = headerRenderer?.navigationEndpoint?.browseEndpoint?.canonicalBaseUrl ?
+            URL_BASE + headerRenderer.navigationEndpoint.browseEndpoint.canonicalBaseUrl :
+            null;
+
+        return new PlatformChannel({
+            id: new PlatformID(PLATFORM, headerRenderer.channelId, config.id, PLATFORM_CLAIMTYPE),
+            name: headerRenderer.title ?? "",
+            thumbnail: thumbnail.url,
+            banner: banner.url,
+            subscribers: Math.max(0, extractHumanNumber_Integer(extractText_String(headerRenderer.subscriberCountText))),
+            description: "",
+            url: idUrl,
+            urlAlternatives: [idUrl, canonicalUrl],
+            links: {}
+        });
+    }
+    else if(initialData?.header?.pageHeaderRenderer) {
+        log("New channel model");
+        const headerRenderer = initialData?.header?.pageHeaderRenderer;
+
+        if(IS_TESTING)
+            console.log("Initial Data (New Model)", initialData);
+
+        const thumbnailTargetWidth = 200;
+        const thumbnails = headerRenderer?.content?.pageHeaderViewModel?.image?.decoratedAvatarViewModel?.avatar?.avatarViewModel?.image?.sources;
+        const thumbnail = (thumbnails && thumbnails.length > 0) ? thumbnails.sort((a,b)=>Math.abs(a.width - thumbnailTargetWidth) - Math.abs(b.width - thumbnailTargetWidth))[0] : { url: "" };
+        const banners = headerRenderer?.content?.pageHeaderViewModel?.banner?.imageBannerViewModel?.image?.sources;
+        const bannerTargetWidth = 1080;
+        const banner = (banners && banners.length > 0) ? banners.sort((a,b)=>Math.abs(a.width - bannerTargetWidth) - Math.abs(b.width - bannerTargetWidth))[0] : { url: "" };
+
+        const id = initialData?.metadata?.channelMetadataRenderer?.externalId;
+        if(!id) {
+            log("ID not found in new channel viewmodel:" + JSON.stringify(id, null, "   "));
+            throw new ScriptException("ID Not found in new channel view model");
+        }
 
 
-	if(IS_TESTING)
-		console.log("Initial Data", initialData);
+        const idUrl = id ?
+            URL_BASE + "/channel/" + id:
+            null;
+        const canonicalUrl = initialData?.metadata?.channelMetadataRenderer?.vanityChannelUrl ?
+            initialData?.metadata?.channelMetadataRenderer?.vanityChannelUrl :
+            null;
 
-	const thumbnailTargetWidth = 200;
-	const thumbnails = headerRenderer.avatar?.thumbnails;
-	const thumbnail = (thumbnails && thumbnails.length > 0) ? thumbnails.sort((a,b)=>Math.abs(a.width - thumbnailTargetWidth) - Math.abs(b.width - thumbnailTargetWidth))[0] : { url: "" };
-	const banners = headerRenderer.banner?.thumbnails;
-	const bannerTargetWidth = 1080;
-	const banner = (banners && banners.length > 0) ? banners.sort((a,b)=>Math.abs(a.width - bannerTargetWidth) - Math.abs(b.width - bannerTargetWidth))[0] : { url: "" };
-	
-	const idUrl = headerRenderer?.navigationEndpoint?.browseEndpoint?.browseId ?
-	    URL_BASE + "/channel/" + headerRenderer.navigationEndpoint.browseEndpoint.browseId :
-	    null;
-	const canonicalUrl = headerRenderer?.navigationEndpoint?.browseEndpoint?.canonicalBaseUrl ?
-	    URL_BASE + headerRenderer.navigationEndpoint.browseEndpoint.canonicalBaseUrl :
-	    null;
+        let subCount = 0;
+        const metadataRows = headerRenderer?.content?.pageHeaderViewModel?.metadata?.contentMetadataViewModel?.metadataRows;
+        for(let row of metadataRows) {
+            const subsStr = row.metadataParts.find(x=>x.text?.content?.indexOf("subscribers") > 0)?.text?.content;
+            if(!subsStr)
+                continue;
+            const subsNum = extractHumanNumber_Integer(extractText_String(subsStr));
+            if(!isNaN(subsNum) && subsNum > 0) {
+               subCount = subsNum;
+                break;
+            }
+        }
 
-	return new PlatformChannel({
-		id: new PlatformID(PLATFORM, headerRenderer.channelId, config.id, PLATFORM_CLAIMTYPE),
-		name: headerRenderer.title ?? "",
-		thumbnail: thumbnail.url,
-		banner: banner.url,
-		subscribers: Math.max(0, extractHumanNumber_Integer(extractText_String(headerRenderer.subscriberCountText))),
-		description: "",
-		url: idUrl,
-		urlAlternatives: [idUrl, canonicalUrl],
-		links: {}
-	});
+        return new PlatformChannel({
+            id: new PlatformID(PLATFORM, id, config.id, PLATFORM_CLAIMTYPE),
+            name: initialData?.metadata?.channelMetadataRenderer?.title ?? "",
+            thumbnail: thumbnail.url,
+            banner: banner.url,
+            subscribers: Math.max(0, subCount),
+            description: initialData?.metadata?.channelMetadataRenderer?.description,
+            url: idUrl,
+            urlAlternatives: [idUrl, canonicalUrl].filter(x=>x != null),
+            links: {}
+        });
+    }
+    else {
+        log("Missing header: (" + sourceUrl + ")\n" + JSON.stringify(initialData, null, "   "));
+        throw new ScriptException("No header for " + sourceUrl);
+    }
 }
 /**
  * Extracts multiple tabs from a page that contains a tab rendering
