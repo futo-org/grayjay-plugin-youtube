@@ -226,7 +226,7 @@ source.getTrending = () => {
 	const tabs = extractPage_Tabs(initialData);
 	if(tabs.length == 0)
 		throw new ScriptException("No tabs found..");
-	return new RichGridPager(tabs[0], {}, USE_MOBILE_PAGES, true);
+	return new RichGridPager(tabs[0], {}, USE_MOBILE_PAGES, false);
 };
 
 
