@@ -7,7 +7,7 @@
 	"sourceUrl": "https://plugins.grayjay.app/Youtube/YoutubeConfig.json",
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
-	"version": 160,
+	"version": 161,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 
@@ -61,6 +61,13 @@
 			"variable": "allowAgeRestricted",
 			"name": "Allow Age Restricted",
 			"description": "Allow watching of age restricted videos",
+			"type": "Boolean",
+			"default": "false"
+		},
+		{
+			"variable": "allowControversialRestricted",
+			"name": "Allow Controversial Restricted",
+			"description": "Allow watching of controversial restricted videos",
 			"type": "Boolean",
 			"default": "false"
 		},

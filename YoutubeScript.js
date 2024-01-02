@@ -375,6 +375,18 @@ source.getContentDetails = (url, useAuth) => {
 			throw new AgeException("Age restricted videos can be allowed using the plugin settings");
 		}
 	}
+	const controversial = initialPlayerData.playabilityStatus?.errorScreen?.playerErrorMessageRenderer?.reason?.simpleText?.indexOf("following content may") > 0 ?? false;
+	if(controversial) {
+		if (_settings["allowControversialRestricted"]) {
+			const sts = _sts[jsUrl];
+			if (!initialPlayerData.streamingData && sts) {
+				initialPlayerData = requestTvHtml5EmbedStreamingData(initialPlayerData.videoDetails.videoId, sts);
+				console.log("Filled missing streaming data using TvHtml5Embed.");
+			}
+		} else {
+			throw new UnavailableException("Controversial restricted videos can be allowed using the plugin settings");
+		}
+	}
 	
 	if (initialPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED") {
 		throw new ScriptException("Login required\nReason: " + initialPlayerData?.playabilityStatus?.reason);
