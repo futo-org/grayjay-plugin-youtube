@@ -3255,7 +3255,7 @@ function extractVideoWithContextRenderer_AuthorLink(videoRenderer) {
 }
 function extractVideoRenderer_AuthorLink(videoRenderer) {
 	const id = videoRenderer.channelThumbnailSupportedRenderers.channelThumbnailWithLinkRenderer?.navigationEndpoint?.browseEndpoint?.browseId;
-	const name = extractRuns_String(videoRenderer.ownerText.runs);
+	const name = extractText_String(videoRenderer.ownerText)//extractRuns_String(videoRenderer.ownerText.runs);
 	const channelIcon = videoRenderer.channelThumbnailSupportedRenderers.channelThumbnailWithLinkRenderer;
 	const thumbUrl = channelIcon.thumbnail.thumbnails[0].url;
 	const channelUrl = (!id) ? extractRuns_Url(videoRenderer.ownerText.runs) : URL_BASE + "/channel/" + id;
