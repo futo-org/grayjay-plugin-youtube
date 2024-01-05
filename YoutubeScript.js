@@ -356,7 +356,7 @@ source.getContentDetails = (url, useAuth) => {
 	const initialData = getInitialData(html);
 	let initialPlayerData = getInitialPlayerData(html);
 
-    if(initialPlayerData.playabilityStatus.status == "UNPLAYABLE")
+    if(initialPlayerData?.playabilityStatus?.status == "UNPLAYABLE")
 		throw new UnavailableException("Video unplayable");
 	
 	const jsUrlMatch = html.match("PLAYER_JS_URL\"\\s?:\\s?\"(.*?)\"");
@@ -401,7 +401,7 @@ source.getContentDetails = (url, useAuth) => {
 		url: url
 	}, jsUrl);
 	if(videoDetails == null)
-	    return new UnavailableException("No video found");
+	    throw new UnavailableException("No video found");
 
 	if(!videoDetails.live && 
 		(videoDetails.video?.videoSources == null || videoDetails.video.videoSources.length == 0) &&
