@@ -7,7 +7,7 @@
 	"sourceUrl": "https://plugins.grayjay.app/Youtube/YoutubeConfig.json",
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
-	"version": 163,
+	"version": 164,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 
@@ -132,7 +132,8 @@
 			".youtube.com": ["authorization"]
 		},
 		"cookiesToFind": ["SIDCC"],
-		"cookiesExclOthers": false
+		"cookiesExclOthers": false,
+		"loginWarning": "You must select a profile after login for authentication to complete."
 	},
 
 	"supportedClaimTypes": [2],
