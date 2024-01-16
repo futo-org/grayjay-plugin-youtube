@@ -28,6 +28,8 @@ const URL_PLAYER = "https://youtubei.googleapis.com/youtubei/v1/player";
 const URL_YOUTUBE_DISLIKES = "https://returnyoutubedislikeapi.com/votes?videoId=";
 const URL_YOUTUBE_SPONSORBLOCK = "https://sponsor.ajay.app/api/skipSegments?videoID=";
 
+const URL_YOUTUBE_RSS = "https://www.youtube.com/feeds/videos.xml?channel_id=";
+
 //Newest to oldest
 const CIPHER_TEST_HASHES = ["4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
 const CIPHER_TEST_PREFIX = "/s/player/";
@@ -50,7 +52,7 @@ const REGEX_VIDEO_URL_SHORT = new RegExp("https://(.*\\.)?youtube\\.com/shorts/(
 const REGEX_VIDEO_URL_CLIP = new RegExp("https://(.*\\.)?youtube\\.com/clip/(.*)[?]?");
 const REGEX_VIDEO_URL_EMBED = new RegExp("https://(.*\\.)?youtube\\.com/embed/([^?]+)");
 
-const REGEX_VIDEO_CHANNEL_URL = new RegExp("https://(.*\\.)?youtube\\.com/channel/.*");
+const REGEX_VIDEO_CHANNEL_URL = new RegExp("https://(.*\\.)?youtube\\.com/channel/(.*)");
 const REGEX_VIDEO_CHANNEL_URL2 = new RegExp("https://(.*\\.)?youtube\\.com/user/.*");
 const REGEX_VIDEO_CHANNEL_URL3 =  new RegExp("https://(.*\\.)?youtube\\.com/@.*");
 
@@ -469,6 +471,7 @@ source.getContentDetails = (url, useAuth) => {
 
 	return finalResult;
 };
+
 source.getContentChapters = function(url, initialData) {
     //return [];
     if(REGEX_VIDEO_URL_CLIP.test(url)) {
@@ -980,6 +983,60 @@ source.getChannelContents = (url, type, order, filters) => {
 
 	return new RichGridPager(tab, contextData);
 };
+/*
+source.peekChannelContents = function(url) {
+    const match = url.match(REGEX_VIDEO_CHANNEL_URL);
+    if(!match || match.length != 3)
+        return {};
+    const id = removeQuery(match[2]);
+    if(!id)
+        return {};
+    const rssUrl = URL_YOUTUBE_RSS + id;
+
+    const xmlResp = http.GET(rssUrl);
+
+    if(!xmlResp.isOk)
+        return null;
+
+    const xml = domParser.parseFromString(xmlResp.body).querySelector("feed");
+    const xmlTree = JSON.parse(xml.toNodeTreeJson())?.children;
+    console.log(xmlTree);
+    if(!xmlTree || xmlTree.length <= 0)
+        return {};
+    const authorNode = xmlTree?.find(x=>x.name == "author");
+    const entryNodes = xmlTree?.filter(x=>x.name == "entry") ?? [];
+    const videos = [];
+
+    const author = new PlatformAuthorLink(
+        new PlatformID(PLATFORM, null, id, PLATFORM_CLAIMTYPE),
+        authorNode.children.find(x=>x.name == "name").value,
+        authorNode.children.find(x=>x.name == "uri").value,
+        ""
+    )
+
+    for(let entry of entryNodes) {
+        const group = entry.children.find(x=>x.name == 'media:group');
+        const community = group.children.find(x=>x.name == "media:community");
+
+        videos.push(new PlatformVideo({
+			id: new PlatformID(PLATFORM, entry.children.find(x=>x.name == 'yt:videoid').value, config.id),
+			name: group.children.find(x=>x.name == 'media:title').value,
+			thumbnails: new Thumbnails([
+			    new Thumbnail(group.children.find(x=>x.name == 'media:thumbnail')?.attributes["url"], 1)
+			]),
+			author: author,
+			uploadDate: parseInt(new Date(entry.children.find(x=>x.name == "updated").value).getTime() / 1000),
+			duration: 0,
+			viewCount: parseInt(community.children.find(x=>x.name == "media:statistics").attributes["views"]) ?? 0,
+			url: entry.children.find(x=>x.name == "link").attributes["href"],
+			isLive: false
+		}));
+    }
+
+    const result = {};
+    result[Type.Feed.Mixed] = videos;
+    return result;
+}; */
 
 source.searchPlaylists = function(query, type, order, filters) {
     const data = requestSearch(query, false, SEARCH_PLAYLISTS_PARAM);
@@ -1166,12 +1223,16 @@ source.getUserPlaylists = function() {
 source.getUserSubscriptions = function() {
 	if (!bridge.isLoggedIn()) {
 		bridge.log("Failed to retrieve subscriptions page because not logged in.");
-		return [];
+		throw new ScriptException("Not logged in");
 	}
 	
 	let subsPage = requestPage(URL_SUB_CHANNELS_M, { "User-Agent": USER_AGENT_PHONE }, true);
 	let result = getInitialData(subsPage);
 
+	if(!result) {
+	    log(subsPage);
+		throw new ScriptException("No initial data found or page unavailable");
+    }
 	if(IS_TESTING) {
 		console.log("Initial Data:", result);
 	}
@@ -1771,7 +1832,7 @@ function requestNext(body, useAuth = false) {
 	}
 	return JSON.parse(resp.body);
 }
-function requestBrowse(body, useMobile = false, useAuth = false) {
+function requestBrowse(body, useMobile = false, useAuth = false, attempt = 0) {
 	const clientContext = getClientContext(useAuth);
 	if(!clientContext || !clientContext.INNERTUBE_CONTEXT || !clientContext.INNERTUBE_API_KEY)
 		throw new ScriptException("Missing client context");
@@ -1786,8 +1847,17 @@ function requestBrowse(body, useMobile = false, useAuth = false) {
 	const url = baseUrl + "?key=" + clientContext.INNERTUBE_API_KEY + "&prettyPrint=false";
 	const resp = http.POST(url, JSON.stringify(body), headers, useAuth);
 	if(!resp.isOk) {
+	    if((resp.code == 408 || resp.code == 500) && attempt < 1) {
+	        return requestBrowse(body, useMobile, useAuth, attempt + 1);
+	    }
+
 		log("Fail Url: " + url + "\nFail Body:\n" + JSON.stringify(body));
-		throw new ScriptException("Failed to browse [" + resp.code + "]");
+
+		if(resp.code != 500 || !bridge.isLoggedIn())
+		    throw new ScriptException("Failed to browse [" + resp.code + "]");
+		else {
+		    throw new ScriptLoginRequiredException("Failed to browse [" + resp.code + "]\nLogin might have expired, try logging in again");
+		}
 	}
 	return JSON.parse(resp.body);
 }
