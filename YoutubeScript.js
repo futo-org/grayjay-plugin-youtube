@@ -1383,7 +1383,7 @@ class YTRequestModifier extends RequestModifier {
 	 * @param {{[key: string]: string}} headers The headers used
 	 * @returns {Request}
 	 */
-	modifyRequest(url, headers) {
+	modifyRequest(url, headers, method, body) {
 		const u = new URL(url);
 		const isVideoPlaybackUrl = u.pathname.startsWith('/videoplayback');
 
@@ -1426,9 +1426,13 @@ class YTRequestModifier extends RequestModifier {
 			}
 		}
 
+		headers["Content-Length"] = "2";
+
         return {
             url: u.toString(),
-			headers: headers
+			headers: headers,
+			method: "POST",
+			body: "x\u0000"
 		}
     }
 }
