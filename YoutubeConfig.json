@@ -87,7 +87,7 @@
 		{
 			"variable": "sponsorBlockHeader",
 			"name": "SponsorBlock",
-			"description": "This is NOT Adblock. SponsorBlock allows you to (automatically) skip in-video sponsor segments.\nIt will harm creators.\n\n(Using https://sponsor.ajay.app)\n\nFUTO respects your decision to use SponsorBlock. But only if you're supprting creators in other ways.",
+			"description": "This is NOT Adblock. SponsorBlock allows you to (automatically) skip in-video sponsor segments.\nIt will harm creators.\n\n(Using https://sponsor.ajay.app)\n\nFUTO respects your decision to use SponsorBlock. But only if you're supporting creators in other ways.",
 			"type": "Header"
 		},
 		{
