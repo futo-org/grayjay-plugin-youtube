@@ -2794,6 +2794,48 @@ function requestCommentPager(contextUrl, continuationToken) {
 			}
 		}
 	}
+
+	if(data?.frameworkUpdates?.entityBatchUpdate?.mutations) {
+		log("New comments model");
+		const mutations = data.frameworkUpdates.entityBatchUpdate.mutations;
+		if(mutations.length > 0) {
+			let commentsContinuation = null;
+			const comments = [];
+			
+			let parentItems = [];
+			for(let i = 0; i < endpoints.length; i++)
+				parentItems.push(...(endpoints[i].reloadContinuationItemsCommand?.continuationItems ??
+					endpoints[i].appendContinuationItemsAction?.continuationItems ?? 
+					[]));
+			parentItems = parentItems.filter(x=>x.commentThreadRenderer);
+			const commentObjects = mutations.filter(x=>x?.payload?.commentEntityPayload);
+
+			for(let commentObject of commentObjects) {
+				const cobj = commentObject?.payload?.commentEntityPayload ?? {};
+				const parent = parentItems.find(x=>x.commentThreadRenderer?.commentViewModel?.commentViewModel?.commentKey == commentObject.entityKey);
+				const replyContents = parent?.commentThreadRenderer?.replies?.commentRepliesRenderer?.contents;
+				const replyContinuation = ((replyContents?.length ?? 0) > 0) ? replyContents[0].continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token : null;
+				
+				const authorEndpoint = cobj.author?.channelCommand?.innertubeCommand?.commandMetadata?.webCommandMetadata?.url;
+				comments.push(new YTComment({
+					contextUrl: contextUrl,
+					author: new PlatformAuthorLink(new PlatformID(PLATFORM, null, config.id, PLATFORM_CLAIMTYPE), cobj.author.displayName, (authorEndpoint) ? URL_BASE + authorEndpoint : "", cobj.author.avatarThumbnailUrl),
+					message: cobj.properties?.content?.content ?? "",
+					rating: new RatingLikes(extractHumanNumber_Integer(cobj.toolbar?.likeCountLiked) ?? 0),
+					date: (extractAgoTextRuns_Timestamp(cobj?.properties?.publishedTime) ?? 0),
+					replyCount: extractFirstNumber_Integer(cobj?.toolbar?.replyCount) ?? 0,
+					context: { replyContinuation: replyContinuation }
+				}));
+			}
+			
+
+			if(comments.length > 0) {
+				return new YTCommentPager(comments, commentsContinuation, contextUrl);
+			}
+		}
+	}
+
+
 	log("Comment object:\n" + JSON.stringify(data, null, "   "));
 	throw new ScriptException("No valid comment endpoint provided by Youtube");
 }
