@@ -3483,7 +3483,7 @@ function extractNavigationEndpoint_Url(navEndpoint, baseUrl) {
 }
 
 function extractAgoTextRuns_Timestamp(runs) {
-	const runStr = extractRuns_String(runs);
+	const runStr = (typeof runs === "string") ? runs : extractRuns_String(runs);
 	return extractAgoText_Timestamp(runStr);
 }
 function extractAgoText_Timestamp(str) {
