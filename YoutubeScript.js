@@ -210,8 +210,10 @@ source.getHome = () => {
         initialData = _prefetchHomeAuth;
         _prefetchHomeUsed = true;
     }
-    else
-        initialData = requestInitialData(URL_HOME, USE_MOBILE_PAGES, true);
+    else if(bridge.isLoggedIn())
+        initialData = requestInitialData(URL_CONTEXT_M, USE_MOBILE_PAGES, true);
+	else
+		initialData = requestInitialData(URL_HOME, USE_MOBILE_PAGES, true);
 	const tabs = extractPage_Tabs(initialData);
 	if(tabs.length == 0)
 		throw new ScriptException("No tabs found..");
