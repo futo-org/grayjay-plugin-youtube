@@ -7,13 +7,13 @@
 	"sourceUrl": "https://plugins.grayjay.app/Youtube/YoutubeConfig.json",
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
-	"version": 168,
+	"version": 171,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 
 	"scriptSignature": "",
 	"scriptPublicKey": "",
-	"packages": ["Http", "Utilities"],
+	"packages": ["Http", "Utilities", "DOMParser"],
 
 	"subscriptionRateLimit": 140,
 	
@@ -116,6 +116,8 @@
 			"options": ["Manual", "Automatic"]
 		}
 	],
+
+	"developerSubmitUrl": "https://dev.grayjay.app/api/Dev/Submit",
 
 	"captcha": {
 		"userAgent": "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.5481.153 Mobile Safari/537.36",
