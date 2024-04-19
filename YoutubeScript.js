@@ -2776,12 +2776,12 @@ function requestCommentPager(contextUrl, continuationToken) {
 	    if(bridge.devSubmit) bridge.devSubmit("requestCommentPager - No comment endpoints", JSON.stringify(data));
 	    throw new ScriptException("No comment endpoints provided by Youtube");
 	}
+	let commentsContinuation = null;
 	for(let i = 0; i < endpoints.length; i++) {
 		const endpoint = endpoints[i];
 		const continuationItems = endpoint.reloadContinuationItemsCommand?.continuationItems ??
 			endpoint.appendContinuationItemsAction?.continuationItems;
 		if(continuationItems && continuationItems.length > 0) {
-			let commentsContinuation = null;
 			let comments = [];
 
 			if(continuationItems && continuationItems.length > 0) {
@@ -2821,7 +2821,6 @@ function requestCommentPager(contextUrl, continuationToken) {
 		log("New comments model");
 		const mutations = data.frameworkUpdates.entityBatchUpdate.mutations;
 		if(mutations.length > 0) {
-			let commentsContinuation = null;
 			const comments = [];
 			
 			let parentItems = [];
