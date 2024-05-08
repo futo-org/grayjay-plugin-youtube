@@ -12,6 +12,7 @@ const URL_SEARCH = "https://www.youtube.com/youtubei/v1/search";
 const URL_BROWSE = "https://www.youtube.com/youtubei/v1/browse";
 const URL_BROWSE_MOBILE = "https://m.youtube.com/youtubei/v1/browse";
 const URL_NEXT = "https://www.youtube.com/youtubei/v1/next";
+const URL_NEXT_MOBILE = "https://m.youtube.com/youtubei/v1/next";
 const URL_GUIDE = "https://www.youtube.com/youtubei/v1/guide";
 const URL_SUB_CHANNELS_M = "https://m.youtube.com/feed/channels";
 const URL_SUBSCRIPTIONS_M = "https://m.youtube.com/feed/subscriptions";
@@ -31,7 +32,7 @@ const URL_YOUTUBE_SPONSORBLOCK = "https://sponsor.ajay.app/api/skipSegments?vide
 const URL_YOUTUBE_RSS = "https://www.youtube.com/feeds/videos.xml?channel_id=";
 
 //Newest to oldest
-const CIPHER_TEST_HASHES = ["4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
+const CIPHER_TEST_HASHES = ["178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
 const CIPHER_TEST_PREFIX = "/s/player/";
 const CIPHER_TEST_SUFFIX = "/player_ias.vflset/en_US/base.js";
 
@@ -531,8 +532,20 @@ source.getContentChapters = function(url, initialData) {
 		const reqs = http.batch()
 		    .GET(url, getRequestHeaders({}), false);
 
-        if(_settings["sponsorBlock"] && videoId)
-            reqs.GET(URL_YOUTUBE_SPONSORBLOCK + videoId, {}, false);
+        if(_settings["sponsorBlock"] && videoId) {
+			const cats = [
+				(!!_settings["sponsorBlockCat_Sponsor"]) ? "sponsor" : null,
+				(!!_settings["sponsorBlockCat_Intro"]) ? "intro" : null,
+				(!!_settings["sponsorBlockCat_Outro"]) ? "outro" : null,
+				(!!_settings["sponsorBlockCat_Self"]) ? "selfpromo" : null,
+				(!!_settings["sponsorBlockCat_Offtopic"]) ? "music_offtopic" : null,
+				(!!_settings["sponsorBlockCat_Preview"]) ? "preview" : null,
+				(!!_settings["sponsorBlockCat_Filler"]) ? "filler" : null
+			].filter(x=>!!x);
+			const catsArg = "&categories=[" + cats.map(x=>"\"" + x + "\"").join(",") + "]";
+            reqs.GET(URL_YOUTUBE_SPONSORBLOCK + videoId + catsArg, {}, false);
+
+		}
 
         const resps = reqs.execute();
 
@@ -894,15 +907,20 @@ function constructUrl(base, queryParams) {
 
 source.getComments = (url) => {
     url = convertIfOtherUrl(url);
+	const useLogin = (!!_settings?.authDetails) && bridge.isLoggedIn();
+	if(useLogin && url.indexOf("/www.") >= 0)
+		url = url.replace("www", "m");
 
-	const html = requestPage(url);
-	const initialData = getInitialData(html);
+	//const html = requestPage(url, {}, useLogin);
+	const initialData = requestInitialData(url, useLogin, useLogin);
 	const contents = initialData.contents;
 	const result = contents.twoColumnWatchNextResults?.results?.results?.contents ??
+		contents.singleColumnWatchNextResults?.results?.results?.contents ??
 		null;	//Add any alternative containers
 	if(!result)
 		return new CommentPager([], false);
-	return extractTwoColumnWatchNextResultContents_CommentsPager(url, result);
+	const engagementPanels = initialData.engagementPanels ?? [];
+	return extractTwoColumnWatchNextResultContents_CommentsPager(url, result, useLogin, engagementPanels);
 };
 source.getSubComments = (comment) => {
 	if(typeof comment === 'string')
@@ -962,7 +980,7 @@ source.getChannelContents = (url, type, order, filters) => {
 	if(useAuth)
 		log("USING AUTH FOR CHANNEL");
 
-	const initialData = requestInitialData(url, false, useAuth);
+	const initialData = requestInitialData(url, useAuth, useAuth);
 	if(!initialData)
 	    throw new ScriptException("No channel data found for: " + url);
 	const channel = extractChannel_PlatformChannel(initialData, url);
@@ -990,7 +1008,7 @@ source.getChannelContents = (url, type, order, filters) => {
 	}
 	//throw new ScriptException("Could not find tab: " + targetTab);
 
-	return new RichGridPager(tab, contextData);
+	return new RichGridPager(tab, contextData, useAuth, useAuth);
 };
 
 source.getPeekChannelTypes = () => {
@@ -1832,13 +1850,22 @@ function requestGuide(pageId) {
 	const data = JSON.parse(res.body);
 	return data;
 }
-function requestNext(body, useAuth = false) {
+function requestNext(body, useAuth = false, useMobile = false) {
 	const clientContext = getClientContext(useAuth);
 	if(!clientContext || !clientContext.INNERTUBE_CONTEXT || !clientContext.INNERTUBE_API_KEY)
 		throw new ScriptException("Missing client context");
 	body.context = clientContext.INNERTUBE_CONTEXT;
-	const url = URL_NEXT + "?key=" + clientContext.INNERTUBE_API_KEY + "&prettyPrint=false";
-	const resp = http.POST(url, JSON.stringify(body), {"Content-Type": "application/json"});
+	const baseUrl = (useMobile) ? URL_NEXT_MOBILE : URL_NEXT;
+	const url = baseUrl + "?key=" + clientContext.INNERTUBE_API_KEY + "&prettyPrint=false";
+	let headers = (!bridge.isLoggedIn() && useAuth) ? {} : getAuthContextHeaders(useMobile);
+	headers["Content-Type"] = "application/json";
+	if(useMobile) {
+		headers["User-Agent"] = USER_AGENT_TABLET;
+	}
+	if(useAuth) {
+		headers["x-goog-authuser"] = clientContext.SESSION_INDEX ?? "0";
+	}
+	const resp = http.POST(url, JSON.stringify(body), headers);
 	if(!resp.isOk) {
 		log("Fail Url: " + url + "\nFail Body:\n" + JSON.stringify(body));
 		throw new ScriptException("Failed to next [" + resp.code + "]");
@@ -2731,7 +2758,7 @@ function extractVideoOwnerRenderer_AuthorLink(renderer) {
 		bestThumbnail,
 		subscribers, membershipUrl);
 }
-function extractTwoColumnWatchNextResultContents_CommentsPager(contextUrl, contents) {
+function extractTwoColumnWatchNextResultContents_CommentsPager(contextUrl, contents, useLogin, engagementPanels) {
 	//Add additional/better details
 
 	let totalComments = 0;
@@ -2747,8 +2774,9 @@ function extractTwoColumnWatchNextResultContents_CommentsPager(contextUrl, conte
 				if(content)
 					switchKey(content, {
 						commentsEntryPointHeaderRenderer(renderer) {
-							if(renderer?.commentCount?.simpleText) {
-								totalComments = parseInt(renderer.commentCount.simpleText);
+							const commentCount = extractText_String(renderer.commentCount);
+							if(commentCount) {
+								totalComments = parseInt(commentCount);
 							}
 						},
 						continuationItemRenderer(continueRenderer) {
@@ -2760,14 +2788,24 @@ function extractTwoColumnWatchNextResultContents_CommentsPager(contextUrl, conte
 			}
 		});
 	}
+	const commentSectionPanel = engagementPanels?.find(x=>x?.engagementPanelSectionListRenderer?.panelIdentifier == "engagement-panel-comments-section");
+	const altContinuation = commentSectionPanel?.engagementPanelSectionListRenderer?.content?.sectionListRenderer?.contents
+		?.find(y=>true)?.itemSectionRenderer;
+	if(altContinuation != null && !commentsToken && altContinuation.sectionIdentifier == "comment-item-section") {
+		const continuationRenderer = altContinuation?.contents?.find(y=>true)?.continuationItemRenderer;
+		const altToken = continuationRenderer?.continuationEndpoint?.continuationCommand?.token;
+		if(altToken)
+			commentsToken = altToken;
+	}
+
 	if(!commentsToken)
 		return new CommentPager([], false);
-	return requestCommentPager(contextUrl, commentsToken) ??  new CommentPager([], false);
+	return requestCommentPager(contextUrl, commentsToken, useLogin, useLogin) ??  new CommentPager([], false);
 }
-function requestCommentPager(contextUrl, continuationToken) {
+function requestCommentPager(contextUrl, continuationToken, useLogin, useMobile) {
 	const data = requestNext({
 		continuation: continuationToken
-	});
+	}, useLogin, useMobile);
 	if(IS_TESTING)
 	    console.log("data", data);
 	const endpoints = data?.onResponseReceivedCommands ?? data?.onResponseReceivedActions ?? data?.onResponseReceivedEndpoints;
@@ -3427,6 +3465,13 @@ function extractCommentRenderer_Comment(contextUrl, commentRenderer, replyCount,
 function convertIfOtherUrl(url) {
     url = convertIfShortUrl(url);
     url = convertIfEmbedUrl(url);
+    url = convertIfMusicUrl(url);
+    return url;
+}
+function convertIfMusicUrl(url) {
+    const musicMatch = url.match(REGEX_VIDEO_URL_DESKTOP);
+    if(musicMatch && musicMatch.length == 3 && musicMatch[1]?.toLowerCase() == "music")
+        url = URL_BASE + "/watch?v=" + musicMatch[1];
     return url;
 }
 function convertIfEmbedUrl(url) {
@@ -4148,24 +4193,24 @@ function getNDecryptorFunctionCode(code, jsUrl) {
         if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (name)", jsUrl);
 		throw new ScriptException("Failed to find n decryptor (name)");
     }
-	const nDecryptFunctionArrName = nDecryptFunctionArrNameMatch[1];
+	const nDecryptFunctionArrName = nDecryptFunctionArrNameMatch[1]?.replace("$", "\\$");
 	const nDecryptFunctionArrIndex = parseInt(nDecryptFunctionArrNameMatch[2]);
 	
 	const nDecryptFunctionNameMatch = code.match(nDecryptFunctionArrName + "\\s*=\\s*\\[([a-zA-Z0-9,\\(,\\)\\.]+?)]");
 	if(!nDecryptFunctionNameMatch) {
         if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (array)", jsUrl);
-		throw new ScriptException("Failed to find n decryptor (array)");
+		throw new ScriptException("Failed to find n decryptor (array)\n" + jsUrl);
 	}
 	const nDecryptArray = nDecryptFunctionNameMatch[1].split(",");
 	if(nDecryptArray.length <= nDecryptFunctionArrIndex) {
         if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (index)", jsUrl);
-		throw new ScriptException("Failed to find n decryptor (index)");
+		throw new ScriptException("Failed to find n decryptor (index)\n" + jsUrl);
 	}
 	const nDecryptFunctionName = nDecryptArray[nDecryptFunctionArrIndex];
 	const nDecryptFunctionCodeMatch = code.match(nDecryptFunctionName + "=function\\(a\\)\\{[\\s\\S]*?join\\(\\\"\\\"\\)};");
 	if(!nDecryptFunctionCodeMatch) {
         if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (code)", jsUrl, code);
-		throw new ScriptException("Failed to find n decryptor (code)");
+		throw new ScriptException("Failed to find n decryptor (code)\n" + jsUrl);
 	}
 	
 	return "(function(){" + 
@@ -4187,14 +4232,14 @@ function getCipherFunctionCode(playerCode, jsUrl) {
 	}
 	if(!cipherFunctionName)	{
         if(bridge.devSubmit) bridge.devSubmit("getCipherFunctionCode - Failed to find cipher (name)", jsUrl);
-		throw new ScriptException("Failed to find cipher (name)");
+		throw new ScriptException("Failed to find cipher (name)\n" + jsUrl);
 	}
 	const cipherFunctionCodeMatch = playerCode.match("(" + cipherFunctionName.replace("$", "\\$") + "=function\\([a-zA-Z0-9_]+\\)\\{.+?\\})");
 	if(!cipherFunctionCodeMatch) {
 		if(IS_TESTING)
 			console.log("Failed to find cipher function in: ", playerCode);
         if(bridge.devSubmit) bridge.devSubmit("getCipherFunctionCode - Failed to find cipher (function)", jsUrl);
-		throw new ScriptException("Failed to find cipher (function)");
+		throw new ScriptException("Failed to find cipher (function)\n" + jsUrl);
 	}
 	const cipherFunctionCode = cipherFunctionCodeMatch[1];
 	const cipherFunctionCodeVar = "var " + cipherFunctionCode;
@@ -4203,7 +4248,7 @@ function getCipherFunctionCode(playerCode, jsUrl) {
 		if(IS_TESTING)
 			console.log("Failed to find helper name in: ", playerCode);
         if(bridge.devSubmit) bridge.devSubmit("getCipherFunctionCode - Failed to find helper (name)", jsUrl);
-		throw new ScriptException("Failed to find helper (name)");
+		throw new ScriptException("Failed to find helper (name)\n" + jsUrl);
 	}
 	if(IS_TESTING)
 		console.log("Cipher Code: ", cipherFunctionCode);
@@ -4213,7 +4258,7 @@ function getCipherFunctionCode(playerCode, jsUrl) {
 		if(IS_TESTING)
 			console.log("Failed to find helper method [" + helperObjName + "] in: ", playerCode);
         if(bridge.devSubmit) bridge.devSubmit("getCipherFunctionCode - Failed to find helper (methods)", jsUrl);
-		throw new ScriptException("Failed to extract helper (methods)");
+		throw new ScriptException("Failed to extract helper (methods)\n" + jsUrl);
 	}
 	const helperObj = helperObjMatch[1];
 	const functionCode = "return function decodeCipher(str){ return " + cipherFunctionName + "(str); }";

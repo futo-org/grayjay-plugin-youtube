@@ -7,7 +7,7 @@
 	"sourceUrl": "https://plugins.grayjay.app/Youtube/YoutubeConfig.json",
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
-	"version": 172,
+	"version": 174,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 
@@ -114,6 +114,70 @@
 			"default": "0",
 			"dependency": "sponsorBlock",
 			"options": ["Manual", "Automatic"]
+		},
+		{
+			"variable": "sponsorBlockCat_Sponsor",
+			"name": "Skip Sponsors",
+			"description": "Skip segments labeled as sponsors",
+			"type": "Boolean",
+			"default": "true",
+			"dependency": "sponsorBlock"
+		},
+		{
+			"variable": "sponsorBlockCat_Intro",
+			"name": "Skip Intros",
+			"description": "Skip segments labeled as intros",
+			"type": "Boolean",
+			"default": "false",
+			"dependency": "sponsorBlock"
+		},
+		{
+			"variable": "sponsorBlockCat_Outro",
+			"name": "Skip Outros",
+			"description": "Skip segments labeled as outros",
+			"type": "Boolean",
+			"default": "false",
+			"dependency": "sponsorBlock"
+		},
+		{
+			"variable": "sponsorBlockCat_Self",
+			"name": "Skip Self-Promos",
+			"description": "Skip segments labeled as self-promos",
+			"type": "Boolean",
+			"default": "false",
+			"dependency": "sponsorBlock"
+		},
+		{
+			"variable": "sponsorBlockCat_Offtopic",
+			"name": "Skip Music-Offtopic",
+			"description": "Skip segments labeled as music-offtopic",
+			"type": "Boolean",
+			"default": "false",
+			"dependency": "sponsorBlock"
+		},
+		{
+			"variable": "sponsorBlockCat_Preview",
+			"name": "Skip Preview",
+			"description": "Skip segments labeled as previews",
+			"type": "Boolean",
+			"default": "false",
+			"dependency": "sponsorBlock"
+		},
+		{
+			"variable": "sponsorBlockCat_Interaction",
+			"name": "Skip Interaction",
+			"description": "Skip segments labeled as interactions",
+			"type": "Boolean",
+			"default": "false",
+			"dependency": "sponsorBlock"
+		},
+		{
+			"variable": "sponsorBlockCat_Filler",
+			"name": "Skip Fillers",
+			"description": "Skip segments labeled as fillers",
+			"type": "Boolean",
+			"default": "false",
+			"dependency": "sponsorBlock"
 		}
 	],
 
