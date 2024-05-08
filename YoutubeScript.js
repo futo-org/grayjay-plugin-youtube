@@ -411,7 +411,7 @@ source.getContentDetails = (url, useAuth) => {
 
 	const videoDetails = extractVideoPage_VideoDetails(initialData, initialPlayerData, {
 		url: url
-	}, jsUrl);
+	}, jsUrl, useLogin);
 	if(videoDetails == null)
 	    throw new UnavailableException("No video found");
 
@@ -908,6 +908,8 @@ function constructUrl(base, queryParams) {
 source.getComments = (url) => {
     url = convertIfOtherUrl(url);
 	const useLogin = (!!_settings?.authDetails) && bridge.isLoggedIn();
+	if(useLogin)
+		log("USING AUTH FOR COMMENTS");
 	if(useLogin && url.indexOf("/www.") >= 0)
 		url = url.replace("www", "m");
 
@@ -926,7 +928,7 @@ source.getSubComments = (comment) => {
 	if(typeof comment === 'string')
 		comment = JSON.parse(comment);
 	if(comment.context?.replyContinuation) {
-		return requestCommentPager(comment.contextUrl, comment.context.replyContinuation);
+		return requestCommentPager(comment.contextUrl, comment.context.replyContinuation, comment?.context?.useLogin == 'true', comment?.context?.useMobile == 'true');
 	}
 	else
 		return new CommentPager([], false);
@@ -1680,14 +1682,16 @@ function extractLiveMessage_Obj(obj) {
 }
 
 class YTCommentPager extends CommentPager {
-	constructor(comments, continuation, contextUrl) {
+	constructor(comments, continuation, contextUrl, useLogin, useMobile) {
 		super(comments, continuation != null, contextUrl);
+		this.useLogin = !!useLogin;
+		this.useMobile = !!useMobile;
 		this.continuation = continuation;
 	}
 	nextPage() {
 		if(!this.continuation)
 			return new CommentPager([], false);
-		return requestCommentPager(this.context, this.continuation) ?? new CommentPager([], false);
+		return requestCommentPager(this.context, this.continuation, this.useLogin, this.useMobile) ?? new CommentPager([], false);
 	}
 }
 class YTComment extends Comment {
@@ -1865,7 +1869,7 @@ function requestNext(body, useAuth = false, useMobile = false) {
 	if(useAuth) {
 		headers["x-goog-authuser"] = clientContext.SESSION_INDEX ?? "0";
 	}
-	const resp = http.POST(url, JSON.stringify(body), headers);
+	const resp = http.POST(url, JSON.stringify(body), headers, useAuth);
 	if(!resp.isOk) {
 		log("Fail Url: " + url + "\nFail Body:\n" + JSON.stringify(body));
 		throw new ScriptException("Failed to next [" + resp.code + "]");
@@ -2447,7 +2451,7 @@ function extractPage_Tabs(initialData, contextData) {
 
 
 //#region Layout Extractors
-function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextData, jsUrl) {
+function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextData, jsUrl, useLogin) {
 	const contents = initialData.contents;
 	const contentsContainer = contents.twoColumnWatchNextResults?.results?.results ??
 		null;
@@ -2714,9 +2718,11 @@ function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextDa
 		video.datetime = parseInt(scheduledTime);
 
     const result = new PlatformVideoDetails(video);
-    result.getComments = function() {
-        return extractTwoColumnWatchNextResultContents_CommentsPager(contextData.url, contentsContainer?.contents)
-    };
+	if(!useLogin){
+		result.getComments = function() {
+			return extractTwoColumnWatchNextResultContents_CommentsPager(contextData.url, contentsContainer?.contents, useLogin)
+		};
+	}
     return result;
 }
 function toSRTTime(sec, withDot) {
@@ -2835,10 +2841,10 @@ function requestCommentPager(contextUrl, continuationToken, useLogin, useMobile)
 								renderer.replies.commentRepliesRenderer.contents[0]?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token :
 								null;
 
-							comments.push(extractCommentRenderer_Comment(contextUrl, commentRenderer, replyCount, replyContinuation));
+							comments.push(extractCommentRenderer_Comment(contextUrl, commentRenderer, replyCount, replyContinuation, useLogin, useMobile));
 						},
 						commentRenderer(renderer) {
-							comments.push(extractCommentRenderer_Comment(contextUrl, renderer, 0, null));
+							comments.push(extractCommentRenderer_Comment(contextUrl, renderer, 0, null, useLogin, useMobile));
 						},
 						continuationItemRenderer(renderer) {
 							if(renderer?.continuationEndpoint?.continuationCommand?.token)
@@ -2849,7 +2855,7 @@ function requestCommentPager(contextUrl, continuationToken, useLogin, useMobile)
 					});
 				}
 				if(comments.length > 0) {
-					return new YTCommentPager(comments, commentsContinuation, contextUrl);
+					return new YTCommentPager(comments, commentsContinuation, contextUrl, useLogin, useMobile);
 				}
 			}
 		}
@@ -2883,13 +2889,13 @@ function requestCommentPager(contextUrl, continuationToken, useLogin, useMobile)
 					rating: new RatingLikes(extractHumanNumber_Integer(cobj.toolbar?.likeCountLiked) ?? 0),
 					date: (extractAgoTextRuns_Timestamp(cobj?.properties?.publishedTime) ?? 0),
 					replyCount: extractFirstNumber_Integer(cobj?.toolbar?.replyCount) ?? 0,
-					context: { replyContinuation: replyContinuation }
+					context: { replyContinuation: replyContinuation, useLogin: useLogin + "", useMobile: useMobile + "" }
 				}));
 			}
 			
 
 			if(comments.length > 0) {
-				return new YTCommentPager(comments, commentsContinuation, contextUrl);
+				return new YTCommentPager(comments, commentsContinuation, contextUrl, useLogin, useMobile);
 			}
 		}
 	}
@@ -3443,7 +3449,7 @@ function extractVideoRenderer_AuthorLink(videoRenderer) {
 
 	return new PlatformAuthorLink(new PlatformID(PLATFORM, id, config.id, PLATFORM_CLAIMTYPE), name, channelUrl, thumbUrl);
 }
-function extractCommentRenderer_Comment(contextUrl, commentRenderer, replyCount, replyContinuation) {
+function extractCommentRenderer_Comment(contextUrl, commentRenderer, replyCount, replyContinuation, useLogin, useMobile) {
 	const authorName = commentRenderer.authorText?.simpleText ?? "";
 	const authorEndpoint = commentRenderer.authorEndpoint?.commandMetadata?.webCommandMetadata?.url ?? "";
 	const authorThumbnail = (commentRenderer.authorThumbnail?.thumbnails ? 
@@ -3457,7 +3463,7 @@ function extractCommentRenderer_Comment(contextUrl, commentRenderer, replyCount,
 		rating: new RatingLikes(commentRenderer?.voteCount?.simpleText ? extractHumanNumber_Integer(commentRenderer.voteCount.simpleText) : 0),
 		date: (commentRenderer.publishedTimeText?.runs ? extractAgoTextRuns_Timestamp(commentRenderer.publishedTimeText.runs) : 0),
 		replyCount: replyCount ?? 0,
-		context: { replyContinuation: replyContinuation }
+		context: { replyContinuation: replyContinuation, useLogin: useLogin + "", useMobile: useMobile + "" }
 	})
 }
 //#endregion
