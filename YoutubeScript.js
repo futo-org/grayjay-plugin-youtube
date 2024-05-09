@@ -32,7 +32,7 @@ const URL_YOUTUBE_SPONSORBLOCK = "https://sponsor.ajay.app/api/skipSegments?vide
 const URL_YOUTUBE_RSS = "https://www.youtube.com/feeds/videos.xml?channel_id=";
 
 //Newest to oldest
-const CIPHER_TEST_HASHES = ["178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
+const CIPHER_TEST_HASHES = ["a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
 const CIPHER_TEST_PREFIX = "/s/player/";
 const CIPHER_TEST_SUFFIX = "/player_ias.vflset/en_US/base.js";
 
@@ -4199,10 +4199,10 @@ function getNDecryptorFunctionCode(code, jsUrl) {
         if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (name)", jsUrl);
 		throw new ScriptException("Failed to find n decryptor (name)");
     }
-	const nDecryptFunctionArrName = nDecryptFunctionArrNameMatch[1]?.replace("$", "\\$");
+	const nDecryptFunctionArrName = nDecryptFunctionArrNameMatch[1];
 	const nDecryptFunctionArrIndex = parseInt(nDecryptFunctionArrNameMatch[2]);
 	
-	const nDecryptFunctionNameMatch = code.match(nDecryptFunctionArrName + "\\s*=\\s*\\[([a-zA-Z0-9,\\(,\\)\\.]+?)]");
+	const nDecryptFunctionNameMatch = code.match(escapeRegex(nDecryptFunctionArrName) + "\\s*=\\s*\\[([$a-zA-Z0-9,\\(,\\)\\.]+?)]");
 	if(!nDecryptFunctionNameMatch) {
         if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (array)", jsUrl);
 		throw new ScriptException("Failed to find n decryptor (array)\n" + jsUrl);
@@ -4212,8 +4212,8 @@ function getNDecryptorFunctionCode(code, jsUrl) {
         if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (index)", jsUrl);
 		throw new ScriptException("Failed to find n decryptor (index)\n" + jsUrl);
 	}
-	const nDecryptFunctionName = nDecryptArray[nDecryptFunctionArrIndex];
-	const nDecryptFunctionCodeMatch = code.match(nDecryptFunctionName + "=function\\(a\\)\\{[\\s\\S]*?join\\(\\\"\\\"\\)};");
+	const nDecryptFunctionName = nDecryptArray[nDecryptFunctionArrIndex]
+	const nDecryptFunctionCodeMatch = code.match(escapeRegex(nDecryptFunctionName) + "=function\\(a\\)\\{[\\s\\S]*?join\\(\\\"\\\"\\)};");
 	if(!nDecryptFunctionCodeMatch) {
         if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (code)", jsUrl, code);
 		throw new ScriptException("Failed to find n decryptor (code)\n" + jsUrl);
@@ -4240,7 +4240,7 @@ function getCipherFunctionCode(playerCode, jsUrl) {
         if(bridge.devSubmit) bridge.devSubmit("getCipherFunctionCode - Failed to find cipher (name)", jsUrl);
 		throw new ScriptException("Failed to find cipher (name)\n" + jsUrl);
 	}
-	const cipherFunctionCodeMatch = playerCode.match("(" + cipherFunctionName.replace("$", "\\$") + "=function\\([a-zA-Z0-9_]+\\)\\{.+?\\})");
+	const cipherFunctionCodeMatch = playerCode.match("(" + escapeRegex(cipherFunctionName) + "=function\\([a-zA-Z0-9_]+\\)\\{.+?\\})");
 	if(!cipherFunctionCodeMatch) {
 		if(IS_TESTING)
 			console.log("Failed to find cipher function in: ", playerCode);
@@ -4274,7 +4274,7 @@ function getCipherFunctionCode(playerCode, jsUrl) {
 		functionCode + "})()";
 }
 function escapeRegex(str) {
-	return str.replace("$", "\\$");
+	return str?.replace("$", "\\$");
 }
 
 function decodeHexEncodedString(str) {
