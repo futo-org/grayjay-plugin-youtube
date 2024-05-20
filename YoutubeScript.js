@@ -2837,10 +2837,10 @@ function requestCommentPager(contextUrl, continuationToken, useLogin, useMobile)
 								return;
 
 							const replyCount = (commentRenderer.replyCount ? commentRenderer?.replyCount : 0);
-							const replyContinuation = renderer.replies?.commentRepliesRenderer?.contents?.length == 1 ?
-								renderer.replies.commentRepliesRenderer.contents[0]?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token :
+							let replyContinuation = renderer.replies?.commentRepliesRenderer?.contents?.length == 1 ?
+								(renderer.replies.commentRepliesRenderer.contents[0]?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token
+									?? renderer.replies.commentRepliesRenderer.contents[0]?.continuationItemRenderer?.button?.buttonRenderer?.command?.continuationCommand?.token) :
 								null;
-
 							comments.push(extractCommentRenderer_Comment(contextUrl, commentRenderer, replyCount, replyContinuation, useLogin, useMobile));
 						},
 						commentRenderer(renderer) {
@@ -2879,7 +2879,10 @@ function requestCommentPager(contextUrl, continuationToken, useLogin, useMobile)
 				const cobj = commentObject?.payload?.commentEntityPayload ?? {};
 				const parent = parentItems.find(x=>x.commentThreadRenderer?.commentViewModel?.commentViewModel?.commentKey == commentObject.entityKey);
 				const replyContents = parent?.commentThreadRenderer?.replies?.commentRepliesRenderer?.contents;
-				const replyContinuation = ((replyContents?.length ?? 0) > 0) ? replyContents[0].continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token : null;
+				const replyContinuation = ((replyContents?.length ?? 0) > 0) ? 
+					(replyContents[0].continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token ??
+						replyContents[0].continuationItemRenderer?.button?.buttonRenderer?.command?.continuationCommand?.token) : 
+					null;
 				
 				const authorEndpoint = cobj.author?.channelCommand?.innertubeCommand?.commandMetadata?.webCommandMetadata?.url;
 				comments.push(new YTComment({
