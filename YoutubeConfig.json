@@ -41,14 +41,16 @@
 			"name": "Use Login for Channels",
 			"description": "Use authenticated client for channel (videos) requests. (eg. for member videos)",
 			"type": "Boolean",
-			"default": "false"
+			"default": "false",
+			"warningDialog": "Only enable this if you need it for channel membership content.\n\nTry disabling if you have issues when loading channels."
 		},
 		{
 			"variable": "authDetails",
 			"name": "Use Login for video details",
 			"description": "Use authenticated client for video requests. (eg. for member videos)",
 			"type": "Boolean",
-			"default": "false"
+			"default": "false",
+			"warningDialog": "Only enable this if you need it for channel membership content.\n\nTry disabling if you have issues when loading videos and comments."
 		},
 		{
 			"variable": "youtubeActivity",
