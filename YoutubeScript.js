@@ -62,6 +62,9 @@ const REGEX_VIDEO_PLAYLIST_URL = new RegExp("https://(.*\\.)?youtube\\.com/playl
 const REGEX_INITIAL_DATA = new RegExp("<script.*?var ytInitialData = (.*?);<\/script>");
 const REGEX_INITIAL_PLAYER_DATA = new RegExp("<script.*?var ytInitialPlayerResponse = (.*?});");
 
+//TODO: Make this one more flexible/reliable. For now used as fallback if initial fails.
+const REGEX_INITIAL_PLAYER_DATA_FALLBACK = new RegExp("<script.*?var ytInitialPlayerResponse = (.*});var meta = document\.createElement");
+
 const REGEX_HUMAN_NUMBER = new RegExp("([0-9\\.,]*)([a-zA-Z]*)");
 const REGEX_HUMAN_AGO = new RegExp("([0-9]*) ([a-zA-Z]*) ago");
 
@@ -2202,10 +2205,20 @@ function getInitialData(html, useAuth = false) {
 	return null;
 }
 function getInitialPlayerData(html) {
-	const match = html.match(REGEX_INITIAL_PLAYER_DATA);
+	let match = html.match(REGEX_INITIAL_PLAYER_DATA);
 	if(match) {
-		const initialDataRaw = match[1];
-		return JSON.parse(initialDataRaw);
+		let initialDataRaw = match[1];
+		try {
+			return JSON.parse(initialDataRaw);
+		}
+		catch(ex) {
+			//Fallback approach
+			match = html.match(REGEX_INITIAL_PLAYER_DATA_FALLBACK);
+			if(match) {
+				initialDataRaw = match[1];
+				return JSON.parse(initialDataRaw);
+			}
+		}
 	}
 	return null;
 }
