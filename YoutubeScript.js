@@ -7,6 +7,7 @@ const URL_CONTEXT_M = "https://m.youtube.com";
 
 const URL_CHANNEL_VIDEOS = "/videos";
 const URL_CHANNEL_STREAMS = "/streams";
+const URL_CHANNEL_PLAYLISTS = "/playlists";
 const URL_SEARCH_SUGGESTIONS = "https://suggestqueries-clients6.youtube.com/complete/search?client=youtube&gs_ri=youtube&ds=yt&q=";
 const URL_SEARCH = "https://www.youtube.com/youtubei/v1/search";
 const URL_BROWSE = "https://www.youtube.com/youtubei/v1/browse";
@@ -61,6 +62,9 @@ const REGEX_VIDEO_PLAYLIST_URL = new RegExp("https://(.*\\.)?youtube\\.com/playl
 
 const REGEX_INITIAL_DATA = new RegExp("<script.*?var ytInitialData = (.*?);<\/script>");
 const REGEX_INITIAL_PLAYER_DATA = new RegExp("<script.*?var ytInitialPlayerResponse = (.*?});");
+
+//TODO: Make this one more flexible/reliable. For now used as fallback if initial fails.
+const REGEX_INITIAL_PLAYER_DATA_FALLBACK = new RegExp("<script.*?var ytInitialPlayerResponse = (.*});var meta = document\.createElement");
 
 const REGEX_HUMAN_NUMBER = new RegExp("([0-9\\.,]*)([a-zA-Z]*)");
 const REGEX_HUMAN_AGO = new RegExp("([0-9]*) ([a-zA-Z]*) ago");
@@ -1013,6 +1017,29 @@ source.getChannelContents = (url, type, order, filters) => {
 	return new RichGridPager(tab, contextData, useAuth, useAuth);
 };
 
+source.getChannelPlaylists = (url) => {
+
+	const targetTab = "Playlists";
+	const useAuth = bridge.isLoggedIn() && !!_settings?.authChannels;
+	if(useAuth)
+		log("USING AUTH FOR CHANNEL");
+
+	const initialData = requestInitialData(url + URL_CHANNEL_PLAYLISTS, useAuth, useAuth);
+	if(!initialData)
+	    throw new ScriptException("No channel data found for: " + url);
+	const channel = extractChannel_PlatformChannel(initialData, url);
+	const contextData = {
+		authorLink: new PlatformAuthorLink(new PlatformID(PLATFORM, channel.id.value, config.id, PLATFORM_CLAIMTYPE), channel.name, channel.url, channel.thumbnail)
+	};
+	const tabs = extractPage_Tabs(initialData, contextData);
+	
+	const tab = tabs.find(x=>x.title == targetTab);
+	if(!tab) 
+		return new PlaylistPager([], false);
+
+	return new RichGridPlaylistPager(tab, contextData, useAuth, useAuth);
+}
+
 source.getPeekChannelTypes = () => {
 	return [Type.Feed.Videos, Type.Feed.Mixed];
 }
@@ -1742,6 +1769,48 @@ class RichGridPager extends VideoPager {
 		return this;
 	}
 }
+class RichGridPlaylistPager extends PlaylistPager {
+	constructor(tab, context, useMobile = false, useAuth = false) {
+		super(tab.playlists, tab.videos.length > 0 && !!tab.continuation, context);
+		this.continuation = tab.continuation;
+		this.useMobile = useMobile;
+		this.useAuth = useAuth;
+	}
+	
+	nextPage() {
+		this.context.page = this.context.page + 1;
+		if(this.continuation) {
+			const newData = validateContinuation(()=>requestBrowse({
+				continuation: this.continuation.token
+			}, !!this.useMobile, !!this.useAuth));
+			if(newData && newData.length > 0) {
+				const fakeRichGrid = {
+					contents: newData
+				};
+				const newItemSection = extractRichGridRenderer_Shelves(fakeRichGrid, this.context);
+
+				if(newItemSection.playlists && newItemSection.playlists.length == 0 && newItemSection.shelves && newItemSection.shelves.length > 0) {
+				    if(IS_TESTING)
+				        console.log("No playlists in root found, checking shelves", newItemSection);
+				    let vids = [];
+				    for(let i = 0; i < newItemSection.shelves.length; i++) {
+				        const shelf = newItemSection.shelves[i];
+                        vids = vids.concat(shelf.playlists);
+				    }
+				    newItemSection.playlists = vids;
+				}
+
+				if(newItemSection.playlists)
+					return new RichGridPager(newItemSection, this.context, this.useMobile, this.useAuth);
+			}
+			else
+				log("Call [RichGridPager.nextPage] continuation gave no appended items, setting empty page with hasMore to false");
+		}
+		this.hasMore = false;
+		this.results = [];
+		return this;
+	}
+}
 class SearchItemSectionVideoPager extends VideoPager {
 	constructor(itemSection) {
 		super(itemSection.videos, itemSection.videos.length > 0 && !!itemSection.continuation);
@@ -2202,10 +2271,20 @@ function getInitialData(html, useAuth = false) {
 	return null;
 }
 function getInitialPlayerData(html) {
-	const match = html.match(REGEX_INITIAL_PLAYER_DATA);
+	let match = html.match(REGEX_INITIAL_PLAYER_DATA);
 	if(match) {
-		const initialDataRaw = match[1];
-		return JSON.parse(initialDataRaw);
+		let initialDataRaw = match[1];
+		try {
+			return JSON.parse(initialDataRaw);
+		}
+		catch(ex) {
+			//Fallback approach
+			match = html.match(REGEX_INITIAL_PLAYER_DATA_FALLBACK);
+			if(match) {
+				initialDataRaw = match[1];
+				return JSON.parse(initialDataRaw);
+			}
+		}
 	}
 	return null;
 }
@@ -3024,7 +3103,7 @@ function extractRichGridRenderer_Shelves(richGridRenderer, contextData) {
 				continuation = extractContinuationItemRenderer_Continuation(renderer, contextData);
 			},
 			itemSectionRenderer(renderer) {
-		        const items = extractItemSectionRenderer_Shelves(renderer);
+		        const items = extractItemSectionRenderer_Shelves(renderer, contextData);
 
 		        if(items.shelves)
 		            shelves = shelves.concat(items.shelves);
@@ -3056,7 +3135,7 @@ function extractSectionListRenderer_Sections(sectionListRenderer, contextData) {
 		const item = contents[i];
 		switchKey(item, {
 			itemSectionRenderer(renderer) {
-				const items = extractItemSectionRenderer_Shelves(renderer);
+				const items = extractItemSectionRenderer_Shelves(renderer, contextData);
 				if(items.videos.length > 0)
 					videos.push(...items.videos);
 				if(items.channels.length > 0)
@@ -3115,6 +3194,11 @@ function extractItemSectionRenderer_Shelves(itemSectionRenderer, contextData) {
 			    if(shelf)
 				    shelves.push(shelf);
 			},
+			gridRenderer(renderer) {
+				const shelf = extractGridRenderer_Shelf(renderer, contextData);
+				if(shelf.playlists.length > 0)
+					playlists.push(...shelf.playlists);
+			},
 			default() {
 				const video = switchKeyVideo(item, contextData);
 				if(video)
@@ -3126,6 +3210,35 @@ function extractItemSectionRenderer_Shelves(itemSectionRenderer, contextData) {
 
 	return {
 		shelves: shelves.filter(x=>x != null),
+		videos: videos.filter(x=>x != null),
+		channels: channels.filter(x=>x != null),
+		playlists: playlists.filter(x=>x != null)
+	};
+}
+function extractGridRenderer_Shelf(gridRenderer, contextData) {
+	const contents = gridRenderer.items;
+	let shelves = [];
+	let videos = [];
+	let channels = [];
+	let playlists = [];
+
+	contents.forEach((item)=>{
+		switchKey(item, {
+			gridPlaylistRenderer(renderer) {
+			    const playlist = extractPlaylistRenderer_Playlist(renderer, contextData);
+			    if(playlist)
+			        playlists.push(playlist);
+			},
+			default() {
+				const video = switchKeyVideo(item, contextData);
+				if(video)
+					videos.push(video);
+			}
+		});
+		
+	});
+
+	return {
 		videos: videos.filter(x=>x != null),
 		channels: channels.filter(x=>x != null),
 		playlists: playlists.filter(x=>x != null)
@@ -3383,11 +3496,15 @@ function extractPlaylistRenderer_Playlist(playlistRenderer, contextData) {
 	const author = (contextData && contextData.authorLink) ?
 		contextData.authorLink : extractRuns_AuthorLink(playlistRenderer.shortBylineText?.runs);
 
+	let thumbnail = (playlistRenderer.thumbnails && playlistRenderer.thumbnails.length > 0) ? extractThumbnail_BestUrl(playlistRenderer.thumbnails[0]) : null;
+	if(!thumbnail && playlistRenderer.thumbnail)
+		thumbnail = extractThumbnail_BestUrl(playlistRenderer.thumbnail);
+
     return new PlatformPlaylist({
 		id: new PlatformID(PLATFORM, playlistRenderer.playlistId, config.id),
 		author: author,
         name: extractText_String(playlistRenderer.title),
-        thumbnail: (playlistRenderer.thumbnails && playlistRenderer.thumbnails.length > 0) ? extractThumbnail_BestUrl(playlistRenderer.thumbnails[0]) : null,
+        thumbnail: thumbnail,
         url: URL_PLAYLIST + playlistRenderer.playlistId,
         videoCount: extractFirstNumber_Integer(extractText_String(playlistRenderer.videoCountText)),
     });
