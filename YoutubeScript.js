@@ -1161,6 +1161,7 @@ source.getPlaylist = function (url) {
 		}
 
 		//TODO: Make a proper pager
+		/*
 		while (continuationToken) {
 			const newData = validateContinuation(()=>requestBrowse({
 				continuation: continuationToken
@@ -1183,7 +1184,7 @@ source.getPlaylist = function (url) {
 					}
 				});
 			}
-		}
+		}*/
 
 		let thumbnail = null;
 		if(videos && videos.length > 0 && 
@@ -1198,12 +1199,56 @@ source.getPlaylist = function (url) {
 			author: extractRuns_AuthorLink(playlistHeaderRenderer?.ownerText?.runs),
             name: title,
             thumbnail: thumbnail,
-            videoCount: videos.length,
-            contents: new VideoPager(videos)
+            videoCount: extractFirstNumber_Integer(extractText_String(playlistHeaderRenderer?.numVideosText)),
+            contents: new PlaylistVideoPager(videos, continuationToken)
         });
     }
     return null;
 };
+
+class PlaylistVideoPager extends VideoPager {
+	constructor(videos, continuation, useMobile = false, useAuth = false) {
+		super(videos, !!continuation);
+		this.continuation = continuation;
+		this.useMobile = useMobile;
+		this.useAuth = useAuth;
+	}
+	
+	nextPage() {
+		if(!this.continuation) {
+			this.hasMore = false;
+			this.results = [];
+			return this;
+		}
+		const newData = validateContinuation(()=>requestBrowse({
+			continuation: this.continuation
+		}, USE_MOBILE_PAGES, true));
+
+		if (newData.length < 1) {
+			this.hasMore = false;
+			this.results = [];
+			return this;
+		}
+		this.continuation = null;
+		let me = this;
+		let videos = [];
+		for(let playlistRenderer of newData) {
+			switchKey(playlistRenderer, {
+				playlistVideoRenderer(renderer) {
+					const video = extractPlaylistVideoRenderer_Video(renderer);
+					if(video)
+						videos.push(video);
+				},
+				continuationItemRenderer(continueRenderer) {
+					me.continuation = continueRenderer?.continuationEndpoint?.continuationCommand?.token;
+				}
+			});
+		}
+		this.results = videos;
+		this.hasMore = !!this.continuation;
+		return this;
+	}
+}
 source.getUserPlaylists = function() {
 	if (!bridge.isLoggedIn()) {
 		bridge.log("Failed to retrieve subscriptions page because not logged in.");
