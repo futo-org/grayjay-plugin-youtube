@@ -483,6 +483,13 @@ source.getContentDetails = (url, useAuth) => {
 		return source.getContentChapters(url, finalResult.__initialData);
 	};
 
+	finalResult.getContentRecommendations = function() {
+		const initialData = finalResult.__initialData;
+		if(!initialData)
+			return new VideoPager([], false);
+		return source.getContentRecommendations(url, initialData);
+	}
+
 	return finalResult;
 };
 
@@ -938,7 +945,46 @@ source.getSubComments = (comment) => {
 		return new CommentPager([], false);
 };
 
+source.getContentRecommendations = (url, initialData) => {
+	useAuth = !!_settings?.authDetails;
+	url = convertIfOtherUrl(url);
 
+	if(!initialData) {
+		const videoId = extractVideoIDFromUrl(url);
+		if(IS_TESTING)
+			console.log("VideoID:", videoId);
+
+		const useLogin = useAuth && bridge.isLoggedIn();
+
+		const headersUsed = (useLogin) ? getAuthContextHeaders(false) : {};
+		headersUsed["Accept-Language"] = "en-US";
+		headersUsed["Cookie"] = "PREF=hl=en&gl=US"
+
+		const resp = http.GET(url, headersUsed, useLogin);
+
+		throwIfCaptcha(resp);
+		if(!resp.isOk) {
+			throw new ScriptException("Failed to request page [" + resp.code + "]");
+		}
+
+		const html = resp.body;//requestPage(url);
+		initialData = getInitialData(html);
+	}
+
+	const contents = initialData.contents;
+	let watchNextFeed = contents.twoColumnWatchNextResults?.secondaryResults?.secondaryResults ?? null;
+	if(!watchNextFeed) 
+		return new VideoPager([], false);
+	if(watchNextFeed.targetId != 'watch-next-feed' && watchNextFeed.results)
+		watchNextFeed = watchNextFeed.results.find(x=>x.targetId == 'watch-next-feed')
+	if(!watchNextFeed)
+		return new VideoPager([], false);
+	
+	const itemSectionRenderer = extractItemSectionRenderer_Shelves(watchNextFeed);
+
+	//TODO: pages
+	return new VideoPager(itemSectionRenderer?.videos ?? [], false);
+};
 
 //Channel
 source.isChannelUrl = (url) => {
@@ -3204,11 +3250,12 @@ function extractSectionListRenderer_Sections(sectionListRenderer, contextData) {
 	};
 }
 function extractItemSectionRenderer_Shelves(itemSectionRenderer, contextData) {
-	const contents = itemSectionRenderer.contents;
+	const contents = itemSectionRenderer.contents ?? itemSectionRenderer.results;
 	let shelves = [];
 	let videos = [];
 	let channels = [];
 	let playlists = [];
+	let continuationToken = undefined;
 
 	contents.forEach((item)=>{
 		switchKey(item, {
@@ -3244,6 +3291,11 @@ function extractItemSectionRenderer_Shelves(itemSectionRenderer, contextData) {
 				if(shelf.playlists.length > 0)
 					playlists.push(...shelf.playlists);
 			},
+			continuationItemRenderer(renderer) {
+				const token = renderer?.continuationEndpoint?.continuationCommand?.token
+				if(token)
+					continuationToken = token;
+			},
 			default() {
 				const video = switchKeyVideo(item, contextData);
 				if(video)
@@ -3257,7 +3309,8 @@ function extractItemSectionRenderer_Shelves(itemSectionRenderer, contextData) {
 		shelves: shelves.filter(x=>x != null),
 		videos: videos.filter(x=>x != null),
 		channels: channels.filter(x=>x != null),
-		playlists: playlists.filter(x=>x != null)
+		playlists: playlists.filter(x=>x != null),
+		continuation: continuationToken
 	};
 }
 function extractGridRenderer_Shelf(gridRenderer, contextData) {
@@ -3409,14 +3462,14 @@ function extractVideoWithContextRenderer_Video(videoRenderer, contextData) {
 		contextData.authorLink : extractVideoWithContextRenderer_AuthorLink(videoRenderer);
 
 	if(IS_TESTING)
-		console.log(videoRenderer);
+		;//console.log(videoRenderer);
 
 	if(!videoRenderer?.lengthText?.runs || !videoRenderer.publishedTimeText?.runs)
 		isLive = true; //If no length, live after all?
 
     let viewCount = 0;
-    if(videoRenderer?.shortViewCountText?.runs != null)
-        viewCount = extractHumanNumber_Integer(extractRuns_String(videoRenderer.shortViewCountText.runs));
+    if(videoRenderer?.shortViewCountText)
+        viewCount = extractHumanNumber_Integer(extractText_String(videoRenderer.shortViewCountText));
     else log("No viewcount found on video " + videoRenderer.videoId);
 
 	const title = (videoRenderer.headline) ? extractText_String(videoRenderer.headline) : extractText_String(videoRenderer.title);
