@@ -1207,7 +1207,7 @@ source.getPlaylist = function (url) {
 		}
 
 		//Fallback for old apps
-		if(!bridge.buildVersion || bridge.buildVersion < 244) {
+		if(!bridge.buildVersion || bridge.buildVersion < 245) {
 			log("Using legacy remote playlist (all videos first page)");
 			while (continuationToken) {
 				const newData = validateContinuation(()=>requestBrowse({
