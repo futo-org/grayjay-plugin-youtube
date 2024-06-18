@@ -1206,31 +1206,33 @@ source.getPlaylist = function (url) {
             });
 		}
 
-		//TODO: Make a proper pager
-		/*
-		while (continuationToken) {
-			const newData = validateContinuation(()=>requestBrowse({
-				continuation: continuationToken
-			}, USE_MOBILE_PAGES, true));
+		//Fallback for old apps
+		if(!bridge.buildVersion || bridge.buildVersion < 244) {
+			log("Using legacy remote playlist (all videos first page)");
+			while (continuationToken) {
+				const newData = validateContinuation(()=>requestBrowse({
+					continuation: continuationToken
+				}, USE_MOBILE_PAGES, true));
 
-			if (newData.length < 1) {
-				break;
-			}
+				if (newData.length < 1) {
+					break;
+				}
 
-			continuationToken = null;
-			for(let playlistRenderer of newData) {
-				switchKey(playlistRenderer, {
-					playlistVideoRenderer(renderer) {
-						const video = extractPlaylistVideoRenderer_Video(renderer);
-						if(video)
-							videos.push(video);
-					},
-					continuationItemRenderer(continueRenderer) {
-						continuationToken = continueRenderer?.continuationEndpoint?.continuationCommand?.token;
-					}
-				});
+				continuationToken = null;
+				for(let playlistRenderer of newData) {
+					switchKey(playlistRenderer, {
+						playlistVideoRenderer(renderer) {
+							const video = extractPlaylistVideoRenderer_Video(renderer);
+							if(video)
+								videos.push(video);
+						},
+						continuationItemRenderer(continueRenderer) {
+							continuationToken = continueRenderer?.continuationEndpoint?.continuationCommand?.token;
+						}
+					});
+				}
 			}
-		}*/
+		}
 
 		let thumbnail = null;
 		if(videos && videos.length > 0 && 
