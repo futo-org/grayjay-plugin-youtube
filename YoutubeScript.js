@@ -483,6 +483,13 @@ source.getContentDetails = (url, useAuth) => {
 		return source.getContentChapters(url, finalResult.__initialData);
 	};
 
+	finalResult.getContentRecommendations = function() {
+		const initialData = finalResult.__initialData;
+		if(!initialData)
+			return new VideoPager([], false);
+		return source.getContentRecommendations(url, initialData);
+	}
+
 	return finalResult;
 };
 
@@ -938,7 +945,46 @@ source.getSubComments = (comment) => {
 		return new CommentPager([], false);
 };
 
+source.getContentRecommendations = (url, initialData) => {
+	useAuth = !!_settings?.authDetails;
+	url = convertIfOtherUrl(url);
 
+	if(!initialData) {
+		const videoId = extractVideoIDFromUrl(url);
+		if(IS_TESTING)
+			console.log("VideoID:", videoId);
+
+		const useLogin = useAuth && bridge.isLoggedIn();
+
+		const headersUsed = (useLogin) ? getAuthContextHeaders(false) : {};
+		headersUsed["Accept-Language"] = "en-US";
+		headersUsed["Cookie"] = "PREF=hl=en&gl=US"
+
+		const resp = http.GET(url, headersUsed, useLogin);
+
+		throwIfCaptcha(resp);
+		if(!resp.isOk) {
+			throw new ScriptException("Failed to request page [" + resp.code + "]");
+		}
+
+		const html = resp.body;//requestPage(url);
+		initialData = getInitialData(html);
+	}
+
+	const contents = initialData.contents;
+	let watchNextFeed = contents.twoColumnWatchNextResults?.secondaryResults?.secondaryResults ?? null;
+	if(!watchNextFeed) 
+		return new VideoPager([], false);
+	if(watchNextFeed.targetId != 'watch-next-feed' && watchNextFeed.results)
+		watchNextFeed = watchNextFeed.results.find(x=>x.targetId == 'watch-next-feed')
+	if(!watchNextFeed)
+		return new VideoPager([], false);
+	
+	const itemSectionRenderer = extractItemSectionRenderer_Shelves(watchNextFeed);
+
+	//TODO: pages
+	return new VideoPager(itemSectionRenderer?.videos ?? [], false);
+};
 
 //Channel
 source.isChannelUrl = (url) => {
@@ -1160,28 +1206,31 @@ source.getPlaylist = function (url) {
             });
 		}
 
-		//TODO: Make a proper pager
-		while (continuationToken) {
-			const newData = validateContinuation(()=>requestBrowse({
-				continuation: continuationToken
-			}, USE_MOBILE_PAGES, true));
+		//Fallback for old apps
+		if(!bridge.buildVersion || bridge.buildVersion < 244) {
+			log("Using legacy remote playlist (all videos first page)");
+			while (continuationToken) {
+				const newData = validateContinuation(()=>requestBrowse({
+					continuation: continuationToken
+				}, USE_MOBILE_PAGES, true));
 
-			if (newData.length < 1) {
-				break;
-			}
+				if (newData.length < 1) {
+					break;
+				}
 
-			continuationToken = null;
-			for(let playlistRenderer of newData) {
-				switchKey(playlistRenderer, {
-					playlistVideoRenderer(renderer) {
-						const video = extractPlaylistVideoRenderer_Video(renderer);
-						if(video)
-							videos.push(video);
-					},
-					continuationItemRenderer(continueRenderer) {
-						continuationToken = continueRenderer?.continuationEndpoint?.continuationCommand?.token;
-					}
-				});
+				continuationToken = null;
+				for(let playlistRenderer of newData) {
+					switchKey(playlistRenderer, {
+						playlistVideoRenderer(renderer) {
+							const video = extractPlaylistVideoRenderer_Video(renderer);
+							if(video)
+								videos.push(video);
+						},
+						continuationItemRenderer(continueRenderer) {
+							continuationToken = continueRenderer?.continuationEndpoint?.continuationCommand?.token;
+						}
+					});
+				}
 			}
 		}
 
@@ -1198,12 +1247,56 @@ source.getPlaylist = function (url) {
 			author: extractRuns_AuthorLink(playlistHeaderRenderer?.ownerText?.runs),
             name: title,
             thumbnail: thumbnail,
-            videoCount: videos.length,
-            contents: new VideoPager(videos)
+            videoCount: extractFirstNumber_Integer(extractText_String(playlistHeaderRenderer?.numVideosText)),
+            contents: new PlaylistVideoPager(videos, continuationToken)
         });
     }
     return null;
 };
+
+class PlaylistVideoPager extends VideoPager {
+	constructor(videos, continuation, useMobile = false, useAuth = false) {
+		super(videos, !!continuation);
+		this.continuation = continuation;
+		this.useMobile = useMobile;
+		this.useAuth = useAuth;
+	}
+	
+	nextPage() {
+		if(!this.continuation) {
+			this.hasMore = false;
+			this.results = [];
+			return this;
+		}
+		const newData = validateContinuation(()=>requestBrowse({
+			continuation: this.continuation
+		}, USE_MOBILE_PAGES, true));
+
+		if (newData.length < 1) {
+			this.hasMore = false;
+			this.results = [];
+			return this;
+		}
+		this.continuation = null;
+		let me = this;
+		let videos = [];
+		for(let playlistRenderer of newData) {
+			switchKey(playlistRenderer, {
+				playlistVideoRenderer(renderer) {
+					const video = extractPlaylistVideoRenderer_Video(renderer);
+					if(video)
+						videos.push(video);
+				},
+				continuationItemRenderer(continueRenderer) {
+					me.continuation = continueRenderer?.continuationEndpoint?.continuationCommand?.token;
+				}
+			});
+		}
+		this.results = videos;
+		this.hasMore = !!this.continuation;
+		return this;
+	}
+}
 source.getUserPlaylists = function() {
 	if (!bridge.isLoggedIn()) {
 		bridge.log("Failed to retrieve subscriptions page because not logged in.");
@@ -3159,11 +3252,12 @@ function extractSectionListRenderer_Sections(sectionListRenderer, contextData) {
 	};
 }
 function extractItemSectionRenderer_Shelves(itemSectionRenderer, contextData) {
-	const contents = itemSectionRenderer.contents;
+	const contents = itemSectionRenderer.contents ?? itemSectionRenderer.results;
 	let shelves = [];
 	let videos = [];
 	let channels = [];
 	let playlists = [];
+	let continuationToken = undefined;
 
 	contents.forEach((item)=>{
 		switchKey(item, {
@@ -3199,6 +3293,11 @@ function extractItemSectionRenderer_Shelves(itemSectionRenderer, contextData) {
 				if(shelf.playlists.length > 0)
 					playlists.push(...shelf.playlists);
 			},
+			continuationItemRenderer(renderer) {
+				const token = renderer?.continuationEndpoint?.continuationCommand?.token
+				if(token)
+					continuationToken = token;
+			},
 			default() {
 				const video = switchKeyVideo(item, contextData);
 				if(video)
@@ -3212,7 +3311,8 @@ function extractItemSectionRenderer_Shelves(itemSectionRenderer, contextData) {
 		shelves: shelves.filter(x=>x != null),
 		videos: videos.filter(x=>x != null),
 		channels: channels.filter(x=>x != null),
-		playlists: playlists.filter(x=>x != null)
+		playlists: playlists.filter(x=>x != null),
+		continuation: continuationToken
 	};
 }
 function extractGridRenderer_Shelf(gridRenderer, contextData) {
@@ -3364,14 +3464,14 @@ function extractVideoWithContextRenderer_Video(videoRenderer, contextData) {
 		contextData.authorLink : extractVideoWithContextRenderer_AuthorLink(videoRenderer);
 
 	if(IS_TESTING)
-		console.log(videoRenderer);
+		;//console.log(videoRenderer);
 
 	if(!videoRenderer?.lengthText?.runs || !videoRenderer.publishedTimeText?.runs)
 		isLive = true; //If no length, live after all?
 
     let viewCount = 0;
-    if(videoRenderer?.shortViewCountText?.runs != null)
-        viewCount = extractHumanNumber_Integer(extractRuns_String(videoRenderer.shortViewCountText.runs));
+    if(videoRenderer?.shortViewCountText)
+        viewCount = extractHumanNumber_Integer(extractText_String(videoRenderer.shortViewCountText));
     else log("No viewcount found on video " + videoRenderer.videoId);
 
 	const title = (videoRenderer.headline) ? extractText_String(videoRenderer.headline) : extractText_String(videoRenderer.title);
