@@ -239,6 +239,12 @@ source.getTrending = () => {
         if(bridge.devSubmit) bridge.devSubmit("getTrending - No tabs found..", JSON.stringify(initialData));
 		throw new ScriptException("No tabs found..");
 	}
+	let tab = tabs[0];
+	if (tab.videos.length === 0) {
+		if (tab.shelves.length > 0) {
+			tab = tab.shelves[0];
+		}
+	}
 	return new RichGridPager(tabs[0], {}, USE_MOBILE_PAGES, false);
 };
 
