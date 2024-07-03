@@ -245,7 +245,7 @@ source.getTrending = () => {
 			tab = tab.shelves[0];
 		}
 	}
-	return new RichGridPager(tabs[0], {}, USE_MOBILE_PAGES, false);
+	return new RichGridPager(tab, {}, USE_MOBILE_PAGES, false);
 };
 
 
