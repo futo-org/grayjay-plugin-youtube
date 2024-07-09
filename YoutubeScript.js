@@ -33,7 +33,7 @@ const URL_YOUTUBE_SPONSORBLOCK = "https://sponsor.ajay.app/api/skipSegments?vide
 const URL_YOUTUBE_RSS = "https://www.youtube.com/feeds/videos.xml?channel_id=";
 
 //Newest to oldest
-const CIPHER_TEST_HASHES = ["a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
+const CIPHER_TEST_HASHES = ["b22ef6e7", "a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
 const CIPHER_TEST_PREFIX = "/s/player/";
 const CIPHER_TEST_SUFFIX = "/player_ias.vflset/en_US/base.js";
 
@@ -1134,7 +1134,7 @@ source.peekChannelContents = function(url, type) {
 
         videos.push(new PlatformVideo({
 			id: new PlatformID(PLATFORM, entry.children.find(x=>x.name == 'yt:videoid').value, config.id),
-			name: group.children.find(x=>x.name == 'media:title').value,
+			name: escapeUnicode(group.children.find(x=>x.name == 'media:title').value),
 			thumbnails: new Thumbnails([
 			    new Thumbnail(group.children.find(x=>x.name == 'media:thumbnail')?.attributes["url"], 1)
 			]),
@@ -2655,7 +2655,7 @@ function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextDa
 	const video = {
 		id: new PlatformID(PLATFORM, videoDetails.videoId, config.id),
 		name: videoDetails.title,
-		thumbnails: new Thumbnails(videoDetails.thumbnail?.thumbnails.map(x=>new Thumbnail(x.url, x.height)) ?? []),
+		thumbnails: new Thumbnails(videoDetails.thumbnail?.thumbnails.map(x=>new Thumbnail(escapeUnicode(x.url), x.height)) ?? []),
 		author: new PlatformAuthorLink(new PlatformID(PLATFORM, videoDetails.channelId, config.id, PLATFORM_CLAIMTYPE), videoDetails.author, URL_BASE + "/channel/" + videoDetails.channelId, null, null),
 		duration: parseInt(videoDetails.lengthSeconds),
 		viewCount: parseInt(videoDetails.viewCount),
@@ -3485,7 +3485,7 @@ function extractVideoWithContextRenderer_Video(videoRenderer, contextData) {
 	if (isLive) {
 		return new PlatformVideo({
 			id: new PlatformID(PLATFORM, videoRenderer.videoId, config.id),
-			name: title,
+			name: escapeUnicode(title),
 			thumbnails: extractThumbnail_Thumbnails(videoRenderer.thumbnail),
 			author: author,
 			uploadDate: plannedDate ?? parseInt(new Date().getTime() / 1000),
@@ -3498,7 +3498,7 @@ function extractVideoWithContextRenderer_Video(videoRenderer, contextData) {
 	} else {
 		return new PlatformVideo({
 			id: new PlatformID(PLATFORM, videoRenderer.videoId, config.id),
-			name: title,
+			name: escapeUnicode(title),
 			thumbnails: extractThumbnail_Thumbnails(videoRenderer.thumbnail),
 			author: author,
 			uploadDate: parseInt(extractAgoText_Timestamp(extractText_String(videoRenderer.publishedTimeText))),
@@ -3542,7 +3542,7 @@ function extractVideoRenderer_Video(videoRenderer, contextData) {
 	if(isLive)
 		return new PlatformVideo({
 			id: new PlatformID(PLATFORM, videoRenderer.videoId, config.id),
-			name: extractRuns_String(videoRenderer.title.runs),
+			name: escapeUnicode(extractRuns_String(videoRenderer.title.runs)),
 			thumbnails: extractThumbnail_Thumbnails(videoRenderer.thumbnail),
 			author: author,
 			uploadDate: plannedDate ?? parseInt(new Date().getTime()/1000),
@@ -3555,7 +3555,7 @@ function extractVideoRenderer_Video(videoRenderer, contextData) {
 	else
 		return new PlatformVideo({
 			id: new PlatformID(PLATFORM, videoRenderer.videoId, config.id),
-			name: extractRuns_String(videoRenderer.title.runs),
+			name: escapeUnicode(extractRuns_String(videoRenderer.title.runs)),
 			thumbnails: extractThumbnail_Thumbnails(videoRenderer.thumbnail),
 			author: author,
 			uploadDate: parseInt(extractAgoText_Timestamp(videoRenderer.publishedTimeText.simpleText)),
@@ -3587,7 +3587,7 @@ function extractPlaylistVideoRenderer_Video(videoRenderer, contextData) {
 
 	return new PlatformVideo({
 		id: new PlatformID(PLATFORM, videoRenderer.videoId, config.id),
-		name: extractRuns_String(videoRenderer.title.runs),
+		name: escapeUnicode(extractRuns_String(videoRenderer.title.runs)),
 		thumbnails: extractThumbnail_Thumbnails(videoRenderer.thumbnail),
 		author: author,
 		uploadDate: date,
@@ -3642,7 +3642,7 @@ function extractRuns_AuthorLink(runs) {
 }
 
 function extractThumbnail_Thumbnails(thumbnail) {
-	return new Thumbnails(thumbnail.thumbnails.map(x=>new Thumbnail(x.url, x.height)));
+	return new Thumbnails(thumbnail.thumbnails.map(x=>new Thumbnail(escapeUnicode(x.url), x.height)));
 }
 function extractThumbnail_BestUrl(thumbnail) {
     if(!thumbnail?.thumbnails || thumbnail.thumbnails.length <= 0)
@@ -3919,6 +3919,12 @@ function extractHumanDate_Timestamp(dateParts) {
 	return (day > 0 && month > 0 && year > 0) ? 
 		new Date(year + "-" + month + "-" + day).getTime() / 1000 : 
 		-1;
+}
+
+function escapeUnicode(str) {
+	if(!str)
+		return str;
+	return str.replace("\\u0026", "&");
 }
 
 //#endregion
@@ -4265,6 +4271,7 @@ const REGEX_CIPHERS = [
 	new RegExp("\\bc\\s*&&\\s*d\\.set\\([^,]+\\s*,\\s*(:encodeURIComponent\\s*\\()([a-zA-Z0-9$]+)\\(")
 ];
 const REGEX_DECRYPT_N = /\.get\(\"n\"\)\)&&\([a-zA-Z0-9$_]=([a-zA-Z0-9$_]+)(?:\[(\d+)])?\([a-zA-Z0-9$_]\)/;
+const REGEX_DECRYPT_N2 = /[a-zA-Z0-9$_]+=String\.fromCharCode\(110\),[a-zA-Z0-9$_]+=[a-zA-Z0-9$_]+\.get\([a-zA-Z0-9$_]+\)\)&&\([a-zA-Z0-9$_]=([a-zA-Z0-9$_]+)(?:\[(\d+)])?\([a-zA-Z0-9$_]\)/;
 const REGEX_PARAM_N = new RegExp("[?&]n=([^&]*)");
 const STS_REGEX = new RegExp("signatureTimestamp[=:](\\d+)");
 
@@ -4420,10 +4427,14 @@ function clearCipher(jsUrl) {
 function getNDecryptorFunctionCode(code, jsUrl) {
 	if(_nDecrypt[jsUrl])
 		return _nDecrypt[jsUrl];
-	const nDecryptFunctionArrNameMatch = REGEX_DECRYPT_N.exec(code);
+	let nDecryptFunctionArrNameMatch = REGEX_DECRYPT_N.exec(code);
+	if(!nDecryptFunctionArrNameMatch) {
+		console.log("NDecryptor failed, trying fallback");
+		nDecryptFunctionArrNameMatch = REGEX_DECRYPT_N2.exec(code);
+	}
 	if(!nDecryptFunctionArrNameMatch) {
         if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (name)", jsUrl);
-		throw new ScriptException("Failed to find n decryptor (name)");
+		throw new ScriptException("Failed to find n decryptor (name)\n" + jsUrl);
     }
 	const nDecryptFunctionArrName = nDecryptFunctionArrNameMatch[1];
 	const nDecryptFunctionArrIndex = parseInt(nDecryptFunctionArrNameMatch[2]);
@@ -4439,7 +4450,20 @@ function getNDecryptorFunctionCode(code, jsUrl) {
 		throw new ScriptException("Failed to find n decryptor (index)\n" + jsUrl);
 	}
 	const nDecryptFunctionName = nDecryptArray[nDecryptFunctionArrIndex]
-	const nDecryptFunctionCodeMatch = code.match(escapeRegex(nDecryptFunctionName) + "=function\\(a\\)\\{[\\s\\S]*?join\\(\\\"\\\"\\)};");
+	
+	const nDecryptFunctionCodeMatch1 = code.match(escapeRegex(nDecryptFunctionName) + "=function\\(a\\)\\{[\\s\\S]*?join\\(\\\"\\\"\\)};");
+	const nDecryptFunctionCodeMatch2 = code.match(escapeRegex(nDecryptFunctionName) + "=function\\(a\\)\\{[\\s\\S]*?join\\.call\\([a-zA-Z$_]+,\\\"\\\"\\)};")
+	let nDecryptFunctionCodeMatch = undefined;
+	if(nDecryptFunctionCodeMatch1 && !nDecryptFunctionCodeMatch2)
+		nDecryptFunctionCodeMatch = nDecryptFunctionCodeMatch1;
+	else if(!nDecryptFunctionCodeMatch1 && nDecryptFunctionCodeMatch2)
+		nDecryptFunctionCodeMatch = nDecryptFunctionCodeMatch2;
+	else if(nDecryptFunctionCodeMatch1 && nDecryptFunctionCodeMatch2 && nDecryptFunctionCodeMatch1.length > 0 && nDecryptFunctionCodeMatch2.length > 0) {
+		if(nDecryptFunctionCodeMatch1[0].length < nDecryptFunctionCodeMatch2[0].length)
+			nDecryptFunctionCodeMatch = nDecryptFunctionCodeMatch1;
+		else
+			nDecryptFunctionCodeMatch = nDecryptFunctionCodeMatch2;
+	}
 	if(!nDecryptFunctionCodeMatch) {
         if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (code)", jsUrl, code);
 		throw new ScriptException("Failed to find n decryptor (code)\n" + jsUrl);
