@@ -3519,9 +3519,10 @@ function extractVideoRenderer_Video(videoRenderer, contextData) {
 	if(plannedDate)
 		isLive = true;
 
-	if(!isLive && !videoRenderer.publishedTimeText?.simpleText)
-		return  null; //Not a normal video
-
+	if (!isLive && !videoRenderer.publishedTimeText?.simpleText) {
+		// Music videos have no dates in search results
+		videoRenderer.publishedTimeText = { simpleText: "" };
+	}
 
 
 	const author = (contextData && contextData.authorLink) ?
