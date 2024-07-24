@@ -117,6 +117,7 @@ var _prefetchHome = null;
 var _prefetchHomeAuth = null;
 var _prefetchHomeUsed = false;
 
+
 function getClientContext(isAuth = false) {
 	return (isAuth) ? _clientContextAuth : _clientContext;
 }
@@ -372,7 +373,7 @@ source.getContentDetails = (url, useAuth, simplify) => {
 
 	const batch = http.batch().GET(url, headersUsed, useLogin);
 		
-	if(videoId && _settings["youtubeDislikes"])
+	if(videoId && _settings["youtubeDislikes"] && !simplify)
 		batch.GET(URL_YOUTUBE_DISLIKES + videoId, {}, false);
 	const resps = batch.execute();
 
@@ -381,9 +382,39 @@ source.getContentDetails = (url, useAuth, simplify) => {
 		throw new ScriptException("Failed to request page [" + resps[0].code + "]");
 	}
 
-	const html = resps[0].body;//requestPage(url);
-	const initialData = getInitialData(html);
+	let html = resps[0].body;//requestPage(url);
+	let initialData = getInitialData(html);
 	let initialPlayerData = getInitialPlayerData(html);
+	let clientConfig = getClientConfig(html);
+
+	let retryAttemptCount = 0;
+	let isValid = false;
+	while(!isValid && retryAttemptCount <= 3) {
+		const invalidExperiments = [51217102, 51217476];
+		var invalidExperimentIndexes = invalidExperiments.map(x=>clientConfig.FEXP_EXPERIMENTS.indexOf(x));
+		if(clientConfig.FEXP_EXPERIMENTS && invalidExperimentIndexes.filter(x=>x >= 0).length > 0) {
+			retryAttemptCount++;
+			log("DETECTED BLOCKING ATTEMPT [" + JSON.stringify(invalidExperimentIndexes) + "]");
+			log("EXPIDS: " + JSON.stringify(clientConfig.FEXP_EXPERIMENTS));
+			bridge.toast("Detected Youtube blocking attempt, bypassing.. (" + retryAttemptCount + ")");
+			
+			resps[0] = http.GET(url, headersUsed, useLogin);
+			if(!resps[0].isOk)
+				throw new ScriptException("Failed to request page [" + resps[0].code + "]");
+			throwIfCaptcha(resps[0]);
+					
+			html = resps[0].body;//requestPage(url);
+			initialData = getInitialData(html);
+			initialPlayerData = getInitialPlayerData(html);
+			clientConfig = getClientConfig(html);
+			continue;
+		}
+
+		if(retryAttemptCount > 0) {
+			log("RESOLVED EXPIDS: " + JSON.stringify(clientConfig.FEXP_EXPERIMENTS))
+		}
+		isValid = true;
+	}
 
     if(initialPlayerData?.playabilityStatus?.status == "UNPLAYABLE")
 		throw new UnavailableException("Video unplayable");
@@ -463,7 +494,7 @@ source.getContentDetails = (url, useAuth, simplify) => {
 		}
 	}
 	//Substitute HLS manifest from iOS
-	if(USE_IOS_FALLBACK && videoDetails.hls && videoDetails.hls.url) {
+	if(USE_IOS_FALLBACK && videoDetails.hls && videoDetails.hls.url && !simplify) {
 		const iosData = requestIOSStreamingData(videoDetails.id.value);
 		if(IS_TESTING)
 			console.log("IOS Streaming Data", iosData);
@@ -1538,29 +1569,34 @@ function removeQuery(urlPart) {
 
 //#region Objects
 class YTVideoSource extends VideoUrlRangeSource {
-    constructor(obj) {
+    constructor(obj, originalUrl) {
 		super(obj);
+		this.originalUrl = originalUrl;
     }
 
     getRequestModifier() {
-        return new YTRequestModifier();
+        return new YTRequestModifier(this.originalUrl);
     }
 }
 
 class YTAudioSource extends AudioUrlRangeSource {
-    constructor(obj) {
+    constructor(obj, originalUrl) {
 		super(obj);
+		this.originalUrl = originalUrl;
     }
 
     getRequestModifier() {
-        return new YTRequestModifier();
+        return new YTRequestModifier(this.originalUrl);
     }
 }
 
 class YTRequestModifier extends RequestModifier {
-	constructor() {
+	constructor(originalUrl) {
 		super({ allowByteSkip: false });
         this.requestNumber = 0;
+		this.originalUrl = originalUrl;
+		this.newUrl = null;
+		this.newUrlCount = 0;
     }
 
 	/**
@@ -1571,20 +1607,31 @@ class YTRequestModifier extends RequestModifier {
 	 */
 	modifyRequest(url, headers) {
 		const u = new URL(url);
+		const actualUrl = (this.newUrl) ? new URL(this.newUrl) : u;
 		const isVideoPlaybackUrl = u.pathname.startsWith('/videoplayback');
 
 		if (isVideoPlaybackUrl && !u.searchParams.has("rn")) {
-			u.searchParams.set("rn", this.requestNumber.toString());
+			actualUrl.searchParams.set("rn", this.requestNumber.toString());
 		}
 		this.requestNumber++;
 
+		if(this.newUrl) {
+			log("BYPASS: Using NewURL For sources");
+			log("BYPASS: OldUrl: " + u.toString());
+			log("BYPASS: NewUrl: " + actualUrl.toString());
+			log("BYPASS: Headers: " + JSON.stringify(headers));
+		}
+		
+
+		let removedRangeHeader = undefined;
 		if (headers["Range"] && !u.searchParams.has("range")) {
 			let range = headers["Range"];
 			if (range.startsWith("bytes=")) {
 				range = range.substring("bytes=".length);
 			}
+			removedRangeHeader = headers["Range"];
 			delete headers["Range"];
-			u.searchParams.set("range", range);
+			actualUrl.searchParams.set("range", range);
 		}
 
 		const c = u.searchParams.get("c");
@@ -1597,6 +1644,41 @@ class YTRequestModifier extends RequestModifier {
 		}
 	
 		headers['TE'] = "trailers";
+		
+		
+		//I hate this
+		//Workaround for seemingly active blocking
+		/*
+		const isValid = refetchClient.request("HEAD", actualUrl.toString(), headers);
+		if(isValid.code == 403 && this.newUrlCount < 3) {
+			const itag = actualUrl.searchParams.get("itag");
+			bridge.toast("Youtube block detected (" + (this.newUrlCount + 1) + "), bypassing..");
+			log("Detected 403, attempting bypass");
+			try {
+				const newDetailsResp = source.getContentDetails(this.originalUrl, false, true);
+				if(newDetailsResp) {
+					let source = newDetailsResp.video.videoSources.find(x=>x.itagId == itag);
+					if(!source)
+						source = newDetailsResp.video.audioSources.find(x=>x.itagId == itag);
+					if(source) {
+						this.newUrl = source.url;
+						this.newUrlCount++;
+						this.requestNumber = 0;
+						log("Injecting new source url[" + source.name + "]: " + source.url);
+						bridge.toast("Injecting new source url");
+						if(removedRangeHeader)
+							headers["Range"] = removedRangeHeader;
+						return this.modifyRequest(url, headers);
+					}
+				}
+				else
+					bridge.toast("Bypass failed, couldn't reload [" + newDetailsResp.code + "]");
+			}
+			catch(ex) {
+				bridge.toast("Bypass failed\n" + ex);
+			}
+		}
+		*/
 
 		if (c) {
 			switch (c) {
@@ -1613,7 +1695,7 @@ class YTRequestModifier extends RequestModifier {
 		}
 
         return {
-            url: u.toString(),
+            url: actualUrl.toString(),
 			headers: headers
 		}
     }
@@ -2735,7 +2817,7 @@ function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextDa
 					initEnd: parseInt(y.initRange?.end),
 					indexStart: parseInt(y.indexRange?.start),
 					indexEnd: parseInt(y.indexRange?.end)
-				});
+				}, contextData.url);
 			}).filter(x=>x != null),
 			initialPlayerData.streamingData.adaptiveFormats.filter(x=>x.mimeType.startsWith("audio/")).map(y=>{
 				const codecs = y.mimeType.substring(y.mimeType.indexOf('codecs=\"') + 8).slice(0, -1);
@@ -2768,7 +2850,7 @@ function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextDa
 					indexStart: parseInt(y.indexRange?.start),
 					indexEnd: parseInt(y.indexRange?.end),
 					audioChannels: y.audioChannels
-				});
+				}, contextData.url);
 			}).filter(x=>x!=null),
 		) : new VideoSourceDescriptor([]),
 		subtitles: initialPlayerData
