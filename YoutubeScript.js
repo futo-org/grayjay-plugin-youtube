@@ -33,7 +33,7 @@ const URL_YOUTUBE_SPONSORBLOCK = "https://sponsor.ajay.app/api/skipSegments?vide
 const URL_YOUTUBE_RSS = "https://www.youtube.com/feeds/videos.xml?channel_id=";
 
 //Newest to oldest
-const CIPHER_TEST_HASHES = ["b22ef6e7", "a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
+const CIPHER_TEST_HASHES = ["3400486c", "b22ef6e7", "a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
 const CIPHER_TEST_PREFIX = "/s/player/";
 const CIPHER_TEST_SUFFIX = "/player_ias.vflset/en_US/base.js";
 
@@ -86,13 +86,20 @@ const REGEX_ASR = new RegExp(/<text .*?start="(.*?)" .*?dur="(.*?)".*?>(.*?)<\/t
 const USER_AGENT_WINDOWS = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36";
 const USER_AGENT_PHONE = "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.5481.153 Mobile Safari/537.36";
 const USER_AGENT_TABLET = "Mozilla/5.0 (iPad; CPU OS 13_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/87.0.4280.77 Mobile/15E148 Safari/604.1";
-const USER_AGENT_IOS = "com.google.ios.youtube/17.31.4(iPhone14,5; U; CPU iOS 15_6 like Mac OS X; US)";
+
+const IOS_APP_VERSION = "19.14.3"
+const IOS_DEVICE_VERSION = "iPhone15,4"
+const IOS_OS_VERSION = "17_4_1"
+const IOS_OS_VERSION_DETAILED = "17.4.1.21E237"
+const USER_AGENT_IOS = "com.google.ios.youtube/" + IOS_APP_VERSION + "(" + IOS_DEVICE_VERSION + "; U; CPU iOS " + IOS_OS_VERSION + " like Mac OS X; US)";
+
 const USER_AGENT_ANDROID = "com.google.android.youtube/17.31.35 (Linux; U; Android 12; US) gzip";
 const USER_AGENT_TVHTML5_EMBED = "Mozilla/5.0 (CrKey armv7l 1.5.16041) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.0 Safari/537.36";
 
 const USE_MOBILE_PAGES = true;
 const USE_ANDROID_FALLBACK = false;
 const USE_IOS_FALLBACK = true;
+const USE_IOS_VIDEOS_FALLBACK = false;
 
 const SORT_VIEWS_STRING = "Views";
 const SORT_RATING_STRING = "Rating";
@@ -346,7 +353,7 @@ source.getChannelTemplateByClaimMap = () => {
 source.isContentDetailsUrl = (url) => {
 	return REGEX_VIDEO_URL_DESKTOP.test(url) || REGEX_VIDEO_URL_SHARE.test(url) || REGEX_VIDEO_URL_SHARE_LIVE.test(url) || REGEX_VIDEO_URL_SHORT.test(url) || REGEX_VIDEO_URL_CLIP.test(url) || REGEX_VIDEO_URL_EMBED.test(url);
 };
-source.getContentDetails = (url, useAuth) => {
+source.getContentDetails = (url, useAuth, simplify) => {
 	useAuth = !!_settings?.authDetails || !!useAuth;
 
     url = convertIfOtherUrl(url);
@@ -419,6 +426,13 @@ source.getContentDetails = (url, useAuth) => {
 		console.log("Initial Player Data", initialPlayerData);
 	}
 
+	let creationData = {
+		url: url,
+		initialData: initialData,
+		initialPlayerData: initialPlayerData,
+		jsUrl: jsUrl
+	};
+
 	const videoDetails = extractVideoPage_VideoDetails(initialData, initialPlayerData, {
 		url: url
 	}, jsUrl, useLogin);
@@ -456,9 +470,22 @@ source.getContentDetails = (url, useAuth) => {
 		if(iosData?.streamingData?.hlsManifestUrl) {
 			log("Using iOS HLS substitute");
 			const existingUrl = videoDetails.hls.url;
+			videoDetails.hls.name = "HLS (IOS)";
 			videoDetails.hls.url = iosData.streamingData.hlsManifestUrl;
-			if(existingUrl == videoDetails.live?.url)
+			if(existingUrl == videoDetails.live?.url) {
+				videoDetails.live.name = "HLS (IOS)";
 				videoDetails.live.url = iosData.streamingData.hlsManifestUrl;
+			}
+		}
+	}
+	else if(USE_IOS_VIDEOS_FALLBACK && !simplify) {
+		const iosData = requestIOSStreamingData(videoDetails.id.value);
+		if(IS_TESTING)
+			console.log("IOS Streaming Data", iosData);
+
+		if(iosData?.streamingData?.adaptiveFormats) {
+			let newDescriptor = extractAdaptiveFormats_VideoDescriptor(iosData.streamingData.adaptiveFormats, jsUrl, creationData, "IOS ");
+			videoDetails.video = newDescriptor;
 		}
 	}
 
@@ -2181,12 +2208,12 @@ function requestIOSStreamingData(videoId) {
 		context: {
 			client: {
 				"clientName": "IOS",
-				"clientVersion": "17.31.4",
+             	"clientVersion": IOS_APP_VERSION,//"17.31.4",^M
 				"deviceMake": "Apple",
-				"deviceModel": "iPhone14,5",
+				"deviceModel": IOS_DEVICE_VERSION,//"iPhone14,5",^M
 				"platform": "MOBILE",
 				"osName": "iOS",
-				"osVersion": "15.6.0.19G71",
+				"osVersion": IOS_OS_VERSION_DETAILED,//"15.6.0.19G71",^M
 				"hl": langDisplay,
 				"gl": langRegion,
 			},
@@ -2903,6 +2930,89 @@ function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextDa
 	}
     return result;
 }
+function extractAdaptiveFormats_VideoDescriptor(adaptiveSources, jsUrl, contextData, prefix) {   
+	const nonce = randomString(16);   
+	return adaptiveSources ? new UnMuxVideoSourceDescriptor(   
+			adaptiveSources.filter(x=>x.mimeType.startsWith("video/")).map(y=>{   
+					const codecs = y.mimeType.substring(y.mimeType.indexOf('codecs=\"') + 8).slice(0, -1);   
+					const container = y.mimeType.substring(0, y.mimeType.indexOf(';'));   
+					if(codecs.startsWith("av01"))   
+							return null; //AV01 is unsupported.   
+
+					const logItag = y.itag ==  134;   
+					if(logItag) {   
+							//log(videoDetails.title + " || Format " + container + " - " + y.itag + " - " + y.width);   
+							log("Source Parameters:\n" + JSON.stringify({   
+									url: y.url,   
+									cipher: y.cipher,   
+									signatureCipher: y.signatureCipher   
+							}, null, "   "));   
+					}   
+					   
+					let url = decryptUrlN(y.url, jsUrl, logItag) ?? decryptUrl(y.cipher, jsUrl, logItag) ?? decryptUrl(y.signatureCipher, jsUrl, logItag);   
+					if(url.indexOf("&cpn=") < 0)   
+							url = url + "&cpn=" + nonce;   
+
+					const duration = parseInt(parseInt(y.approxDurationMs) / 1000) ?? 0;   
+					if(isNaN(duration))   
+							return null;   
+
+					if(!y.initRange?.end || !y.indexRange?.end)   
+							return null;   
+
+					return new YTVideoSource({   
+							name: prefix + y.height + "p" + (y.fps ? y.fps : "") + " " + container,   
+							url: url,   
+							width: y.width,   
+							height: y.height,   
+							duration: (!isNaN(duration)) ? duration : 0,   
+							container: y.mimeType.substring(0, y.mimeType.indexOf(';')),   
+							codec: codecs,   
+							bitrate: y.bitrate,   
+
+							itagId: y.itag,   
+							initStart: parseInt(y.initRange?.start),   
+							initEnd: parseInt(y.initRange?.end),   
+							indexStart: parseInt(y.indexRange?.start),   
+							indexEnd: parseInt(y.indexRange?.end)   
+					}, contextData);   
+			}).filter(x=>x != null),   
+			adaptiveSources.filter(x=>x.mimeType.startsWith("audio/")).map(y=>{   
+					const codecs = y.mimeType.substring(y.mimeType.indexOf('codecs=\"') + 8).slice(0, -1);   
+					const container = y.mimeType.substring(0, y.mimeType.indexOf(';'));   
+
+					let url = decryptUrlN(y.url, jsUrl) ?? decryptUrl(y.cipher, jsUrl) ?? decryptUrl(y.signatureCipher, jsUrl);   
+					if(url.indexOf("&cpn=") < 0)   
+							url = url + "&cpn=" + nonce;   
+					   
+					const duration = parseInt(parseInt(y.approxDurationMs) / 1000);   
+					if(isNaN(duration))   
+							return null;   
+
+					if(!y.initRange?.end || !y.indexRange?.end)   
+							return null;   
+
+					return new YTAudioSource({   
+							name: prefix + (y.audioTrack?.displayName ? y.audioTrack.displayName : codecs),   
+							container: container,   
+							bitrate: y.bitrate,   
+							url: url,   
+							duration: (!isNaN(duration)) ? duration : 0,   
+							container: y.mimeType.substring(0, y.mimeType.indexOf(';')),   
+							codec: codecs,   
+							language: ytLangIdToLanguage(y.audioTrack?.id),   
+
+							itagId: y.itag,   
+							initStart: parseInt(y.initRange?.start),   
+							initEnd: parseInt(y.initRange?.end),   
+							indexStart: parseInt(y.indexRange?.start),   
+							indexEnd: parseInt(y.indexRange?.end),   
+							audioChannels: y.audioChannels   
+					}, contextData);   
+			}).filter(x=>x!=null),   
+	) : new VideoSourceDescriptor([])   
+}
+
 function toSRTTime(sec, withDot) {
 	let hours = 0;
 	let minutes = 0;
@@ -4270,8 +4380,11 @@ const REGEX_CIPHERS = [
 	new RegExp("\\b([\\w$]{2,})\\s*=\\s*function\\((\\w+)\\)\\{\\s*\\2=\\s*\\2\\.split\\(\"\"\\)\\s*;"),
 	new RegExp("\\bc\\s*&&\\s*d\\.set\\([^,]+\\s*,\\s*(:encodeURIComponent\\s*\\()([a-zA-Z0-9$]+)\\(")
 ];
-const REGEX_DECRYPT_N = /\.get\(\"n\"\)\)&&\([a-zA-Z0-9$_]=([a-zA-Z0-9$_]+)(?:\[(\d+)])?\([a-zA-Z0-9$_]\)/;
-const REGEX_DECRYPT_N2 = /[a-zA-Z0-9$_]+=String\.fromCharCode\(110\),[a-zA-Z0-9$_]+=[a-zA-Z0-9$_]+\.get\([a-zA-Z0-9$_]+\)\)&&\([a-zA-Z0-9$_]=([a-zA-Z0-9$_]+)(?:\[(\d+)])?\([a-zA-Z0-9$_]\)/;
+const REGEX_DECRYPT_N_VARIANTS = [
+	/\.get\(\"n\"\)\)&&\([a-zA-Z0-9$_]=([a-zA-Z0-9$_]+)(?:\[(\d+)])?\([a-zA-Z0-9$_]\)/,
+	/[a-zA-Z0-9$_]+=String\.fromCharCode\(110\),[a-zA-Z0-9$_]+=[a-zA-Z0-9$_]+\.get\([a-zA-Z0-9$_]+\)\)&&\([a-zA-Z0-9$_]=([a-zA-Z0-9$_]+)(?:\[(\d+)])?\([a-zA-Z0-9$_]\)/,
+	/[a-zA-Z]+="[n]+"\[.+\],[a-zA-Z0-9$_]+=[a-zA-Z0-9$_]+\.get\([a-zA-Z0-9$_]+\)\)&&\([a-zA-Z0-9$_]=([a-zA-Z0-9$_]+)(?:\[(\d+)])?\([a-zA-Z0-9$_]\)/
+];
 const REGEX_PARAM_N = new RegExp("[?&]n=([^&]*)");
 const STS_REGEX = new RegExp("signatureTimestamp[=:](\\d+)");
 
@@ -4427,10 +4540,14 @@ function clearCipher(jsUrl) {
 function getNDecryptorFunctionCode(code, jsUrl) {
 	if(_nDecrypt[jsUrl])
 		return _nDecrypt[jsUrl];
-	let nDecryptFunctionArrNameMatch = REGEX_DECRYPT_N.exec(code);
-	if(!nDecryptFunctionArrNameMatch) {
-		console.log("NDecryptor failed, trying fallback");
-		nDecryptFunctionArrNameMatch = REGEX_DECRYPT_N2.exec(code);
+	let nDecryptFunctionArrNameMatch = undefined;
+	for(let i = 0; i < REGEX_DECRYPT_N_VARIANTS.length; i++) {
+		nDecryptFunctionArrNameMatch = REGEX_DECRYPT_N_VARIANTS[i].exec(code);
+		if(!nDecryptFunctionArrNameMatch) {
+			console.log("NDecryptor failed, trying fallback to [" + i + 2 + "]");
+		}
+		else
+			break;
 	}
 	if(!nDecryptFunctionArrNameMatch) {
         if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (name)", jsUrl);
