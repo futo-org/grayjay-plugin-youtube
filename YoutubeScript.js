@@ -4465,7 +4465,8 @@ const REGEX_CIPHERS = [
 const REGEX_DECRYPT_N_VARIANTS = [
 	/\.get\(\"n\"\)\)&&\([a-zA-Z0-9$_]=([a-zA-Z0-9$_]+)(?:\[(\d+)])?\([a-zA-Z0-9$_]\)/,
 	/[a-zA-Z0-9$_]+=String\.fromCharCode\(110\),[a-zA-Z0-9$_]+=[a-zA-Z0-9$_]+\.get\([a-zA-Z0-9$_]+\)\)&&\([a-zA-Z0-9$_]=([a-zA-Z0-9$_]+)(?:\[(\d+)])?\([a-zA-Z0-9$_]\)/,
-	/[a-zA-Z]+="[n]+"\[.+\],[a-zA-Z0-9$_]+=[a-zA-Z0-9$_]+\.get\([a-zA-Z0-9$_]+\)\)&&\([a-zA-Z0-9$_]=([a-zA-Z0-9$_]+)(?:\[(\d+)])?\([a-zA-Z0-9$_]\)/
+	/[a-zA-Z]+="[n]+"\[.+\],[a-zA-Z0-9$_]+=[a-zA-Z0-9$_]+\.get\([a-zA-Z0-9$_]+\)\)&&\([a-zA-Z0-9$_]=([a-zA-Z0-9$_]+)(?:\[(\d+)])?\([a-zA-Z0-9$_]\)/,
+	/\/file\/index\.m3u8.+?[a-zA-Z0-9$_]=([a-zA-Z0-9$_]+)(?:\[(\d+)])?\([a-zA-Z0-9$_]\)/
 ];
 const REGEX_PARAM_N = new RegExp("[?&]n=([^&]*)");
 const STS_REGEX = new RegExp("signatureTimestamp[=:](\\d+)");
@@ -4650,18 +4651,16 @@ function getNDecryptorFunctionCode(code, jsUrl) {
 	}
 	const nDecryptFunctionName = nDecryptArray[nDecryptFunctionArrIndex]
 	
-	const nDecryptFunctionCodeMatch1 = code.match(escapeRegex(nDecryptFunctionName) + "=function\\(a\\)\\{[\\s\\S]*?join\\(\\\"\\\"\\)};");
-	const nDecryptFunctionCodeMatch2 = code.match(escapeRegex(nDecryptFunctionName) + "=function\\(a\\)\\{[\\s\\S]*?join\\.call\\([a-zA-Z$_]+,\\\"\\\"\\)};")
+	const nDecryptFunctionCodeMatches = [
+		escapeRegex(nDecryptFunctionName) + "=function\\(a\\)\\{[\\s\\S]*?join\\(\\\"\\\"\\)};",
+		escapeRegex(nDecryptFunctionName) + "=function\\(a\\)\\{[\\s\\S]*?join\\.call\\([a-zA-Z$_]+,\\\"\\\"\\)};",
+		new RegExp(escapeRegex(nDecryptFunctionName) + "=function\\(a\\)\\{[\\s\\S]*?join\\.call\\(.*?\\).*?};", "s")
+	]
 	let nDecryptFunctionCodeMatch = undefined;
-	if(nDecryptFunctionCodeMatch1 && !nDecryptFunctionCodeMatch2)
-		nDecryptFunctionCodeMatch = nDecryptFunctionCodeMatch1;
-	else if(!nDecryptFunctionCodeMatch1 && nDecryptFunctionCodeMatch2)
-		nDecryptFunctionCodeMatch = nDecryptFunctionCodeMatch2;
-	else if(nDecryptFunctionCodeMatch1 && nDecryptFunctionCodeMatch2 && nDecryptFunctionCodeMatch1.length > 0 && nDecryptFunctionCodeMatch2.length > 0) {
-		if(nDecryptFunctionCodeMatch1[0].length < nDecryptFunctionCodeMatch2[0].length)
-			nDecryptFunctionCodeMatch = nDecryptFunctionCodeMatch1;
-		else
-			nDecryptFunctionCodeMatch = nDecryptFunctionCodeMatch2;
+	for(let functionRegex of nDecryptFunctionCodeMatches) {
+		const match = code.match(functionRegex);
+		if(match && match.length > 0 && (!nDecryptFunctionCodeMatch || nDecryptFunctionCodeMatch.length > match[0].length))
+			nDecryptFunctionCodeMatch = match[0];
 	}
 	if(!nDecryptFunctionCodeMatch) {
         if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (code)", jsUrl, code);
@@ -4669,7 +4668,7 @@ function getNDecryptorFunctionCode(code, jsUrl) {
 	}
 	
 	return "(function(){" + 
-		"var " + nDecryptFunctionCodeMatch[0] + "\n" +
+		"var " + nDecryptFunctionCodeMatch + "\n" +
 		"return function decryptN(nEncrypted){ return " + nDecryptFunctionName + "(nEncrypted); } \n" +
 	"})()";
 }
