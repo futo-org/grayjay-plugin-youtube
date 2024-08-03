@@ -99,7 +99,7 @@ const USER_AGENT_TVHTML5_EMBED = "Mozilla/5.0 (CrKey armv7l 1.5.16041) AppleWebK
 const USE_MOBILE_PAGES = true;
 const USE_ANDROID_FALLBACK = false;
 const USE_IOS_FALLBACK = true;
-const USE_IOS_VIDEOS_FALLBACK = true;
+const USE_IOS_VIDEOS_FALLBACK = false;
 
 const SORT_VIEWS_STRING = "Views";
 const SORT_RATING_STRING = "Rating";
