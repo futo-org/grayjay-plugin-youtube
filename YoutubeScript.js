@@ -99,7 +99,7 @@ const USER_AGENT_TVHTML5_EMBED = "Mozilla/5.0 (CrKey armv7l 1.5.16041) AppleWebK
 const USE_MOBILE_PAGES = true;
 const USE_ANDROID_FALLBACK = false;
 const USE_IOS_FALLBACK = true;
-const USE_IOS_VIDEOS_FALLBACK = false;
+const USE_IOS_VIDEOS_FALLBACK = true;
 
 const SORT_VIEWS_STRING = "Views";
 const SORT_RATING_STRING = "Rating";
@@ -389,16 +389,17 @@ source.getContentDetails = (url, useAuth, simplify) => {
 
 	let retryAttemptCount = 0;
 	let isValid = false;
-	while(!isValid && retryAttemptCount <= 3) {
+	const attemptCountMax = 1;
+	while(!isValid && retryAttemptCount < attemptCountMax) {
 		const invalidExperiments = [51217102, 51217476];
 		var invalidExperimentIndexes = invalidExperiments.map(x=>clientConfig.FEXP_EXPERIMENTS.indexOf(x));
 		if(clientConfig.FEXP_EXPERIMENTS && invalidExperimentIndexes.filter(x=>x >= 0).length > 0) {
 			retryAttemptCount++;
 			log("DETECTED BLOCKING ATTEMPT [" + JSON.stringify(invalidExperimentIndexes) + "]");
 			log("EXPIDS: " + JSON.stringify(clientConfig.FEXP_EXPERIMENTS));
-			bridge.toast("Detected Youtube blocking attempt, bypassing.. (" + retryAttemptCount + ")");
+			//bridge.toast("Detected Youtube blocking attempt, bypassing.. (" + retryAttemptCount + ")");
 			
-			resps[0] = http.GET(url, headersUsed, useLogin);
+			resps[0] = http.GET(url, headersUsed, false);
 			if(!resps[0].isOk)
 				throw new ScriptException("Failed to request page [" + resps[0].code + "]");
 			throwIfCaptcha(resps[0]);
@@ -415,6 +416,13 @@ source.getContentDetails = (url, useAuth, simplify) => {
 		}
 		isValid = true;
 	}
+	let forceiOSSources = false;
+	if(retryAttemptCount >= attemptCountMax) {
+		bridge.toast("Detected Youtube blocking attempt, fallback to iOS.. (" + retryAttemptCount + ")");
+		forceiOSSources = true;
+	}
+	else if(retryAttemptCount > 0)
+		bridge.toast("Detected Youtube blocking attempt, bypassed.. (" + retryAttemptCount + ")");
 
     if(initialPlayerData?.playabilityStatus?.status == "UNPLAYABLE")
 		throw new UnavailableException("Video unplayable");
@@ -509,7 +517,7 @@ source.getContentDetails = (url, useAuth, simplify) => {
 			}
 		}
 	}
-	else if(USE_IOS_VIDEOS_FALLBACK && !simplify) {
+	else if((USE_IOS_VIDEOS_FALLBACK || forceiOSSources) && !simplify) {
 		const iosData = requestIOSStreamingData(videoDetails.id.value);
 		if(IS_TESTING)
 			console.log("IOS Streaming Data", iosData);
