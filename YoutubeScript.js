@@ -390,41 +390,36 @@ source.getContentDetails = (url, useAuth, simplify) => {
 	let retryAttemptCount = 0;
 	let isValid = false;
 	const attemptCountMax = 1;
-	while(!isValid && retryAttemptCount < attemptCountMax) {
-		const invalidExperiments = [51217102, 51217476];
-		var invalidExperimentIndexes = invalidExperiments.map(x=>clientConfig.FEXP_EXPERIMENTS.indexOf(x));
-		if(clientConfig.FEXP_EXPERIMENTS && invalidExperimentIndexes.filter(x=>x >= 0).length > 0) {
-			retryAttemptCount++;
-			log("DETECTED BLOCKING ATTEMPT [" + JSON.stringify(invalidExperimentIndexes) + "]");
-			log("EXPIDS: " + JSON.stringify(clientConfig.FEXP_EXPERIMENTS));
-			//bridge.toast("Detected Youtube blocking attempt, bypassing.. (" + retryAttemptCount + ")");
-			
-			resps[0] = http.GET(url, headersUsed, false);
-			if(!resps[0].isOk)
-				throw new ScriptException("Failed to request page [" + resps[0].code + "]");
-			throwIfCaptcha(resps[0]);
-					
-			html = resps[0].body;//requestPage(url);
-			initialData = getInitialData(html);
-			initialPlayerData = getInitialPlayerData(html);
-			clientConfig = getClientConfig(html);
-			continue;
+	if(!simplify)
+		while(!isValid && retryAttemptCount < attemptCountMax) {
+			const invalidExperiments = [51217102, 51217476];
+			var invalidExperimentIndexes = invalidExperiments.map(x=>clientConfig.FEXP_EXPERIMENTS.indexOf(x));
+			if(clientConfig.FEXP_EXPERIMENTS && invalidExperimentIndexes.filter(x=>x >= 0).length > 0) {
+				retryAttemptCount++;
+				log("DETECTED BLOCKING ATTEMPT [" + JSON.stringify(invalidExperimentIndexes) + "]");
+				log("EXPIDS: " + JSON.stringify(clientConfig.FEXP_EXPERIMENTS));
+				//bridge.toast("Detected Youtube blocking attempt, bypassing.. (" + retryAttemptCount + ")");
+				
+				resps[0] = http.GET(url, headersUsed, false);
+				if(!resps[0].isOk)
+					throw new ScriptException("Failed to request page [" + resps[0].code + "]");
+				throwIfCaptcha(resps[0]);
+						
+				html = resps[0].body;//requestPage(url);
+				initialData = getInitialData(html);
+				initialPlayerData = getInitialPlayerData(html);
+				clientConfig = getClientConfig(html);
+				continue;
+			}
+
+			if(retryAttemptCount > 0) {
+				log("RESOLVED EXPIDS: " + JSON.stringify(clientConfig.FEXP_EXPERIMENTS))
+			}
+			isValid = true;
 		}
 
-		if(retryAttemptCount > 0) {
-			log("RESOLVED EXPIDS: " + JSON.stringify(clientConfig.FEXP_EXPERIMENTS))
-		}
-		isValid = true;
-	}
-	let forceiOSSources = false;
-	if(retryAttemptCount >= attemptCountMax) {
-		bridge.toast("Detected Youtube blocking attempt, fallback to iOS.. (" + retryAttemptCount + ")");
-		forceiOSSources = true;
-	}
-	else if(retryAttemptCount > 0)
-		bridge.toast("Detected Youtube blocking attempt, bypassed.. (" + retryAttemptCount + ")");
 
-    if(initialPlayerData?.playabilityStatus?.status == "UNPLAYABLE")
+		if(initialPlayerData?.playabilityStatus?.status == "UNPLAYABLE")
 		throw new UnavailableException("Video unplayable");
 	
 	const jsUrlMatch = html.match("PLAYER_JS_URL\"\\s?:\\s?\"(.*?)\"");
@@ -459,6 +454,15 @@ source.getContentDetails = (url, useAuth, simplify) => {
 	if (initialPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED") {
 		throw new ScriptException("Login required\nReason: " + initialPlayerData?.playabilityStatus?.reason);
 	}
+	
+	let forceiOSSources = false;
+	if(retryAttemptCount >= attemptCountMax) {
+		bridge.toast("Detected Youtube blocking attempt, fallback to iOS.. (" + retryAttemptCount + ")");
+		forceiOSSources = true;
+	}
+	else if(retryAttemptCount > 0)
+		bridge.toast("Detected Youtube blocking attempt, bypassed.. (" + retryAttemptCount + ")");
+
 		
 	if(IS_TESTING) {
 		console.log("Initial Data", initialData);
@@ -856,7 +860,7 @@ source.getPlaybackTracker = function(url, initialPlayerData) {
 	if(!_settings["youtubeActivity"] || !bridge.isLoggedIn())
 		return null;
 	if(!initialPlayerData) {
-		const video = source.getContentDetails(url, true);
+		const video = source.getContentDetails(url, true, true);
 		initialPlayerData = video.__playerData;
 		if(!initialPlayerData)
 			throw new ScriptException("No playerData for playback tracker");
