@@ -53,6 +53,13 @@
 			"warningDialog": "Only enable this if you need it for channel membership content.\n\nTry disabling if you have issues when loading videos and comments."
 		},
 		{
+			"variable": "allowLoginFallback",
+			"name": "Allow Loginfallback",
+			"description": "Allow usage of login in case where login required (eg. bot check)",
+			"type": "Boolean",
+			"default": "true"
+		},
+		{
 			"variable": "youtubeActivity",
 			"name": "Provide Youtube Activity",
 			"description": "Use authenticated client for playback, telling Youtube what you watched.",
