@@ -99,7 +99,7 @@ const USER_AGENT_TVHTML5_EMBED = "Mozilla/5.0 (CrKey armv7l 1.5.16041) AppleWebK
 const USE_MOBILE_PAGES = true;
 const USE_ANDROID_FALLBACK = false;
 const USE_IOS_FALLBACK = true;
-const USE_IOS_VIDEOS_FALLBACK = false;
+const USE_IOS_VIDEOS_FALLBACK = true;
 
 const SORT_VIEWS_STRING = "Views";
 const SORT_RATING_STRING = "Rating";
@@ -354,10 +354,11 @@ source.getChannelTemplateByClaimMap = () => {
 source.isContentDetailsUrl = (url) => {
 	return REGEX_VIDEO_URL_DESKTOP.test(url) || REGEX_VIDEO_URL_SHARE.test(url) || REGEX_VIDEO_URL_SHARE_LIVE.test(url) || REGEX_VIDEO_URL_SHORT.test(url) || REGEX_VIDEO_URL_CLIP.test(url) || REGEX_VIDEO_URL_EMBED.test(url);
 };
+
 source.getContentDetails = (url, useAuth, simplify) => {
 	useAuth = !!_settings?.authDetails || !!useAuth;
 
-    url = convertIfOtherUrl(url);
+	url = convertIfOtherUrl(url);
 
 	const clientContext = getClientContext(false);
 
@@ -371,13 +372,25 @@ source.getContentDetails = (url, useAuth, simplify) => {
 	headersUsed["Accept-Language"] = "en-US";
 	headersUsed["Cookie"] = "PREF=hl=en&gl=US"
 
-	const batch = http.batch().GET(url, headersUsed, useLogin);
-		
-	if(videoId && _settings["youtubeDislikes"] && !simplify)
+	let batchCounter = 1;
+	const batch = http.batch()
+		.GET(url, headersUsed, useLogin);
+	
+	let batchYoutubeDislikesIndex = -1;
+	if(videoId && _settings["youtubeDislikes"] && !simplify) {
 		batch.GET(URL_YOUTUBE_DISLIKES + videoId, {}, false);
+		batchYoutubeDislikesIndex = batchCounter++;
+	}
+
+	let batchIOS = -1;
+	if(USE_IOS_VIDEOS_FALLBACK) {
+		requestIOSStreamingData(videoId, batch);
+		batchIOS = batchCounter++;
+	}
+
 	const resps = batch.execute();
 
-    throwIfCaptcha(resps[0]);
+	throwIfCaptcha(resps[0]);
 	if(!resps[0].isOk) {
 		throw new ScriptException("Failed to request page [" + resps[0].code + "]");
 	}
@@ -386,40 +399,30 @@ source.getContentDetails = (url, useAuth, simplify) => {
 	let initialData = getInitialData(html);
 	let initialPlayerData = getInitialPlayerData(html);
 	let clientConfig = getClientConfig(html);
+	
+	
+	if (initialPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED") {
+		if(!!_settings?.allowLoginFallback && !useLogin) {
+			bridge.toast("Using login fallback to resolve:\n" + initialPlayerData?.playabilityStatus?.reason);
+			resps[0] = http.GET(url, headersUsed, true);
 
-	let retryAttemptCount = 0;
-	let isValid = false;
-	const attemptCountMax = 1;
-	if(!simplify)
-		while(!isValid && retryAttemptCount < attemptCountMax) {
-			const invalidExperiments = [51217102, 51217476];
-			var invalidExperimentIndexes = invalidExperiments.map(x=>clientConfig.FEXP_EXPERIMENTS.indexOf(x));
-			if(clientConfig.FEXP_EXPERIMENTS && invalidExperimentIndexes.filter(x=>x >= 0).length > 0) {
-				retryAttemptCount++;
-				log("DETECTED BLOCKING ATTEMPT [" + JSON.stringify(invalidExperimentIndexes) + "]");
-				log("EXPIDS: " + JSON.stringify(clientConfig.FEXP_EXPERIMENTS));
-				//bridge.toast("Detected Youtube blocking attempt, bypassing.. (" + retryAttemptCount + ")");
-				
-				resps[0] = http.GET(url, headersUsed, false);
-				if(!resps[0].isOk)
-					throw new ScriptException("Failed to request page [" + resps[0].code + "]");
-				throwIfCaptcha(resps[0]);
-						
-				html = resps[0].body;//requestPage(url);
-				initialData = getInitialData(html);
-				initialPlayerData = getInitialPlayerData(html);
-				clientConfig = getClientConfig(html);
-				continue;
-			}
+			html = resps[0].body;//requestPage(url);
+			initialData = getInitialData(html);
+			initialPlayerData = getInitialPlayerData(html);
+			clientConfig = getClientConfig(html);
 
-			if(retryAttemptCount > 0) {
-				log("RESOLVED EXPIDS: " + JSON.stringify(clientConfig.FEXP_EXPERIMENTS))
-			}
-			isValid = true;
+			if (initialPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED")
+				throw new ScriptException("Login required\nReason: " + initialPlayerData?.playabilityStatus?.reason);
 		}
+		else
+			throw new ScriptException("Login required\nReason: " + initialPlayerData?.playabilityStatus?.reason);
+	}
+	const invalidExperiments = [51217102, 51217476];
+	var invalidExperimentIndexes = invalidExperiments.map(x=>clientConfig.FEXP_EXPERIMENTS.indexOf(x));
+	const isExperiment = clientConfig.FEXP_EXPERIMENTS && invalidExperimentIndexes.filter(x=>x >= 0).length > 0;
 
 
-		if(initialPlayerData?.playabilityStatus?.status == "UNPLAYABLE")
+	if(initialPlayerData?.playabilityStatus?.status == "UNPLAYABLE")
 		throw new UnavailableException("Video unplayable");
 	
 	const jsUrlMatch = html.match("PLAYER_JS_URL\"\\s?:\\s?\"(.*?)\"");
@@ -451,19 +454,6 @@ source.getContentDetails = (url, useAuth, simplify) => {
 		}
 	}
 	
-	if (initialPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED") {
-		throw new ScriptException("Login required\nReason: " + initialPlayerData?.playabilityStatus?.reason);
-	}
-	
-	let forceiOSSources = false;
-	if(retryAttemptCount >= attemptCountMax) {
-		bridge.toast("Detected Youtube blocking attempt, fallback to iOS.. (" + retryAttemptCount + ")");
-		forceiOSSources = true;
-	}
-	else if(retryAttemptCount > 0)
-		bridge.toast("Detected Youtube blocking attempt, bypassed.. (" + retryAttemptCount + ")");
-
-		
 	if(IS_TESTING) {
 		console.log("Initial Data", initialData);
 		console.log("Initial Player Data", initialPlayerData);
@@ -480,17 +470,17 @@ source.getContentDetails = (url, useAuth, simplify) => {
 		url: url
 	}, jsUrl, useLogin);
 	if(videoDetails == null)
-	    throw new UnavailableException("No video found");
+		throw new UnavailableException("No video found");
 
 	if(!videoDetails.live && 
 		(videoDetails.video?.videoSources == null || videoDetails.video.videoSources.length == 0) &&
 		(!videoDetails.datetime || videoDetails.datetime < (((new Date()).getTime() / 1000) - 60 * 60))) {
-        if(isNewCipher) {
-            log("Unavailable video found with new cipher, clearing cipher");
-            clearCipher(jsUrl);
-        }
+		if(isNewCipher) {
+			log("Unavailable video found with new cipher, clearing cipher");
+			clearCipher(jsUrl);
+		}
 		throw new UnavailableException("No sources found");
-    }
+	}
 
 	//Substitute Dash manifest from Android
 	if(USE_ANDROID_FALLBACK && videoDetails.dash && videoDetails.dash.url) {
@@ -507,44 +497,60 @@ source.getContentDetails = (url, useAuth, simplify) => {
 	}
 	//Substitute HLS manifest from iOS
 	if(USE_IOS_FALLBACK && videoDetails.hls && videoDetails.hls.url && !simplify) {
-		const iosData = requestIOSStreamingData(videoDetails.id.value);
-		if(IS_TESTING)
-			console.log("IOS Streaming Data", iosData);
-		if(iosData?.streamingData?.hlsManifestUrl) {
-			log("Using iOS HLS substitute");
-			const existingUrl = videoDetails.hls.url;
-			videoDetails.hls.name = "HLS (IOS)";
-			videoDetails.hls.url = iosData.streamingData.hlsManifestUrl;
-			if(existingUrl == videoDetails.live?.url) {
-				videoDetails.live.name = "HLS (IOS)";
-				videoDetails.live.url = iosData.streamingData.hlsManifestUrl;
+		const iosDataResp = (batchIOS > 0) ?
+			resps[batchIOS] : 
+			requestIOSStreamingData(videoDetails.id.value);
+			
+		if(iosDataResp.isOk) {
+			const iosData = JSON.parse(iosDataResp.body);
+			if(IS_TESTING)
+				console.log("IOS Streaming Data", iosData);
+			if(iosData?.streamingData?.hlsManifestUrl) {
+				log("Using iOS HLS substitute");
+				const existingUrl = videoDetails.hls.url;
+				videoDetails.hls.name = "HLS (IOS)";
+				videoDetails.hls.url = iosData.streamingData.hlsManifestUrl;
+				if(existingUrl == videoDetails.live?.url) {
+					videoDetails.live.name = "HLS (IOS)";
+					videoDetails.live.url = iosData.streamingData.hlsManifestUrl;
+				}
 			}
 		}
+		else
+			bridge.toast("Failed to get iOS stream data");
 	}
-	else if((USE_IOS_VIDEOS_FALLBACK || forceiOSSources) && !simplify) {
-		const iosData = requestIOSStreamingData(videoDetails.id.value);
-		if(IS_TESTING)
-			console.log("IOS Streaming Data", iosData);
+	else if(USE_IOS_VIDEOS_FALLBACK && !simplify) {
+		bridge.toast("Using iOS sources fallback (" + (batchIOS > 0 ? "cached" : "lazily") + ")");
+		const iosDataResp = (batchIOS > 0) ?
+			resps[batchIOS] : 
+			requestIOSStreamingData(videoDetails.id.value);
+		if(iosDataResp.isOk) {
+			const iosData = JSON.parse(iosDataResp.body);
+			if(IS_TESTING)
+				console.log("IOS Streaming Data", iosData);
 
-		if(iosData?.streamingData?.adaptiveFormats) {
-			let newDescriptor = extractAdaptiveFormats_VideoDescriptor(iosData.streamingData.adaptiveFormats, jsUrl, creationData, "IOS ");
-			videoDetails.video = newDescriptor;
+			if(iosData?.streamingData?.adaptiveFormats) {
+				let newDescriptor = extractAdaptiveFormats_VideoDescriptor(iosData.streamingData.adaptiveFormats, jsUrl, creationData, "IOS ");
+				videoDetails.video = newDescriptor;
+			}
 		}
+		else
+			bridge.toast("Failed to get iOS stream data");
 	}
 
-	if(resps.length > 1) {
+	if(batchYoutubeDislikesIndex > 0) {
 		try {
-            const youtubeDislikeInfoResponse = resps[1]
-            if(youtubeDislikeInfoResponse.isOk) {
-                const youtubeDislikeInfo = JSON.parse(youtubeDislikeInfoResponse.body);
-                if(IS_TESTING)
-                    console.log("Youtube Dislike Info", youtubeDislikeInfo);
-                videoDetails.rating = new RatingLikesDislikes(videoDetails.rating.likes, youtubeDislikeInfo.dislikes);
-            }
-        }
-        catch(ex) {
-            console.log("Failed to fetch Youtube Dislikes", ex);
-        }
+			const youtubeDislikeInfoResponse = resps[batchYoutubeDislikesIndex]
+			if(youtubeDislikeInfoResponse.isOk) {
+				const youtubeDislikeInfo = JSON.parse(youtubeDislikeInfoResponse.body);
+				if(IS_TESTING)
+					console.log("Youtube Dislike Info", youtubeDislikeInfo);
+				videoDetails.rating = new RatingLikesDislikes(videoDetails.rating.likes, youtubeDislikeInfo.dislikes);
+			}
+		}
+		catch(ex) {
+			console.log("Failed to fetch Youtube Dislikes", ex);
+		}
 	}
 
 	const finalResult = videoDetails;
@@ -2293,7 +2299,8 @@ function requestClientConfig(useMobile = false, useAuth = false) {
 	if(!resp.isOk) throw new ScriptException("Failed to request context requestClientConfig");
 	return getClientConfig(resp.body);
 }
-function requestIOSStreamingData(videoId) {
+
+function requestIOSStreamingData(videoId, batch) {
 	const body = {
 		videoId: videoId,
 		cpn: "" + randomString(16),
@@ -2330,11 +2337,14 @@ function requestIOSStreamingData(videoId) {
 		"&t=" + token +
 		"&id=" + videoId
 
-	const resp = http.POST(url, JSON.stringify(body), headers, false);
-	if(resp.isOk)
-		return JSON.parse(resp.body);
-	else
+	if(batch) {
+		batch.POST(url, JSON.stringify(body), headers, false);
 		return null;
+	}
+	else {
+		const resp = http.POST(url, JSON.stringify(body), headers, false);
+		return resp;
+	}
 }
 function requestAndroidStreamingData(videoId) {
 	const body = {
