@@ -32,7 +32,8 @@
 		"www.google.com",
 		"google.com",
 		"returnyoutubedislikeapi.com",
-		"sponsor.ajay.app"
+		"sponsor.ajay.app",
+		"everywhere"
 	],
 
 	"settings": [
@@ -51,6 +52,13 @@
 			"type": "Boolean",
 			"default": "false",
 			"warningDialog": "Only enable this if you need it for channel membership content.\n\nTry disabling if you have issues when loading videos and comments."
+		},
+		{
+			"variable": "allowLoginFallback",
+			"name": "Allow Loginfallback",
+			"description": "Allow usage of login in case where login required (eg. bot check)",
+			"type": "Boolean",
+			"default": "true"
 		},
 		{
 			"variable": "youtubeActivity",
@@ -72,6 +80,13 @@
 			"description": "Allow watching of controversial restricted videos",
 			"type": "Boolean",
 			"default": "false"
+		},
+		{
+			"variable": "useUMP",
+			"name": "Use Experimental UMP Streams",
+			"description": "Use an early experimental implementation of UMP. May cause videos to fail & use more memory. (Requires newest Grayjay)",
+			"type": "Boolean",
+			"default": "true"
 		},
 		{
 			"variable": "youtubeDislikerHeader",
