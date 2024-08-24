@@ -574,9 +574,32 @@ source.getContentChapters = function(url, initialData) {
 	if(sbResp && sbResp.isOk) {
 	    try {
 	        const allowNoVoteSkip = !!(_settings["sponsorBlockNoVotes"]);
-	        const skipType = (_settings["sponsorBlockType"]) ? Type.Chapter.SKIP : Type.Chapter.SKIPPABLE;
 	        const sbData = JSON.parse(sbResp.body);
 	        for(let block of sbData) {
+	        	let sponsorConfiguredType = skipType;
+	        	switch (block.category) {
+					case 'sponsor':
+						sponsorConfiguredType = (_settings["sponsorBlockCat_Sponsor"] > 1) ? Type.Chapter.SKIP : Type.Chapter.SKIPPABLE;
+						break;
+					case 'intro':
+						sponsorConfiguredType = (_settings["sponsorBlockCat_Intro"] > 1) ? Type.Chapter.SKIP : Type.Chapter.SKIPPABLE;
+						break;
+					case 'outro':
+						sponsorConfiguredType = (_settings["sponsorBlockCat_Outro"] > 1) ? Type.Chapter.SKIP : Type.Chapter.SKIPPABLE;
+						break;
+					case 'selfpromo':
+						sponsorConfiguredType = (_settings["sponsorBlockCat_Self"] > 1) ? Type.Chapter.SKIP : Type.Chapter.SKIPPABLE;
+						break;
+					case 'music_offtopic':
+						sponsorConfiguredType = (_settings["sponsorBlockCat_Offtopic"] > 1) ? Type.Chapter.SKIP : Type.Chapter.SKIPPABLE;
+						break;
+					case 'preview':
+						sponsorConfiguredType = (_settings["sponsorBlockCat_Preview"] > 1) ? Type.Chapter.SKIP : Type.Chapter.SKIPPABLE;
+						break;
+					case 'filler':
+						sponsorConfiguredType = (_settings["sponsorBlockCat_Filler"] > 1) ? Type.Chapter.SKIP : Type.Chapter.SKIPPABLE;
+						break;
+				}
 	            if(block.actionType == "skip" &&
 	                block.segment && block.segment.length == 2 &&
 	                (allowNoVoteSkip || block.votes >= 1)) {
@@ -584,7 +607,7 @@ source.getContentChapters = function(url, initialData) {
 	                    name: block.category,
 	                    timeStart: parseFloat(block.segment[0]),
 	                    timeEnd: parseFloat(block.segment[1]),
-	                    type: skipType
+	                    type: sponsorConfiguredType
 	                });
 	            }
 	        }
@@ -4421,7 +4444,7 @@ function getNDecryptorFunctionCode(code, jsUrl) {
     }
 	const nDecryptFunctionArrName = nDecryptFunctionArrNameMatch[1];
 	const nDecryptFunctionArrIndex = parseInt(nDecryptFunctionArrNameMatch[2]);
-	
+
 	const nDecryptFunctionNameMatch = code.match(escapeRegex(nDecryptFunctionArrName) + "\\s*=\\s*\\[([$a-zA-Z0-9,\\(,\\)\\.]+?)]");
 	if(!nDecryptFunctionNameMatch) {
         if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (array)", jsUrl);
@@ -4438,8 +4461,8 @@ function getNDecryptorFunctionCode(code, jsUrl) {
         if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (code)", jsUrl, code);
 		throw new ScriptException("Failed to find n decryptor (code)\n" + jsUrl);
 	}
-	
-	return "(function(){" + 
+
+	return "(function(){" +
 		"var " + nDecryptFunctionCodeMatch[0] + "\n" +
 		"return function decryptN(nEncrypted){ return " + nDecryptFunctionName + "(nEncrypted); } \n" +
 	"})()";
