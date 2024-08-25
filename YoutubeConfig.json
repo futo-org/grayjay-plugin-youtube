@@ -7,7 +7,7 @@
   "sourceUrl": "https://plugins.grayjay.app/Youtube/YoutubeConfig.json",
   "repositoryUrl": "https://futo.org",
   "scriptUrl": "./YoutubeScript.js",
-  "version": 192,
+  "version": 193,
   "iconUrl": "./youtube.png",
   "id": "35ae969a-a7db-11ed-afa1-0242ac120002",
   "scriptSignature": "EiHbPj3er/P0wHUWmRcuvqYOWgtZWfRFUhiexPD2JodrkhnTGZp5CT6/4KEk7mNgAeuvw2XX3MC9K2YveOhlscX5LkHzjPjYu+V5fH22FNxCgerawpeS5PwH8ePN9hxLFIi+lhacR7hsjuRkOq3r9TgHVPkPT3zoGtSvvBdELhlsqmxWfgW3ax3goAxGpB/DleBrMnlOSrWOuukjhn/dO5QtGU4kkFNwmVqSbNemW9thTM10QmoZKMrJnBUjLazoQrReFpF6pLCOkhWDYBiEDBN/bHkEirckx3BCpgnQmr24xp2/uYOZuXyetLC+6UyceRR1/EtSbcakgJ+Nv4lGwg==",
@@ -115,82 +115,78 @@
       "default": "false",
       "dependency": "sponsorBlock"
     },
-    {
-      "variable": "sponsorBlockType",
-      "name": "Skip Type",
-      "description": "Change skip behavior for SponsorBlock. Automatic may cause unexpected skipping for some users, and thus not recommended.",
-      "type": "Dropdown",
-      "default": "0",
-      "dependency": "sponsorBlock",
-      "options": [
-        "Manual",
-        "Automatic"
-      ]
-    },
-    {
-      "variable": "sponsorBlockCat_Sponsor",
-      "name": "Skip Sponsors",
-      "description": "Skip segments labeled as sponsors",
-      "type": "Boolean",
-      "default": "true",
-      "dependency": "sponsorBlock"
-    },
-    {
-      "variable": "sponsorBlockCat_Intro",
-      "name": "Skip Intros",
-      "description": "Skip segments labeled as intros",
-      "type": "Boolean",
-      "default": "false",
-      "dependency": "sponsorBlock"
-    },
-    {
-      "variable": "sponsorBlockCat_Outro",
-      "name": "Skip Outros",
-      "description": "Skip segments labeled as outros",
-      "type": "Boolean",
-      "default": "false",
-      "dependency": "sponsorBlock"
-    },
-    {
-      "variable": "sponsorBlockCat_Self",
-      "name": "Skip Self-Promos",
-      "description": "Skip segments labeled as self-promos",
-      "type": "Boolean",
-      "default": "false",
-      "dependency": "sponsorBlock"
-    },
-    {
-      "variable": "sponsorBlockCat_Offtopic",
-      "name": "Skip Music-Offtopic",
-      "description": "Skip segments labeled as music-offtopic",
-      "type": "Boolean",
-      "default": "false",
-      "dependency": "sponsorBlock"
-    },
-    {
-      "variable": "sponsorBlockCat_Preview",
-      "name": "Skip Preview",
-      "description": "Skip segments labeled as previews",
-      "type": "Boolean",
-      "default": "false",
-      "dependency": "sponsorBlock"
-    },
-    {
-      "variable": "sponsorBlockCat_Interaction",
-      "name": "Skip Interaction",
-      "description": "Skip segments labeled as interactions",
-      "type": "Boolean",
-      "default": "false",
-      "dependency": "sponsorBlock"
-    },
-    {
-      "variable": "sponsorBlockCat_Filler",
-      "name": "Skip Fillers",
-      "description": "Skip segments labeled as fillers",
-      "type": "Boolean",
-      "default": "false",
-      "dependency": "sponsorBlock"
-    }
+	  {
+		  "variable": "sponsorBlockCat_Sponsor",
+		  "name": "Skip Sponsors",
+		  "description": "Skip segments labeled as sponsors",
+		  "type": "Dropdown",
+		  "default": "0",
+		  "dependency": "sponsorBlock",
+		  "options": ["No skip", "Manual", "Automatic"]
+	  },
+	  {
+		  "variable": "sponsorBlockCat_Intro",
+		  "name": "Skip Intros",
+		  "description": "Skip segments labeled as intros",
+		  "type": "Dropdown",
+		  "default": "0",
+		  "dependency": "sponsorBlock",
+		  "options": ["No skip", "Manual", "Automatic"]
+	  },
+	  {
+		  "variable": "sponsorBlockCat_Outro",
+		  "name": "Skip Outros",
+		  "description": "Skip segments labeled as outros",
+		  "type": "Dropdown",
+		  "default": "0",
+		  "dependency": "sponsorBlock",
+		  "options": ["No skip", "Manual", "Automatic"]
+	  },
+	  {
+		  "variable": "sponsorBlockCat_Self",
+		  "name": "Skip Self-Promos",
+		  "description": "Skip segments labeled as self-promos",
+		  "type": "Dropdown",
+		  "default": "0",
+		  "dependency": "sponsorBlock",
+		  "options": ["No skip", "Manual", "Automatic"]
+	  },
+	  {
+		  "variable": "sponsorBlockCat_Offtopic",
+		  "name": "Skip Music-Offtopic",
+		  "description": "Skip segments labeled as music-offtopic",
+		  "type": "Dropdown",
+		  "default": "0",
+		  "dependency": "sponsorBlock",
+		  "options": ["No skip", "Manual", "Automatic"]
+	  },
+	  {
+		  "variable": "sponsorBlockCat_Preview",
+		  "name": "Skip Preview",
+		  "description": "Skip segments labeled as previews",
+		  "type": "Dropdown",
+		  "default": "0",
+		  "dependency": "sponsorBlock",
+		  "options": ["No skip", "Manual", "Automatic"]
+	  },
+	  {
+		  "variable": "sponsorBlockCat_Interaction",
+		  "name": "Skip Interaction",
+		  "description": "Skip segments labeled as interactions",
+		  "type": "Dropdown",
+		  "default": "0",
+		  "dependency": "sponsorBlock",
+		  "options": ["No skip", "Manual", "Automatic"]
+	  },
+	  {
+		  "variable": "sponsorBlockCat_Filler",
+		  "name": "Skip Fillers",
+		  "description": "Skip segments labeled as fillers",
+		  "type": "Dropdown",
+		  "default": "0",
+		  "dependency": "sponsorBlock",
+		  "options": ["No skip", "Manual", "Automatic"]
+	  }
   ],
   "developerSubmitUrl": "https://dev.grayjay.app/api/Dev/Submit",
   "captcha": {
