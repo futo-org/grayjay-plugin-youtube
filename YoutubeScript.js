@@ -33,7 +33,7 @@ const URL_YOUTUBE_SPONSORBLOCK = "https://sponsor.ajay.app/api/skipSegments?vide
 const URL_YOUTUBE_RSS = "https://www.youtube.com/feeds/videos.xml?channel_id=";
 
 //Newest to oldest
-const CIPHER_TEST_HASHES = ["a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
+const CIPHER_TEST_HASHES = ["3400486c", "b22ef6e7", "a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
 const CIPHER_TEST_PREFIX = "/s/player/";
 const CIPHER_TEST_SUFFIX = "/player_ias.vflset/en_US/base.js";
 
@@ -86,13 +86,20 @@ const REGEX_ASR = new RegExp(/<text .*?start="(.*?)" .*?dur="(.*?)".*?>(.*?)<\/t
 const USER_AGENT_WINDOWS = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36";
 const USER_AGENT_PHONE = "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.5481.153 Mobile Safari/537.36";
 const USER_AGENT_TABLET = "Mozilla/5.0 (iPad; CPU OS 13_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/87.0.4280.77 Mobile/15E148 Safari/604.1";
-const USER_AGENT_IOS = "com.google.ios.youtube/17.31.4(iPhone14,5; U; CPU iOS 15_6 like Mac OS X; US)";
+
+const IOS_APP_VERSION = "19.14.3"
+const IOS_DEVICE_VERSION = "iPhone15,4"
+const IOS_OS_VERSION = "17_4_1"
+const IOS_OS_VERSION_DETAILED = "17.4.1.21E237"
+const USER_AGENT_IOS = "com.google.ios.youtube/" + IOS_APP_VERSION + "(" + IOS_DEVICE_VERSION + "; U; CPU iOS " + IOS_OS_VERSION + " like Mac OS X; US)";
+
 const USER_AGENT_ANDROID = "com.google.android.youtube/17.31.35 (Linux; U; Android 12; US) gzip";
 const USER_AGENT_TVHTML5_EMBED = "Mozilla/5.0 (CrKey armv7l 1.5.16041) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.0 Safari/537.36";
 
 const USE_MOBILE_PAGES = true;
 const USE_ANDROID_FALLBACK = false;
 const USE_IOS_FALLBACK = true;
+const USE_IOS_VIDEOS_FALLBACK = true;
 
 const SORT_VIEWS_STRING = "Views";
 const SORT_RATING_STRING = "Rating";
@@ -109,6 +116,7 @@ var langRegion = "US";
 var _prefetchHome = null;
 var _prefetchHomeAuth = null;
 var _prefetchHomeUsed = false;
+
 
 function getClientContext(isAuth = false) {
 	return (isAuth) ? _clientContextAuth : _clientContext;
@@ -239,7 +247,13 @@ source.getTrending = () => {
         if(bridge.devSubmit) bridge.devSubmit("getTrending - No tabs found..", JSON.stringify(initialData));
 		throw new ScriptException("No tabs found..");
 	}
-	return new RichGridPager(tabs[0], {}, USE_MOBILE_PAGES, false);
+	let tab = tabs[0];
+	if (tab.videos.length === 0) {
+		if (tab.shelves.length > 0) {
+			tab = tab.shelves[0];
+		}
+	}
+	return new RichGridPager(tab, {}, USE_MOBILE_PAGES, false);
 };
 
 
@@ -340,10 +354,11 @@ source.getChannelTemplateByClaimMap = () => {
 source.isContentDetailsUrl = (url) => {
 	return REGEX_VIDEO_URL_DESKTOP.test(url) || REGEX_VIDEO_URL_SHARE.test(url) || REGEX_VIDEO_URL_SHARE_LIVE.test(url) || REGEX_VIDEO_URL_SHORT.test(url) || REGEX_VIDEO_URL_CLIP.test(url) || REGEX_VIDEO_URL_EMBED.test(url);
 };
-source.getContentDetails = (url, useAuth) => {
+
+source.getContentDetails = (url, useAuth, simplify) => {
 	useAuth = !!_settings?.authDetails || !!useAuth;
 
-    url = convertIfOtherUrl(url);
+	url = convertIfOtherUrl(url);
 
 	const clientContext = getClientContext(false);
 
@@ -357,22 +372,57 @@ source.getContentDetails = (url, useAuth) => {
 	headersUsed["Accept-Language"] = "en-US";
 	headersUsed["Cookie"] = "PREF=hl=en&gl=US"
 
-	const batch = http.batch().GET(url, headersUsed, useLogin);
-		
-	if(videoId && _settings["youtubeDislikes"])
+	let batchCounter = 1;
+	const batch = http.batch()
+		.GET(url, headersUsed, useLogin);
+	
+	let batchYoutubeDislikesIndex = -1;
+	if(videoId && _settings["youtubeDislikes"] && !simplify) {
 		batch.GET(URL_YOUTUBE_DISLIKES + videoId, {}, false);
+		batchYoutubeDislikesIndex = batchCounter++;
+	}
+
+	let batchIOS = -1;
+	if(USE_IOS_VIDEOS_FALLBACK) {
+		requestIOSStreamingData(videoId, batch);
+		batchIOS = batchCounter++;
+	}
+
 	const resps = batch.execute();
 
-    throwIfCaptcha(resps[0]);
+	throwIfCaptcha(resps[0]);
 	if(!resps[0].isOk) {
 		throw new ScriptException("Failed to request page [" + resps[0].code + "]");
 	}
 
-	const html = resps[0].body;//requestPage(url);
-	const initialData = getInitialData(html);
+	let html = resps[0].body;//requestPage(url);
+	let initialData = getInitialData(html);
 	let initialPlayerData = getInitialPlayerData(html);
+	let clientConfig = getClientConfig(html);
+	
+	
+	if (initialPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED") {
+		if(!!_settings?.allowLoginFallback && !useLogin) {
+			bridge.toast("Using login fallback to resolve:\n" + initialPlayerData?.playabilityStatus?.reason);
+			resps[0] = http.GET(url, headersUsed, true);
 
-    if(initialPlayerData?.playabilityStatus?.status == "UNPLAYABLE")
+			html = resps[0].body;//requestPage(url);
+			initialData = getInitialData(html);
+			initialPlayerData = getInitialPlayerData(html);
+			clientConfig = getClientConfig(html);
+
+			if (initialPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED")
+				throw new ScriptException("Login required\nReason: " + initialPlayerData?.playabilityStatus?.reason);
+		}
+		else
+			throw new ScriptException("Login required\nReason: " + initialPlayerData?.playabilityStatus?.reason);
+	}
+	const invalidExperiments = [51217102, 51217476];
+	var invalidExperimentIndexes = invalidExperiments.map(x=>clientConfig.FEXP_EXPERIMENTS.indexOf(x));
+	const isExperiment = clientConfig.FEXP_EXPERIMENTS && invalidExperimentIndexes.filter(x=>x >= 0).length > 0;
+
+
+	if(initialPlayerData?.playabilityStatus?.status == "UNPLAYABLE")
 		throw new UnavailableException("Video unplayable");
 	
 	const jsUrlMatch = html.match("PLAYER_JS_URL\"\\s?:\\s?\"(.*?)\"");
@@ -404,30 +454,33 @@ source.getContentDetails = (url, useAuth) => {
 		}
 	}
 	
-	if (initialPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED") {
-		throw new ScriptException("Login required\nReason: " + initialPlayerData?.playabilityStatus?.reason);
-	}
-		
 	if(IS_TESTING) {
 		console.log("Initial Data", initialData);
 		console.log("Initial Player Data", initialPlayerData);
 	}
 
+	let creationData = {
+		url: url,
+		initialData: initialData,
+		initialPlayerData: initialPlayerData,
+		jsUrl: jsUrl
+	};
+
 	const videoDetails = extractVideoPage_VideoDetails(initialData, initialPlayerData, {
 		url: url
 	}, jsUrl, useLogin);
 	if(videoDetails == null)
-	    throw new UnavailableException("No video found");
+		throw new UnavailableException("No video found");
 
 	if(!videoDetails.live && 
 		(videoDetails.video?.videoSources == null || videoDetails.video.videoSources.length == 0) &&
 		(!videoDetails.datetime || videoDetails.datetime < (((new Date()).getTime() / 1000) - 60 * 60))) {
-        if(isNewCipher) {
-            log("Unavailable video found with new cipher, clearing cipher");
-            clearCipher(jsUrl);
-        }
+		if(isNewCipher) {
+			log("Unavailable video found with new cipher, clearing cipher");
+			clearCipher(jsUrl);
+		}
 		throw new UnavailableException("No sources found");
-    }
+	}
 
 	//Substitute Dash manifest from Android
 	if(USE_ANDROID_FALLBACK && videoDetails.dash && videoDetails.dash.url) {
@@ -443,32 +496,61 @@ source.getContentDetails = (url, useAuth) => {
 		}
 	}
 	//Substitute HLS manifest from iOS
-	if(USE_IOS_FALLBACK && videoDetails.hls && videoDetails.hls.url) {
-		const iosData = requestIOSStreamingData(videoDetails.id.value);
-		if(IS_TESTING)
-			console.log("IOS Streaming Data", iosData);
-		if(iosData?.streamingData?.hlsManifestUrl) {
-			log("Using iOS HLS substitute");
-			const existingUrl = videoDetails.hls.url;
-			videoDetails.hls.url = iosData.streamingData.hlsManifestUrl;
-			if(existingUrl == videoDetails.live?.url)
-				videoDetails.live.url = iosData.streamingData.hlsManifestUrl;
+	if(USE_IOS_FALLBACK && videoDetails.hls && videoDetails.hls.url && !simplify) {
+		const iosDataResp = (batchIOS > 0) ?
+			resps[batchIOS] : 
+			requestIOSStreamingData(videoDetails.id.value);
+			
+		if(iosDataResp.isOk) {
+			const iosData = JSON.parse(iosDataResp.body);
+			if(IS_TESTING)
+				console.log("IOS Streaming Data", iosData);
+			if(iosData?.streamingData?.hlsManifestUrl) {
+				log("Using iOS HLS substitute");
+				const existingUrl = videoDetails.hls.url;
+				videoDetails.hls.name = "HLS (IOS)";
+				videoDetails.hls.url = iosData.streamingData.hlsManifestUrl;
+				if(existingUrl == videoDetails.live?.url) {
+					videoDetails.live.name = "HLS (IOS)";
+					videoDetails.live.url = iosData.streamingData.hlsManifestUrl;
+				}
+			}
 		}
+		else
+			bridge.toast("Failed to get iOS stream data");
+	}
+	else if(USE_IOS_VIDEOS_FALLBACK && !simplify) {
+		bridge.toast("Using iOS sources fallback (" + (batchIOS > 0 ? "cached" : "lazily") + ")");
+		const iosDataResp = (batchIOS > 0) ?
+			resps[batchIOS] : 
+			requestIOSStreamingData(videoDetails.id.value);
+		if(iosDataResp.isOk) {
+			const iosData = JSON.parse(iosDataResp.body);
+			if(IS_TESTING)
+				console.log("IOS Streaming Data", iosData);
+
+			if(iosData?.streamingData?.adaptiveFormats) {
+				let newDescriptor = extractAdaptiveFormats_VideoDescriptor(iosData.streamingData.adaptiveFormats, jsUrl, creationData, "IOS ");
+				videoDetails.video = newDescriptor;
+			}
+		}
+		else
+			bridge.toast("Failed to get iOS stream data");
 	}
 
-	if(resps.length > 1) {
+	if(batchYoutubeDislikesIndex > 0) {
 		try {
-            const youtubeDislikeInfoResponse = resps[1]
-            if(youtubeDislikeInfoResponse.isOk) {
-                const youtubeDislikeInfo = JSON.parse(youtubeDislikeInfoResponse.body);
-                if(IS_TESTING)
-                    console.log("Youtube Dislike Info", youtubeDislikeInfo);
-                videoDetails.rating = new RatingLikesDislikes(videoDetails.rating.likes, youtubeDislikeInfo.dislikes);
-            }
-        }
-        catch(ex) {
-            console.log("Failed to fetch Youtube Dislikes", ex);
-        }
+			const youtubeDislikeInfoResponse = resps[batchYoutubeDislikesIndex]
+			if(youtubeDislikeInfoResponse.isOk) {
+				const youtubeDislikeInfo = JSON.parse(youtubeDislikeInfoResponse.body);
+				if(IS_TESTING)
+					console.log("Youtube Dislike Info", youtubeDislikeInfo);
+				videoDetails.rating = new RatingLikesDislikes(videoDetails.rating.likes, youtubeDislikeInfo.dislikes);
+			}
+		}
+		catch(ex) {
+			console.log("Failed to fetch Youtube Dislikes", ex);
+		}
 	}
 
 	const finalResult = videoDetails;
@@ -574,32 +656,9 @@ source.getContentChapters = function(url, initialData) {
 	if(sbResp && sbResp.isOk) {
 	    try {
 	        const allowNoVoteSkip = !!(_settings["sponsorBlockNoVotes"]);
+	        const skipType = (_settings["sponsorBlockType"]) ? Type.Chapter.SKIP : Type.Chapter.SKIPPABLE;
 	        const sbData = JSON.parse(sbResp.body);
 	        for(let block of sbData) {
-	        	let sponsorConfiguredType = skipType;
-	        	switch (block.category) {
-					case 'sponsor':
-						sponsorConfiguredType = (_settings["sponsorBlockCat_Sponsor"] > 1) ? Type.Chapter.SKIP : Type.Chapter.SKIPPABLE;
-						break;
-					case 'intro':
-						sponsorConfiguredType = (_settings["sponsorBlockCat_Intro"] > 1) ? Type.Chapter.SKIP : Type.Chapter.SKIPPABLE;
-						break;
-					case 'outro':
-						sponsorConfiguredType = (_settings["sponsorBlockCat_Outro"] > 1) ? Type.Chapter.SKIP : Type.Chapter.SKIPPABLE;
-						break;
-					case 'selfpromo':
-						sponsorConfiguredType = (_settings["sponsorBlockCat_Self"] > 1) ? Type.Chapter.SKIP : Type.Chapter.SKIPPABLE;
-						break;
-					case 'music_offtopic':
-						sponsorConfiguredType = (_settings["sponsorBlockCat_Offtopic"] > 1) ? Type.Chapter.SKIP : Type.Chapter.SKIPPABLE;
-						break;
-					case 'preview':
-						sponsorConfiguredType = (_settings["sponsorBlockCat_Preview"] > 1) ? Type.Chapter.SKIP : Type.Chapter.SKIPPABLE;
-						break;
-					case 'filler':
-						sponsorConfiguredType = (_settings["sponsorBlockCat_Filler"] > 1) ? Type.Chapter.SKIP : Type.Chapter.SKIPPABLE;
-						break;
-				}
 	            if(block.actionType == "skip" &&
 	                block.segment && block.segment.length == 2 &&
 	                (allowNoVoteSkip || block.votes >= 1)) {
@@ -607,7 +666,7 @@ source.getContentChapters = function(url, initialData) {
 	                    name: block.category,
 	                    timeStart: parseFloat(block.segment[0]),
 	                    timeEnd: parseFloat(block.segment[1]),
-	                    type: sponsorConfiguredType
+	                    type: skipType
 	                });
 	            }
 	        }
@@ -807,7 +866,7 @@ source.getPlaybackTracker = function(url, initialPlayerData) {
 	if(!_settings["youtubeActivity"] || !bridge.isLoggedIn())
 		return null;
 	if(!initialPlayerData) {
-		const video = source.getContentDetails(url, true);
+		const video = source.getContentDetails(url, true, true);
 		initialPlayerData = video.__playerData;
 		if(!initialPlayerData)
 			throw new ScriptException("No playerData for playback tracker");
@@ -1151,7 +1210,7 @@ source.peekChannelContents = function(url, type) {
 
         videos.push(new PlatformVideo({
 			id: new PlatformID(PLATFORM, entry.children.find(x=>x.name == 'yt:videoid').value, config.id),
-			name: group.children.find(x=>x.name == 'media:title').value,
+			name: escapeUnicode(group.children.find(x=>x.name == 'media:title').value),
 			thumbnails: new Thumbnails([
 			    new Thumbnail(group.children.find(x=>x.name == 'media:thumbnail')?.attributes["url"], 1)
 			]),
@@ -1528,29 +1587,34 @@ function removeQuery(urlPart) {
 
 //#region Objects
 class YTVideoSource extends VideoUrlRangeSource {
-    constructor(obj) {
+    constructor(obj, originalUrl) {
 		super(obj);
+		this.originalUrl = originalUrl;
     }
 
     getRequestModifier() {
-        return new YTRequestModifier();
+        return new YTRequestModifier(this.originalUrl);
     }
 }
 
 class YTAudioSource extends AudioUrlRangeSource {
-    constructor(obj) {
+    constructor(obj, originalUrl) {
 		super(obj);
+		this.originalUrl = originalUrl;
     }
 
     getRequestModifier() {
-        return new YTRequestModifier();
+        return new YTRequestModifier(this.originalUrl);
     }
 }
 
 class YTRequestModifier extends RequestModifier {
-	constructor() {
+	constructor(originalUrl) {
 		super({ allowByteSkip: false });
         this.requestNumber = 0;
+		this.originalUrl = originalUrl;
+		this.newUrl = null;
+		this.newUrlCount = 0;
     }
 
 	/**
@@ -1561,20 +1625,31 @@ class YTRequestModifier extends RequestModifier {
 	 */
 	modifyRequest(url, headers) {
 		const u = new URL(url);
+		const actualUrl = (this.newUrl) ? new URL(this.newUrl) : u;
 		const isVideoPlaybackUrl = u.pathname.startsWith('/videoplayback');
 
 		if (isVideoPlaybackUrl && !u.searchParams.has("rn")) {
-			u.searchParams.set("rn", this.requestNumber.toString());
+			actualUrl.searchParams.set("rn", this.requestNumber.toString());
 		}
 		this.requestNumber++;
 
+		if(this.newUrl) {
+			log("BYPASS: Using NewURL For sources");
+			log("BYPASS: OldUrl: " + u.toString());
+			log("BYPASS: NewUrl: " + actualUrl.toString());
+			log("BYPASS: Headers: " + JSON.stringify(headers));
+		}
+		
+
+		let removedRangeHeader = undefined;
 		if (headers["Range"] && !u.searchParams.has("range")) {
 			let range = headers["Range"];
 			if (range.startsWith("bytes=")) {
 				range = range.substring("bytes=".length);
 			}
+			removedRangeHeader = headers["Range"];
 			delete headers["Range"];
-			u.searchParams.set("range", range);
+			actualUrl.searchParams.set("range", range);
 		}
 
 		const c = u.searchParams.get("c");
@@ -1587,6 +1662,41 @@ class YTRequestModifier extends RequestModifier {
 		}
 	
 		headers['TE'] = "trailers";
+		
+		
+		//I hate this
+		//Workaround for seemingly active blocking
+		/*
+		const isValid = refetchClient.request("HEAD", actualUrl.toString(), headers);
+		if(isValid.code == 403 && this.newUrlCount < 3) {
+			const itag = actualUrl.searchParams.get("itag");
+			bridge.toast("Youtube block detected (" + (this.newUrlCount + 1) + "), bypassing..");
+			log("Detected 403, attempting bypass");
+			try {
+				const newDetailsResp = source.getContentDetails(this.originalUrl, false, true);
+				if(newDetailsResp) {
+					let source = newDetailsResp.video.videoSources.find(x=>x.itagId == itag);
+					if(!source)
+						source = newDetailsResp.video.audioSources.find(x=>x.itagId == itag);
+					if(source) {
+						this.newUrl = source.url;
+						this.newUrlCount++;
+						this.requestNumber = 0;
+						log("Injecting new source url[" + source.name + "]: " + source.url);
+						bridge.toast("Injecting new source url");
+						if(removedRangeHeader)
+							headers["Range"] = removedRangeHeader;
+						return this.modifyRequest(url, headers);
+					}
+				}
+				else
+					bridge.toast("Bypass failed, couldn't reload [" + newDetailsResp.code + "]");
+			}
+			catch(ex) {
+				bridge.toast("Bypass failed\n" + ex);
+			}
+		}
+		*/
 
 		if (c) {
 			switch (c) {
@@ -1603,7 +1713,7 @@ class YTRequestModifier extends RequestModifier {
 		}
 
         return {
-            url: u.toString(),
+            url: actualUrl.toString(),
 			headers: headers
 		}
     }
@@ -2189,7 +2299,8 @@ function requestClientConfig(useMobile = false, useAuth = false) {
 	if(!resp.isOk) throw new ScriptException("Failed to request context requestClientConfig");
 	return getClientConfig(resp.body);
 }
-function requestIOSStreamingData(videoId) {
+
+function requestIOSStreamingData(videoId, batch) {
 	const body = {
 		videoId: videoId,
 		cpn: "" + randomString(16),
@@ -2198,12 +2309,12 @@ function requestIOSStreamingData(videoId) {
 		context: {
 			client: {
 				"clientName": "IOS",
-				"clientVersion": "17.31.4",
+             	"clientVersion": IOS_APP_VERSION,//"17.31.4",^M
 				"deviceMake": "Apple",
-				"deviceModel": "iPhone14,5",
+				"deviceModel": IOS_DEVICE_VERSION,//"iPhone14,5",^M
 				"platform": "MOBILE",
 				"osName": "iOS",
-				"osVersion": "15.6.0.19G71",
+				"osVersion": IOS_OS_VERSION_DETAILED,//"15.6.0.19G71",^M
 				"hl": langDisplay,
 				"gl": langRegion,
 			},
@@ -2226,11 +2337,14 @@ function requestIOSStreamingData(videoId) {
 		"&t=" + token +
 		"&id=" + videoId
 
-	const resp = http.POST(url, JSON.stringify(body), headers, false);
-	if(resp.isOk)
-		return JSON.parse(resp.body);
-	else
+	if(batch) {
+		batch.POST(url, JSON.stringify(body), headers, false);
 		return null;
+	}
+	else {
+		const resp = http.POST(url, JSON.stringify(body), headers, false);
+		return resp;
+	}
 }
 function requestAndroidStreamingData(videoId) {
 	const body = {
@@ -2672,7 +2786,7 @@ function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextDa
 	const video = {
 		id: new PlatformID(PLATFORM, videoDetails.videoId, config.id),
 		name: videoDetails.title,
-		thumbnails: new Thumbnails(videoDetails.thumbnail?.thumbnails.map(x=>new Thumbnail(x.url, x.height)) ?? []),
+		thumbnails: new Thumbnails(videoDetails.thumbnail?.thumbnails.map(x=>new Thumbnail(escapeUnicode(x.url), x.height)) ?? []),
 		author: new PlatformAuthorLink(new PlatformID(PLATFORM, videoDetails.channelId, config.id, PLATFORM_CLAIMTYPE), videoDetails.author, URL_BASE + "/channel/" + videoDetails.channelId, null, null),
 		duration: parseInt(videoDetails.lengthSeconds),
 		viewCount: parseInt(videoDetails.viewCount),
@@ -2725,7 +2839,7 @@ function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextDa
 					initEnd: parseInt(y.initRange?.end),
 					indexStart: parseInt(y.indexRange?.start),
 					indexEnd: parseInt(y.indexRange?.end)
-				});
+				}, contextData.url);
 			}).filter(x=>x != null),
 			initialPlayerData.streamingData.adaptiveFormats.filter(x=>x.mimeType.startsWith("audio/")).map(y=>{
 				const codecs = y.mimeType.substring(y.mimeType.indexOf('codecs=\"') + 8).slice(0, -1);
@@ -2758,7 +2872,7 @@ function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextDa
 					indexStart: parseInt(y.indexRange?.start),
 					indexEnd: parseInt(y.indexRange?.end),
 					audioChannels: y.audioChannels
-				});
+				}, contextData.url);
 			}).filter(x=>x!=null),
 		) : new VideoSourceDescriptor([]),
 		subtitles: initialPlayerData
@@ -2920,6 +3034,89 @@ function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextDa
 	}
     return result;
 }
+function extractAdaptiveFormats_VideoDescriptor(adaptiveSources, jsUrl, contextData, prefix) {   
+	const nonce = randomString(16);   
+	return adaptiveSources ? new UnMuxVideoSourceDescriptor(   
+			adaptiveSources.filter(x=>x.mimeType.startsWith("video/")).map(y=>{   
+					const codecs = y.mimeType.substring(y.mimeType.indexOf('codecs=\"') + 8).slice(0, -1);   
+					const container = y.mimeType.substring(0, y.mimeType.indexOf(';'));   
+					if(codecs.startsWith("av01"))   
+							return null; //AV01 is unsupported.   
+
+					const logItag = y.itag ==  134;   
+					if(logItag) {   
+							//log(videoDetails.title + " || Format " + container + " - " + y.itag + " - " + y.width);   
+							log("Source Parameters:\n" + JSON.stringify({   
+									url: y.url,   
+									cipher: y.cipher,   
+									signatureCipher: y.signatureCipher   
+							}, null, "   "));   
+					}   
+					   
+					let url = decryptUrlN(y.url, jsUrl, logItag) ?? decryptUrl(y.cipher, jsUrl, logItag) ?? decryptUrl(y.signatureCipher, jsUrl, logItag);   
+					if(url.indexOf("&cpn=") < 0)   
+							url = url + "&cpn=" + nonce;   
+
+					const duration = parseInt(parseInt(y.approxDurationMs) / 1000) ?? 0;   
+					if(isNaN(duration))   
+							return null;   
+
+					if(!y.initRange?.end || !y.indexRange?.end)   
+							return null;   
+
+					return new YTVideoSource({   
+							name: prefix + y.height + "p" + (y.fps ? y.fps : "") + " " + container,   
+							url: url,   
+							width: y.width,   
+							height: y.height,   
+							duration: (!isNaN(duration)) ? duration : 0,   
+							container: y.mimeType.substring(0, y.mimeType.indexOf(';')),   
+							codec: codecs,   
+							bitrate: y.bitrate,   
+
+							itagId: y.itag,   
+							initStart: parseInt(y.initRange?.start),   
+							initEnd: parseInt(y.initRange?.end),   
+							indexStart: parseInt(y.indexRange?.start),   
+							indexEnd: parseInt(y.indexRange?.end)   
+					}, contextData);   
+			}).filter(x=>x != null),   
+			adaptiveSources.filter(x=>x.mimeType.startsWith("audio/")).map(y=>{   
+					const codecs = y.mimeType.substring(y.mimeType.indexOf('codecs=\"') + 8).slice(0, -1);   
+					const container = y.mimeType.substring(0, y.mimeType.indexOf(';'));   
+
+					let url = decryptUrlN(y.url, jsUrl) ?? decryptUrl(y.cipher, jsUrl) ?? decryptUrl(y.signatureCipher, jsUrl);   
+					if(url.indexOf("&cpn=") < 0)   
+							url = url + "&cpn=" + nonce;   
+					   
+					const duration = parseInt(parseInt(y.approxDurationMs) / 1000);   
+					if(isNaN(duration))   
+							return null;   
+
+					if(!y.initRange?.end || !y.indexRange?.end)   
+							return null;   
+
+					return new YTAudioSource({   
+							name: prefix + (y.audioTrack?.displayName ? y.audioTrack.displayName : codecs),   
+							container: container,   
+							bitrate: y.bitrate,   
+							url: url,   
+							duration: (!isNaN(duration)) ? duration : 0,   
+							container: y.mimeType.substring(0, y.mimeType.indexOf(';')),   
+							codec: codecs,   
+							language: ytLangIdToLanguage(y.audioTrack?.id),   
+
+							itagId: y.itag,   
+							initStart: parseInt(y.initRange?.start),   
+							initEnd: parseInt(y.initRange?.end),   
+							indexStart: parseInt(y.indexRange?.start),   
+							indexEnd: parseInt(y.indexRange?.end),   
+							audioChannels: y.audioChannels   
+					}, contextData);   
+			}).filter(x=>x!=null),   
+	) : new VideoSourceDescriptor([])   
+}
+
 function toSRTTime(sec, withDot) {
 	let hours = 0;
 	let minutes = 0;
@@ -3502,7 +3699,7 @@ function extractVideoWithContextRenderer_Video(videoRenderer, contextData) {
 	if (isLive) {
 		return new PlatformVideo({
 			id: new PlatformID(PLATFORM, videoRenderer.videoId, config.id),
-			name: title,
+			name: escapeUnicode(title),
 			thumbnails: extractThumbnail_Thumbnails(videoRenderer.thumbnail),
 			author: author,
 			uploadDate: plannedDate ?? parseInt(new Date().getTime() / 1000),
@@ -3515,7 +3712,7 @@ function extractVideoWithContextRenderer_Video(videoRenderer, contextData) {
 	} else {
 		return new PlatformVideo({
 			id: new PlatformID(PLATFORM, videoRenderer.videoId, config.id),
-			name: title,
+			name: escapeUnicode(title),
 			thumbnails: extractThumbnail_Thumbnails(videoRenderer.thumbnail),
 			author: author,
 			uploadDate: parseInt(extractAgoText_Timestamp(extractText_String(videoRenderer.publishedTimeText))),
@@ -3559,7 +3756,7 @@ function extractVideoRenderer_Video(videoRenderer, contextData) {
 	if(isLive)
 		return new PlatformVideo({
 			id: new PlatformID(PLATFORM, videoRenderer.videoId, config.id),
-			name: extractRuns_String(videoRenderer.title.runs),
+			name: escapeUnicode(extractRuns_String(videoRenderer.title.runs)),
 			thumbnails: extractThumbnail_Thumbnails(videoRenderer.thumbnail),
 			author: author,
 			uploadDate: plannedDate ?? parseInt(new Date().getTime()/1000),
@@ -3572,7 +3769,7 @@ function extractVideoRenderer_Video(videoRenderer, contextData) {
 	else
 		return new PlatformVideo({
 			id: new PlatformID(PLATFORM, videoRenderer.videoId, config.id),
-			name: extractRuns_String(videoRenderer.title.runs),
+			name: escapeUnicode(extractRuns_String(videoRenderer.title.runs)),
 			thumbnails: extractThumbnail_Thumbnails(videoRenderer.thumbnail),
 			author: author,
 			uploadDate: parseInt(extractAgoText_Timestamp(videoRenderer.publishedTimeText.simpleText)),
@@ -3604,7 +3801,7 @@ function extractPlaylistVideoRenderer_Video(videoRenderer, contextData) {
 
 	return new PlatformVideo({
 		id: new PlatformID(PLATFORM, videoRenderer.videoId, config.id),
-		name: extractRuns_String(videoRenderer.title.runs),
+		name: escapeUnicode(extractRuns_String(videoRenderer.title.runs)),
 		thumbnails: extractThumbnail_Thumbnails(videoRenderer.thumbnail),
 		author: author,
 		uploadDate: date,
@@ -3659,7 +3856,7 @@ function extractRuns_AuthorLink(runs) {
 }
 
 function extractThumbnail_Thumbnails(thumbnail) {
-	return new Thumbnails(thumbnail.thumbnails.map(x=>new Thumbnail(x.url, x.height)));
+	return new Thumbnails(thumbnail.thumbnails.map(x=>new Thumbnail(escapeUnicode(x.url), x.height)));
 }
 function extractThumbnail_BestUrl(thumbnail) {
     if(!thumbnail?.thumbnails || thumbnail.thumbnails.length <= 0)
@@ -3936,6 +4133,12 @@ function extractHumanDate_Timestamp(dateParts) {
 	return (day > 0 && month > 0 && year > 0) ? 
 		new Date(year + "-" + month + "-" + day).getTime() / 1000 : 
 		-1;
+}
+
+function escapeUnicode(str) {
+	if(!str)
+		return str;
+	return str.replace("\\u0026", "&");
 }
 
 //#endregion
@@ -4281,7 +4484,12 @@ const REGEX_CIPHERS = [
 	new RegExp("\\b([\\w$]{2,})\\s*=\\s*function\\((\\w+)\\)\\{\\s*\\2=\\s*\\2\\.split\\(\"\"\\)\\s*;"),
 	new RegExp("\\bc\\s*&&\\s*d\\.set\\([^,]+\\s*,\\s*(:encodeURIComponent\\s*\\()([a-zA-Z0-9$]+)\\(")
 ];
-const REGEX_DECRYPT_N = /\.get\(\"n\"\)\)&&\([a-zA-Z0-9$_]=([a-zA-Z0-9$_]+)(?:\[(\d+)])?\([a-zA-Z0-9$_]\)/;
+const REGEX_DECRYPT_N_VARIANTS = [
+	/\.get\(\"n\"\)\)&&\([a-zA-Z0-9$_]=([a-zA-Z0-9$_]+)(?:\[(\d+)])?\([a-zA-Z0-9$_]\)/,
+	/[a-zA-Z0-9$_]+=String\.fromCharCode\(110\),[a-zA-Z0-9$_]+=[a-zA-Z0-9$_]+\.get\([a-zA-Z0-9$_]+\)\)&&\([a-zA-Z0-9$_]=([a-zA-Z0-9$_]+)(?:\[(\d+)])?\([a-zA-Z0-9$_]\)/,
+	/[a-zA-Z]+="[n]+"\[.+\],[a-zA-Z0-9$_]+=[a-zA-Z0-9$_]+\.get\([a-zA-Z0-9$_]+\)\)&&\([a-zA-Z0-9$_]=([a-zA-Z0-9$_]+)(?:\[(\d+)])?\([a-zA-Z0-9$_]\)/,
+	/\/file\/index\.m3u8.+?[a-zA-Z0-9$_]=([a-zA-Z0-9$_]+)(?:\[(\d+)])?\([a-zA-Z0-9$_]\)/
+];
 const REGEX_PARAM_N = new RegExp("[?&]n=([^&]*)");
 const STS_REGEX = new RegExp("signatureTimestamp[=:](\\d+)");
 
@@ -4437,14 +4645,22 @@ function clearCipher(jsUrl) {
 function getNDecryptorFunctionCode(code, jsUrl) {
 	if(_nDecrypt[jsUrl])
 		return _nDecrypt[jsUrl];
-	const nDecryptFunctionArrNameMatch = REGEX_DECRYPT_N.exec(code);
+	let nDecryptFunctionArrNameMatch = undefined;
+	for(let i = 0; i < REGEX_DECRYPT_N_VARIANTS.length; i++) {
+		nDecryptFunctionArrNameMatch = REGEX_DECRYPT_N_VARIANTS[i].exec(code);
+		if(!nDecryptFunctionArrNameMatch) {
+			console.log("NDecryptor failed, trying fallback to [" + i + 2 + "]");
+		}
+		else
+			break;
+	}
 	if(!nDecryptFunctionArrNameMatch) {
         if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (name)", jsUrl);
-		throw new ScriptException("Failed to find n decryptor (name)");
+		throw new ScriptException("Failed to find n decryptor (name)\n" + jsUrl);
     }
 	const nDecryptFunctionArrName = nDecryptFunctionArrNameMatch[1];
 	const nDecryptFunctionArrIndex = parseInt(nDecryptFunctionArrNameMatch[2]);
-
+	
 	const nDecryptFunctionNameMatch = code.match(escapeRegex(nDecryptFunctionArrName) + "\\s*=\\s*\\[([$a-zA-Z0-9,\\(,\\)\\.]+?)]");
 	if(!nDecryptFunctionNameMatch) {
         if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (array)", jsUrl);
@@ -4456,14 +4672,25 @@ function getNDecryptorFunctionCode(code, jsUrl) {
 		throw new ScriptException("Failed to find n decryptor (index)\n" + jsUrl);
 	}
 	const nDecryptFunctionName = nDecryptArray[nDecryptFunctionArrIndex]
-	const nDecryptFunctionCodeMatch = code.match(escapeRegex(nDecryptFunctionName) + "=function\\(a\\)\\{[\\s\\S]*?join\\(\\\"\\\"\\)};");
+	
+	const nDecryptFunctionCodeMatches = [
+		escapeRegex(nDecryptFunctionName) + "=function\\(a\\)\\{[\\s\\S]*?join\\(\\\"\\\"\\)};",
+		escapeRegex(nDecryptFunctionName) + "=function\\(a\\)\\{[\\s\\S]*?join\\.call\\([a-zA-Z$_]+,\\\"\\\"\\)};",
+		new RegExp(escapeRegex(nDecryptFunctionName) + "=function\\(a\\)\\{[\\s\\S]*?join\\.call\\(.*?\\).*?};", "s")
+	]
+	let nDecryptFunctionCodeMatch = undefined;
+	for(let functionRegex of nDecryptFunctionCodeMatches) {
+		const match = code.match(functionRegex);
+		if(match && match.length > 0 && (!nDecryptFunctionCodeMatch || nDecryptFunctionCodeMatch.length > match[0].length))
+			nDecryptFunctionCodeMatch = match[0];
+	}
 	if(!nDecryptFunctionCodeMatch) {
         if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (code)", jsUrl, code);
 		throw new ScriptException("Failed to find n decryptor (code)\n" + jsUrl);
 	}
-
-	return "(function(){" +
-		"var " + nDecryptFunctionCodeMatch[0] + "\n" +
+	
+	return "(function(){" + 
+		"var " + nDecryptFunctionCodeMatch + "\n" +
 		"return function decryptN(nEncrypted){ return " + nDecryptFunctionName + "(nEncrypted); } \n" +
 	"})()";
 }
