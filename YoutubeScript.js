@@ -1736,13 +1736,13 @@ function generateWEBMDash(webm, templateUrl, initUrl) {
 						xmlTag("SegmentTemplate", {timescale: webm.timescale / 1000, startNumber: "1", 
 								media: templateUrl, 
 								duration: webm.duration,
-								initialization: initUrl} /*, (indent)=>
+								initialization: initUrl} , (indent)=>
 							xmlTag("SegmentTimeline", {}, (indent)=>
 								webm.cues.map((cue, i)=>
 									xmlTag("S", {t: cue, d: (webm.cues.length > i + 1) ? webm.cues[i + 1] - cue : webm.durationCueTimescale - cue}, undefined, indent + " ")
 								).join("")
 							,indent + " ")
-						,indent + " "*/)
+						,indent + " ")
 				,indent + " ")
 			, indent + " ")
 		, indent + " ")
@@ -1939,9 +1939,13 @@ class YTABRExecutor {
 		return this.segments[index];
 	}
 	freeOldSegments(index) {
+		index = parseInt(index);
 		const reusable = this.reusableBuffer;
 		for(let key of Object.keys(this.segments)) {
+			key = parseInt(key);
+
 			if(key < index || key > index + 6) {
+				log("UMP [" + this.type + "]: disposing segment " + key + " (<" + index + " || >" + (index + 6) + ")");
 				reusable?.free(this.segments[key].data);
 				const segment = this.segments[key];
 				if(segment) {
@@ -2041,6 +2045,8 @@ class YTABRExecutor {
 		}
 		if(!stream || !stream.data)
 			throw new ScriptException("NO STREAMDATA FOUND (" + Object.keys(umpResp.streams).join(", ") + "): " + !!umpResp.streams[0]?.data);
+		
+		log("UMP [" + this.type + "]: segment " + segment + " - " + stream.data?.length);
 		return stream.data;
 	}
 }
@@ -2064,7 +2070,7 @@ function getVideoPlaybackRequest(source, ustreamerConfig, playerPosMs, segmentIn
 		info.setVideoheight2maybe(source.height);
 		info.setSelectedqualityheight(source.height);
 	}
-	info.setG7(28613683);
+	info.setG7(8613683);
 	info.setCurrentvideopositionms(playerPosMs);
 	if(lastRequest > 0)
 		info.setTimesincelastrequestms((new Date().getTime() - lastRequest));
