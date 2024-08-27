@@ -1,15 +1,15 @@
 {
-	"name": "Youtube",
+	"name": "Youtube (Alt)",
 	"description": "One of the biggest video platforms owned by Google",
 	"author": "FUTO",
 	"authorUrl": "https://futo.org",
 	"platformUrl": "https://youtube.com",
-	"sourceUrl": "https://plugins.grayjay.app/Youtube/YoutubeConfig.json",
+	"sourceUrl": "",
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
 	"version": 191,
-	"iconUrl": "./youtube.png",
-	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
+	"iconUrl": "./youtubeAlt.png",
+	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 
 	"scriptSignature": "",
 	"scriptPublicKey": "",
@@ -33,7 +33,7 @@
 		"google.com",
 		"returnyoutubedislikeapi.com",
 		"sponsor.ajay.app",
-		"everywhere"
+		".googlevideo.com"
 	],
 
 	"settings": [
