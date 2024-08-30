@@ -413,6 +413,8 @@ source.getContentDetails = (url, useAuth, simplify) => {
 
 			if (initialPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED")
 				throw new ScriptException("Login required\nReason: " + initialPlayerData?.playabilityStatus?.reason);
+			else
+				log("Login fallback resolved?");
 		}
 		else
 			throw new ScriptException("Login required\nReason: " + initialPlayerData?.playabilityStatus?.reason);
@@ -520,11 +522,11 @@ source.getContentDetails = (url, useAuth, simplify) => {
 			bridge.toast("Failed to get iOS stream data");
 	}
 	else if(USE_IOS_VIDEOS_FALLBACK && !simplify) {
-		bridge.toast("Using iOS sources fallback (" + (batchIOS > 0 ? "cached" : "lazily") + ")");
 		const iosDataResp = (batchIOS > 0) ?
 			resps[batchIOS] : 
 			requestIOSStreamingData(videoDetails.id.value);
 		if(iosDataResp.isOk) {
+			bridge.toast("Using iOS sources fallback (" + (batchIOS > 0 ? "cached" : "lazily") + ")");
 			const iosData = JSON.parse(iosDataResp.body);
 			if(IS_TESTING)
 				console.log("IOS Streaming Data", iosData);
@@ -533,6 +535,8 @@ source.getContentDetails = (url, useAuth, simplify) => {
 				let newDescriptor = extractAdaptiveFormats_VideoDescriptor(iosData.streamingData.adaptiveFormats, jsUrl, creationData, "IOS ");
 				videoDetails.video = newDescriptor;
 			}
+			else
+				bridge.toast("Invalid iOS source response..");
 		}
 		else
 			bridge.toast("Failed to get iOS stream data");
@@ -2904,8 +2908,18 @@ function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextDa
 
 								const start = parseFloat(lineParsed[1]);
 								const dur = parseFloat(lineParsed[2]);
-								const end = start + dur;
+								let end = start + dur;
 								const text = decodeHtml(lineParsed[3]);
+
+								const nextLine = (i + 1 < lines.length) ? lines[i + 1] : null;
+								if(nextLine) {
+									const lineParsedNext = /<text .*?start="(.*?)" .*?dur="(.*?)".*?>(.*?)<\/text>/gms.exec(nextLine);
+									const startNext = parseFloat(lineParsedNext[1]);
+									const durNext = parseFloat(lineParsedNext[2]);
+									const endNext = startNext + durNext;
+									if(startNext && startNext < end)
+										end = startNext;
+								}
 
 								newSubs.push((i - skipped + 1) + "\n" +
 									toSRTTime(start, true) + " --> " + toSRTTime(end, true) + "\n" +
