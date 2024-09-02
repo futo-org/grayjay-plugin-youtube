@@ -518,7 +518,7 @@ source.getContentDetails = (url, useAuth, simplify) => {
 				}
 			}
 		}
-		else
+		else if(!!_settings["showVerboseToasts"])
 			bridge.toast("Failed to get iOS stream data");
 	}
 	else if(USE_IOS_VIDEOS_FALLBACK && !simplify) {
@@ -526,7 +526,8 @@ source.getContentDetails = (url, useAuth, simplify) => {
 			resps[batchIOS] : 
 			requestIOSStreamingData(videoDetails.id.value);
 		if(iosDataResp.isOk) {
-			bridge.toast("Using iOS sources fallback (" + (batchIOS > 0 ? "cached" : "lazily") + ")");
+			if(!!_settings["showVerboseToasts"])
+				bridge.toast("Using iOS sources fallback (" + (batchIOS > 0 ? "cached" : "lazily") + ")");
 			const iosData = JSON.parse(iosDataResp.body);
 			if(IS_TESTING)
 				console.log("IOS Streaming Data", iosData);
@@ -535,7 +536,7 @@ source.getContentDetails = (url, useAuth, simplify) => {
 				let newDescriptor = extractAdaptiveFormats_VideoDescriptor(iosData.streamingData.adaptiveFormats, jsUrl, creationData, "IOS ");
 				videoDetails.video = newDescriptor;
 			}
-			else
+			else if(!!_settings["showVerboseToasts"])
 				bridge.toast("Invalid iOS source response..");
 		}
 		else
@@ -3293,7 +3294,7 @@ function requestCommentPager(contextUrl, continuationToken, useLogin, useMobile)
 				const authorEndpoint = cobj.author?.channelCommand?.innertubeCommand?.commandMetadata?.webCommandMetadata?.url;
 				comments.push(new YTComment({
 					contextUrl: contextUrl,
-					author: new PlatformAuthorLink(new PlatformID(PLATFORM, null, config.id, PLATFORM_CLAIMTYPE), cobj.author.displayName, (authorEndpoint) ? URL_BASE + authorEndpoint : "", cobj.author.avatarThumbnailUrl),
+					author: new PlatformAuthorLink(new PlatformID(PLATFORM, cobj?.author?.displayName, config.id, PLATFORM_CLAIMTYPE), cobj.author.displayName, (authorEndpoint) ? URL_BASE + authorEndpoint : "", cobj.author.avatarThumbnailUrl),
 					message: cobj.properties?.content?.content ?? "",
 					rating: new RatingLikes(extractHumanNumber_Integer(cobj.toolbar?.likeCountLiked) ?? 0),
 					date: (extractAgoTextRuns_Timestamp(cobj?.properties?.publishedTime) ?? 0),

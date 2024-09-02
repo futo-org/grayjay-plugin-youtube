@@ -7,7 +7,7 @@
 	"sourceUrl": "https://plugins.grayjay.app/Youtube/YoutubeConfig.json",
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
-	"version": 193,
+	"version": 194,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 
@@ -77,6 +77,13 @@
 			"variable": "allowControversialRestricted",
 			"name": "Allow Controversial Restricted",
 			"description": "Allow watching of controversial restricted videos",
+			"type": "Boolean",
+			"default": "false"
+		},
+		{
+			"variable": "showVerboseToasts",
+			"name": "Show Verbose Messages",
+			"description": "Show messages that give more information about what is happening, might be considered annoying for some.",
 			"type": "Boolean",
 			"default": "false"
 		},
