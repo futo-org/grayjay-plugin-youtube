@@ -100,8 +100,8 @@ const USE_MOBILE_PAGES = true;
 const USE_ANDROID_FALLBACK = false;
 const USE_IOS_FALLBACK = true;
 const USE_IOS_VIDEOS_FALLBACK = true;
-let USE_ABR_VIDEOS = true;
 
+let USE_ABR_VIDEOS = true;
 
 const SORT_VIEWS_STRING = "Views";
 const SORT_RATING_STRING = "Rating";
@@ -360,6 +360,7 @@ source.isContentDetailsUrl = (url) => {
 	return REGEX_VIDEO_URL_DESKTOP.test(url) || REGEX_VIDEO_URL_SHARE.test(url) || REGEX_VIDEO_URL_SHARE_LIVE.test(url) || REGEX_VIDEO_URL_SHORT.test(url) || REGEX_VIDEO_URL_CLIP.test(url) || REGEX_VIDEO_URL_EMBED.test(url);
 };
 
+
 if(false && (bridge.buildSpecVersion ?? 1) > 1) {
 	//TODO: Implement more compact version using new api batch spec
 }
@@ -376,6 +377,7 @@ else {
 		const videoId = extractVideoIDFromUrl(url);
 		if(IS_TESTING)
 			console.log("VideoID:", videoId);
+
 
 		const useLogin = useAuth && bridge.isLoggedIn();
 
@@ -2823,6 +2825,7 @@ function requestClientConfig(useMobile = false, useAuth = false) {
 	if(!resp.isOk) throw new ScriptException("Failed to request context requestClientConfig");
 	return getClientConfig(resp.body);
 }
+
 function requestIOSStreamingData(videoId, batch) {
 	const body = {
 		videoId: videoId,
@@ -3480,8 +3483,18 @@ function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextDa
 
 								const start = parseFloat(lineParsed[1]);
 								const dur = parseFloat(lineParsed[2]);
-								const end = start + dur;
+								let end = start + dur;
 								const text = decodeHtml(lineParsed[3]);
+
+								const nextLine = (i + 1 < lines.length) ? lines[i + 1] : null;
+								if(nextLine) {
+									const lineParsedNext = /<text .*?start="(.*?)" .*?dur="(.*?)".*?>(.*?)<\/text>/gms.exec(nextLine);
+									const startNext = parseFloat(lineParsedNext[1]);
+									const durNext = parseFloat(lineParsedNext[2]);
+									const endNext = startNext + durNext;
+									if(startNext && startNext < end)
+										end = startNext;
+								}
 
 								newSubs.push((i - skipped + 1) + "\n" +
 									toSRTTime(start, true) + " --> " + toSRTTime(end, true) + "\n" +
@@ -3855,7 +3868,7 @@ function requestCommentPager(contextUrl, continuationToken, useLogin, useMobile)
 				const authorEndpoint = cobj.author?.channelCommand?.innertubeCommand?.commandMetadata?.webCommandMetadata?.url;
 				comments.push(new YTComment({
 					contextUrl: contextUrl,
-					author: new PlatformAuthorLink(new PlatformID(PLATFORM, null, config.id, PLATFORM_CLAIMTYPE), cobj.author.displayName, (authorEndpoint) ? URL_BASE + authorEndpoint : "", cobj.author.avatarThumbnailUrl),
+					author: new PlatformAuthorLink(new PlatformID(PLATFORM, cobj?.author?.displayName, config.id, PLATFORM_CLAIMTYPE), cobj.author.displayName, (authorEndpoint) ? URL_BASE + authorEndpoint : "", cobj.author.avatarThumbnailUrl),
 					message: cobj.properties?.content?.content ?? "",
 					rating: new RatingLikes(extractHumanNumber_Integer(cobj.toolbar?.likeCountLiked) ?? 0),
 					date: (extractAgoTextRuns_Timestamp(cobj?.properties?.publishedTime) ?? 0),

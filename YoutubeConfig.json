@@ -7,7 +7,7 @@
 	"sourceUrl": "",
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
-	"version": 191,
+	"version": 194,
 	"iconUrl": "./youtubeAlt.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 
@@ -87,6 +87,13 @@
 			"description": "Use an early experimental implementation of UMP. May cause videos to fail & use more memory. (Requires newest Grayjay)",
 			"type": "Boolean",
 			"default": "true"
+		},
+		{
+			"variable": "showVerboseToasts",
+			"name": "Show Verbose Messages",
+			"description": "Show messages that give more information about what is happening, might be considered annoying for some.",
+			"type": "Boolean",
+			"default": "false"
 		},
 		{
 			"variable": "youtubeDislikerHeader",
