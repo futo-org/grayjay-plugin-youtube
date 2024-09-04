@@ -57,6 +57,7 @@ const REGEX_VIDEO_URL_EMBED = new RegExp("https://(.*\\.)?youtube\\.com/embed/([
 const REGEX_VIDEO_CHANNEL_URL = new RegExp("https://(.*\\.)?youtube\\.com/channel/(.*)");
 const REGEX_VIDEO_CHANNEL_URL2 = new RegExp("https://(.*\\.)?youtube\\.com/user/.*");
 const REGEX_VIDEO_CHANNEL_URL3 =  new RegExp("https://(.*\\.)?youtube\\.com/@.*");
+const REGEX_VIDEO_CHANNEL_URL4 =  new RegExp("https://(.*\\.)?youtube\\.com/c/*");
 
 const REGEX_VIDEO_PLAYLIST_URL = new RegExp("https://(.*\\.)?youtube\\.com/playlist\\?list=.*");
 
@@ -1077,7 +1078,8 @@ source.getContentRecommendations = (url, initialData) => {
 source.isChannelUrl = (url) => {
 	return REGEX_VIDEO_CHANNEL_URL.test(url) || 
 		REGEX_VIDEO_CHANNEL_URL2.test(url) || 
-		REGEX_VIDEO_CHANNEL_URL3.test(url)
+		REGEX_VIDEO_CHANNEL_URL3.test(url) ||
+		REGEX_VIDEO_CHANNEL_URL4.test(url);
 };
 source.getChannel = (url) => {
 	const initialData = requestInitialData(url);
@@ -1092,8 +1094,29 @@ source.getChannelCapabilities = () => {
 		sorts: [Type.Order.Chronological, "Popular"]
 	};
 }
+function filterChannelUrl(url) {
+	url = removeQuery(url);
+	//Filter out known suffixes..prob need something better
+	const channelSuffixes = [
+		"featured",
+		"videos",
+		"shorts",
+		"streams",
+		"podcasts",
+		"playlists",
+		"community"
+	];
+	for(let suffix of channelSuffixes) {
+		if(url.endsWith("/" + suffix)) {
+			url = url.substring(0, url.length - suffix.length + 1);
+			break;
+		}
+	}
+	return url;
+}
 source.getChannelContents = (url, type, order, filters) => {
 	let targetTab = null;
+	url = filterChannelUrl(url);
 
 	switch(type) {
 		case undefined:
@@ -1327,11 +1350,16 @@ source.getPlaylist = function (url) {
 			videos[0].thumbnails.sources.length > 0)
 			thumbnail = videos[0].thumbnails.sources[videos[0].thumbnails.sources.length - 1].url;
 
+		let author = extractRuns_AuthorLink(playlistHeaderRenderer?.ownerText?.runs);
+		if(!author && videos && videos.length > 0 && videos.filter(x=>x.author.url != videos[0].author.url).length == 0) {
+			//Assume author = video owner if all videos by same & author null
+			author = videos[0].author;
+		}
 		
         return new PlatformPlaylistDetails({
             url: url,
 			id: new PlatformID(PLATFORM, playlistHeaderRenderer?.playlistId, config.id),
-			author: extractRuns_AuthorLink(playlistHeaderRenderer?.ownerText?.runs),
+			author: author,
             name: title,
             thumbnail: thumbnail,
             videoCount: extractFirstNumber_Integer(extractText_String(playlistHeaderRenderer?.numVideosText)),
