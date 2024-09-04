@@ -400,8 +400,8 @@ source.getContentDetails = (url, useAuth, simplify) => {
 	let initialPlayerData = getInitialPlayerData(html);
 	let clientConfig = getClientConfig(html);
 	
-	
-	if (initialPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED") {
+	const ageRestricted = initialPlayerData.playabilityStatus?.reason?.indexOf("your age") > 0 ?? false;
+	if (initialPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED" && !ageRestricted) {
 		if(!!_settings?.allowLoginFallback && !useLogin) {
 			bridge.toast("Using login fallback to resolve:\n" + initialPlayerData?.playabilityStatus?.reason);
 			resps[0] = http.GET(url, headersUsed, true);
@@ -431,7 +431,6 @@ source.getContentDetails = (url, useAuth, simplify) => {
 	const jsUrl = (jsUrlMatch) ? jsUrlMatch[1] : clientContext.PLAYER_JS_URL;
 	const isNewCipher = prepareCipher(jsUrl);
 	
-	const ageRestricted = initialPlayerData.playabilityStatus?.reason?.indexOf("your age") > 0 ?? false;
 	if (ageRestricted) {
 		if (_settings["allowAgeRestricted"]) {
 			const sts = _sts[jsUrl];
