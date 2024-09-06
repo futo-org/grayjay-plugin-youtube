@@ -3715,7 +3715,7 @@ function extractVideoWithContextRenderer_Video(videoRenderer, contextData) {
 		x.thumbnailOverlayTimeStatusRenderer?.accessibility?.accessibilityData?.label == "LIVE");
 	let isLive = liveBadges != null && liveBadges.length > 0;
 
-	isLive = isLive || (videoRenderer.badges?.filter(x=>x.metadataBadgeRenderer?.style == "BADGE_STYLE_TYPE_LIVE_NOW"))
+	isLive = isLive || ((videoRenderer.badges?.filter(x=>x.metadataBadgeRenderer?.style == "BADGE_STYLE_TYPE_LIVE_NOW")?.length ?? 0) > 0)
 
 	let plannedDate = null;
 	if(videoRenderer.upcomingEventData?.startTime)
@@ -3784,7 +3784,7 @@ function extractVideoRenderer_Video(videoRenderer, contextData) {
 	if(plannedDate)
 		isLive = true;
 	
-	isLive = isLive || (videoRenderer.badges?.filter(x=>x.metadataBadgeRenderer?.style == "BADGE_STYLE_TYPE_LIVE_NOW"))
+	isLive = isLive || ((videoRenderer.badges?.filter(x=>x.metadataBadgeRenderer?.style == "BADGE_STYLE_TYPE_LIVE_NOW")?.length ?? 0) > 0)
 
 	if(!isLive && !videoRenderer.publishedTimeText?.simpleText)
 		return  null; //Not a normal video
