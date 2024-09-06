@@ -3728,8 +3728,8 @@ function extractVideoWithContextRenderer_Video(videoRenderer, contextData) {
 	if(IS_TESTING)
 		;//console.log(videoRenderer);
 
-	if(!videoRenderer?.lengthText?.runs || !videoRenderer.publishedTimeText?.runs)
-		isLive = true; //If no length, live after all?
+	//if(!videoRenderer?.lengthText?.runs || !videoRenderer.publishedTimeText?.runs)
+	//	isLive = true; //If no length, live after all?
 
     let viewCount = 0;
     if(videoRenderer?.shortViewCountText)
