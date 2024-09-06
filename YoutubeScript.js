@@ -3711,8 +3711,11 @@ function extractRichItemRenderer_Video(itemRenderer, contextData) {
 function extractVideoWithContextRenderer_Video(videoRenderer, contextData) {
 
 	const liveBadges = videoRenderer.thumbnailOverlays?.filter(x=>
+		x.thumbnailOverlayTimeStatusRenderer?.style == "LIVE" ||
 		x.thumbnailOverlayTimeStatusRenderer?.accessibility?.accessibilityData?.label == "LIVE");
 	let isLive = liveBadges != null && liveBadges.length > 0;
+
+	isLive = isLive || (videoRenderer.badges?.filter(x=>x.metadataBadgeRenderer?.style == "BADGE_STYLE_TYPE_LIVE_NOW"))
 
 	let plannedDate = null;
 	if(videoRenderer.upcomingEventData?.startTime)
@@ -3780,6 +3783,8 @@ function extractVideoRenderer_Video(videoRenderer, contextData) {
 		plannedDate = parseInt(videoRenderer.upcomingEventData.startTime);
 	if(plannedDate)
 		isLive = true;
+	
+	isLive = isLive || (videoRenderer.badges?.filter(x=>x.metadataBadgeRenderer?.style == "BADGE_STYLE_TYPE_LIVE_NOW"))
 
 	if(!isLive && !videoRenderer.publishedTimeText?.simpleText)
 		return  null; //Not a normal video
@@ -4051,6 +4056,8 @@ function extractAgoTextRuns_Timestamp(runs) {
 	return extractAgoText_Timestamp(runStr);
 }
 function extractAgoText_Timestamp(str) {
+	if(!str)
+		return 0;
 	const match = str.match(REGEX_HUMAN_AGO);
 	if(!match)
 		return 0;
@@ -4093,6 +4100,8 @@ function extractRuns_ViewerCount(runs) {
 	return -1;
 }
 function extractHumanTime_Seconds(str) {
+	if(!str)
+		return 0;
 	if(str.indexOf(" ") >= 0)
 		str = str.split(" ")[0];
 	const parts = str.split(":");
