@@ -1033,7 +1033,7 @@ source.getSubComments = (comment) => {
 };
 
 source.getContentRecommendations = (url, initialData) => {
-	useAuth = !!_settings?.authDetails;
+	const useAuth = !!_settings?.authDetails;
 	url = convertIfOtherUrl(url);
 
 	if(!initialData) {
@@ -3792,8 +3792,8 @@ function extractVideoRenderer_Video(videoRenderer, contextData) {
 	if(IS_TESTING)
 		console.log(videoRenderer);
 
-	if(!videoRenderer?.lengthText?.simpleText)
-		isLive = true; //If no length, live after all?
+//	if(!videoRenderer?.lengthText?.simpleText)
+//		isLive = true; //If no length, live after all?
 
 	if(isLive)
 		return new PlatformVideo({

@@ -7,7 +7,7 @@
 	"sourceUrl": "https://plugins.grayjay.app/Youtube/YoutubeConfig.json",
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
-	"version": 196,
+	"version": 197,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 
