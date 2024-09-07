@@ -7,10 +7,9 @@
 	"sourceUrl": "",
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
-	"version": 194,
+	"version": 201,
 	"iconUrl": "./youtubeAlt.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
-
 	"scriptSignature": "",
 	"scriptPublicKey": "",
 	"packages": ["Http", "Utilities", "DOMParser"],
