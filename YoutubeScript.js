@@ -1060,12 +1060,21 @@ source.getContentRecommendations = (url, initialData) => {
 
 	const contents = initialData.contents;
 	let watchNextFeed = contents.twoColumnWatchNextResults?.secondaryResults?.secondaryResults ?? null;
+	log("Recommendations twoColumnWatchNextResults: " + !!contents.twoColumnWatchNextResults);
 	if(!watchNextFeed) 
 		return new VideoPager([], false);
+	log("Recommendations watchNextFeed: " + !!watchNextFeed + "\n" + JSON.stringify(watchNextFeed));
+	const originalItems = watchNextFeed.results;
 	if(watchNextFeed.targetId != 'watch-next-feed' && watchNextFeed.results)
-		watchNextFeed = watchNextFeed.results.find(x=>x.targetId == 'watch-next-feed')
-	if(!watchNextFeed)
+		watchNextFeed = watchNextFeed.results.find(x=>x.targetId == 'watch-next-feed' || x.itemSectionRenderer?.targetId == 'watch-next-feed');
+	if(!watchNextFeed) {
+		log("No videos found?\n" + originalItems.map(x=>JSON.stringify(x)).join("\n\n"));
 		return new VideoPager([], false);
+	}
+	if(watchNextFeed.itemSectionRenderer?.targetId == 'watch-next-feed') {
+		log("Recommendations in sub-section renderer");
+		watchNextFeed = watchNextFeed.itemSectionRenderer;
+	}
 	
 	const itemSectionRenderer = extractItemSectionRenderer_Shelves(watchNextFeed);
 
