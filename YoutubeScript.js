@@ -1060,10 +1060,10 @@ source.getContentRecommendations = (url, initialData) => {
 
 	const contents = initialData.contents;
 	let watchNextFeed = contents.twoColumnWatchNextResults?.secondaryResults?.secondaryResults ?? null;
-	log("Recommendations twoColumnWatchNextResults: " + !!contents.twoColumnWatchNextResults);
+	//log("Recommendations twoColumnWatchNextResults: " + !!contents.twoColumnWatchNextResults);
 	if(!watchNextFeed) 
 		return new VideoPager([], false);
-	log("Recommendations watchNextFeed: " + !!watchNextFeed + "\n" + JSON.stringify(watchNextFeed));
+	//log("Recommendations watchNextFeed: " + !!watchNextFeed + "\n" + JSON.stringify(watchNextFeed));
 	const originalItems = watchNextFeed.results;
 	if(watchNextFeed.targetId != 'watch-next-feed' && watchNextFeed.results)
 		watchNextFeed = watchNextFeed.results.find(x=>x.targetId == 'watch-next-feed' || x.itemSectionRenderer?.targetId == 'watch-next-feed');
@@ -1286,7 +1286,7 @@ source.getPlaylist = function (url) {
 
     const playlistHeaderRenderer = initialData?.header?.playlistHeaderRenderer;
     if(!playlistHeaderRenderer) {
-        log("No playlist header found");
+        throw new ScriptException("No playlist header found");
         return null;
     }
 
@@ -1296,14 +1296,14 @@ source.getPlaylist = function (url) {
     const renderer = initialData?.contents?.singleColumnBrowseResultsRenderer ?? initialData?.contents?.twoColumnBrowseResultsRenderer;
     if(renderer) {
         if(!renderer.tabs) {
-            log("No tabs found");
+            throw new ScriptException("No tabs found");
             return null;
         }
         const tab = renderer.tabs[0];
         const tabRenderer = tab.tabRenderer;
         const playlistList = findRenderer(tab, "playlistVideoListRenderer");
         if(!playlistList || !playlistList.contents) {
-            log("playlistVideoListRenderer not found");
+            throw new ScriptException("playlistVideoListRenderer not found");
             return null;
 		}
 		
@@ -1374,6 +1374,8 @@ source.getPlaylist = function (url) {
             contents: new PlaylistVideoPager(videos, continuationToken)
         });
     }
+	else
+		throw new ScriptException("No playlist renderer found?");
     return null;
 };
 
@@ -3946,7 +3948,7 @@ function extractVideoRenderer_AuthorLink(videoRenderer) {
 	return new PlatformAuthorLink(new PlatformID(PLATFORM, id, config.id, PLATFORM_CLAIMTYPE), name, channelUrl, thumbUrl);
 }
 function extractCommentRenderer_Comment(contextUrl, commentRenderer, replyCount, replyContinuation, useLogin, useMobile) {
-	const authorName = commentRenderer.authorText?.simpleText ?? "";
+	const authorName = extractText_String(commentRenderer.authorText) ?? "";
 	const authorEndpoint = commentRenderer.authorEndpoint?.commandMetadata?.webCommandMetadata?.url ?? "";
 	const authorThumbnail = (commentRenderer.authorThumbnail?.thumbnails ? 
 		commentRenderer.authorThumbnail.thumbnails[commentRenderer.authorThumbnail.thumbnails.length - 1].url :
