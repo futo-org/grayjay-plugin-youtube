@@ -1126,6 +1126,7 @@ source.getChannelContents = (url, type, order, filters) => {
 	let targetTab = null;
 	url = filterChannelUrl(url);
 
+	log("GetChannelContents - " + type);
 	switch(type) {
 		case undefined:
 		case null:
@@ -1158,7 +1159,6 @@ source.getChannelContents = (url, type, order, filters) => {
 		authorLink: new PlatformAuthorLink(new PlatformID(PLATFORM, channel.id.value, config.id, PLATFORM_CLAIMTYPE), channel.name, channel.url, channel.thumbnail)
 	};
 	const tabs = extractPage_Tabs(initialData, contextData);
-	
 	const tab = tabs.find(x=>x.title == targetTab);
 	if(!tab) 
 		return new VideoPager([], false);
@@ -1177,7 +1177,7 @@ source.getChannelContents = (url, type, order, filters) => {
 		return new VideoPager([], false);
 	}
 	//throw new ScriptException("Could not find tab: " + targetTab);
-
+	log("Channel Result Count: " + tab?.videos?.length)
 	return new RichGridPager(tab, contextData, useAuth, useAuth);
 };
 
@@ -3731,7 +3731,7 @@ function extractVideoWithContextRenderer_Video(videoRenderer, contextData) {
 	let plannedDate = null;
 	if(videoRenderer.upcomingEventData?.startTime)
 		plannedDate = parseInt(videoRenderer.upcomingEventData.startTime);
-
+	isLive = isLive || !!plannedDate
 	//if(!isLive && !videoRenderer.publishedTimeText?.simpleText)
 	//	return  null; //Not a normal video
 
