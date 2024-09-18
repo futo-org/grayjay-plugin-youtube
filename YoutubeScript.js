@@ -102,7 +102,7 @@ const USE_ANDROID_FALLBACK = false;
 const USE_IOS_FALLBACK = true;
 const USE_IOS_VIDEOS_FALLBACK = true;
 
-let USE_ABR_VIDEOS = true;
+let USE_ABR_VIDEOS = false;
 
 const SORT_VIEWS_STRING = "Views";
 const SORT_RATING_STRING = "Rating";
@@ -414,8 +414,8 @@ else {
 		let initialPlayerData = getInitialPlayerData(html);
 		let clientConfig = getClientConfig(html);
 		
-		
-		if (initialPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED") {
+		let ageRestricted = initialPlayerData.playabilityStatus?.reason?.indexOf("your age") > 0 ?? false;
+		if (initialPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED" && (bridge.isLoggedIn() || !ageRestricted)) {
 			if(!!_settings?.allowLoginFallback && !useLogin) {
 				bridge.toast("Using login fallback to resolve:\n" + initialPlayerData?.playabilityStatus?.reason);
 				resps[0] = http.GET(url, headersUsed, true);
@@ -426,10 +426,10 @@ else {
 				clientConfig = getClientConfig(html);
 
 				if (initialPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED")
-					throw new ScriptException("Login required\nReason: " + initialPlayerData?.playabilityStatus?.reason);
+					throw new ScriptLoginRequiredException("Login required\nReason: " + initialPlayerData?.playabilityStatus?.reason);
 			}
 			else
-				throw new ScriptException("Login required\nReason: " + initialPlayerData?.playabilityStatus?.reason);
+				throw new ScriptLoginRequiredException("Login required\nReason: " + initialPlayerData?.playabilityStatus?.reason);
 		}
 		const invalidExperiments = [51217102, 51217476];
 		var invalidExperimentIndexes = invalidExperiments.map(x=>clientConfig.FEXP_EXPERIMENTS.indexOf(x));
@@ -442,8 +442,8 @@ else {
 		const jsUrlMatch = html.match("PLAYER_JS_URL\"\\s?:\\s?\"(.*?)\"");
 		const jsUrl = (jsUrlMatch) ? jsUrlMatch[1] : clientContext.PLAYER_JS_URL;
 		const isNewCipher = prepareCipher(jsUrl);
-		
-		const ageRestricted = initialPlayerData.playabilityStatus?.reason?.indexOf("your age") > 0 ?? false;
+
+		ageRestricted = initialPlayerData.playabilityStatus?.reason?.indexOf("your age") > 0 ?? false;
 		if (ageRestricted) {
 			if (_settings["allowAgeRestricted"]) {
 				const sts = _sts[jsUrl];
@@ -534,7 +534,6 @@ else {
 				bridge.toast("Failed to get iOS stream data");
 		}
 		else if(USE_IOS_VIDEOS_FALLBACK && !USE_ABR_VIDEOS && !simplify) {
-			bridge.toast("Using iOS sources fallback (" + (batchIOS > 0 ? "cached" : "lazily") + ")");
 			const iosDataResp = (batchIOS > 0) ?
 				resps[batchIOS] : 
 				requestIOSStreamingData(videoDetails.id.value);
@@ -544,12 +543,22 @@ else {
 					console.log("IOS Streaming Data", iosData);
 
 				if(iosData?.streamingData?.adaptiveFormats) {
+					if(!!_settings["showVerboseToasts"])
+					bridge.toast("Using iOS sources fallback (" + (batchIOS > 0 ? "cached" : "lazily") + ")");
 					let newDescriptor = extractAdaptiveFormats_VideoDescriptor(iosData.streamingData.adaptiveFormats, jsUrl, creationData, "IOS ");
 					videoDetails.video = newDescriptor;
 				}
+				else {
+					log("Failed to get iOS stream data, fallback to UMP")
+					bridge.toast("Failed to get iOS stream data, fallback to UMP");
+					videoDetails.video = extractABR_VideoDescriptor(initialPlayerData, jsUrl) ?? new VideoSourceDescriptor([]);
+				}
 			}
-			else
-				bridge.toast("Failed to get iOS stream data");
+			else {
+				log("Failed to get iOS stream data, fallback to UMP (" + iosDataResp?.code + ")")
+				bridge.toast("Failed to get iOS stream data, fallback to UMP");
+				videoDetails.video = extractABR_VideoDescriptor(initialPlayerData, jsUrl) ?? new VideoSourceDescriptor([]);
+			}
 		}
 
 		if(batchYoutubeDislikesIndex > 0) {
@@ -1070,12 +1079,21 @@ source.getContentRecommendations = (url, initialData) => {
 
 	const contents = initialData.contents;
 	let watchNextFeed = contents.twoColumnWatchNextResults?.secondaryResults?.secondaryResults ?? null;
+	//log("Recommendations twoColumnWatchNextResults: " + !!contents.twoColumnWatchNextResults);
 	if(!watchNextFeed) 
 		return new VideoPager([], false);
+	//log("Recommendations watchNextFeed: " + !!watchNextFeed + "\n" + JSON.stringify(watchNextFeed));
+	const originalItems = watchNextFeed.results;
 	if(watchNextFeed.targetId != 'watch-next-feed' && watchNextFeed.results)
-		watchNextFeed = watchNextFeed.results.find(x=>x.targetId == 'watch-next-feed')
-	if(!watchNextFeed)
+		watchNextFeed = watchNextFeed.results.find(x=>x.targetId == 'watch-next-feed' || x.itemSectionRenderer?.targetId == 'watch-next-feed');
+	if(!watchNextFeed) {
+		log("No videos found?\n" + originalItems.map(x=>JSON.stringify(x)).join("\n\n"));
 		return new VideoPager([], false);
+	}
+	if(watchNextFeed.itemSectionRenderer?.targetId == 'watch-next-feed') {
+		log("Recommendations in sub-section renderer");
+		watchNextFeed = watchNextFeed.itemSectionRenderer;
+	}
 	
 	const itemSectionRenderer = extractItemSectionRenderer_Shelves(watchNextFeed);
 
@@ -1127,6 +1145,7 @@ source.getChannelContents = (url, type, order, filters) => {
 	let targetTab = null;
 	url = filterChannelUrl(url);
 
+	log("GetChannelContents - " + type);
 	switch(type) {
 		case undefined:
 		case null:
@@ -1159,7 +1178,6 @@ source.getChannelContents = (url, type, order, filters) => {
 		authorLink: new PlatformAuthorLink(new PlatformID(PLATFORM, channel.id.value, config.id, PLATFORM_CLAIMTYPE), channel.name, channel.url, channel.thumbnail)
 	};
 	const tabs = extractPage_Tabs(initialData, contextData);
-	
 	const tab = tabs.find(x=>x.title == targetTab);
 	if(!tab) 
 		return new VideoPager([], false);
@@ -1178,7 +1196,7 @@ source.getChannelContents = (url, type, order, filters) => {
 		return new VideoPager([], false);
 	}
 	//throw new ScriptException("Could not find tab: " + targetTab);
-
+	log("Channel Result Count: " + tab?.videos?.length)
 	return new RichGridPager(tab, contextData, useAuth, useAuth);
 };
 
@@ -1287,7 +1305,7 @@ source.getPlaylist = function (url) {
 
     const playlistHeaderRenderer = initialData?.header?.playlistHeaderRenderer;
     if(!playlistHeaderRenderer) {
-        log("No playlist header found");
+        throw new ScriptException("No playlist header found");
         return null;
     }
 
@@ -1297,14 +1315,14 @@ source.getPlaylist = function (url) {
     const renderer = initialData?.contents?.singleColumnBrowseResultsRenderer ?? initialData?.contents?.twoColumnBrowseResultsRenderer;
     if(renderer) {
         if(!renderer.tabs) {
-            log("No tabs found");
+            throw new ScriptException("No tabs found");
             return null;
         }
         const tab = renderer.tabs[0];
         const tabRenderer = tab.tabRenderer;
         const playlistList = findRenderer(tab, "playlistVideoListRenderer");
         if(!playlistList || !playlistList.contents) {
-            log("playlistVideoListRenderer not found");
+            throw new ScriptException("playlistVideoListRenderer not found");
             return null;
 		}
 		
@@ -1375,6 +1393,8 @@ source.getPlaylist = function (url) {
             contents: new PlaylistVideoPager(videos, continuationToken)
         });
     }
+	else
+		throw new ScriptException("No playlist renderer found?");
     return null;
 };
 
@@ -1703,7 +1723,7 @@ function generateDash(sourceObj, ustreamerConfig, abrUrl) {
 	const lastAction = (new Date()).getTime() - (Math.random() * 5000);
 	const initialReq = getVideoPlaybackRequest(sourceObj, ustreamerConfig, 0, 0, 0, lastAction, now);
 	const postData = initialReq.serializeBinary();
-	const initialResp = http.POST(abrUrl, postData, {
+	let initialResp = http.POST(abrUrl, postData, {
 		"Origin": "https://www.youtube.com",
 		"Accept": "*/*",
 		"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
@@ -1723,9 +1743,41 @@ function generateDash(sourceObj, ustreamerConfig, abrUrl) {
 		((isVideo) ? getMediaReusableVideoBuffers() : getMediaReusableAudioBuffers()) :
 		undefined;
 
-	const umpResp = new UMPResponse(byteArray, reusableBuffer);
-	if(!umpResp)
-		throw new ScriptException("Invalid UMP response found");
+	let umpResp = undefined;
+
+	const maxRedirect = 3;
+	for(let i = 0; i < maxRedirect; i++) {
+		umpResp = new UMPResponse(byteArray, reusableBuffer);
+		if(!umpResp)
+			throw new ScriptException("Invalid UMP response found");
+		if(!umpResp.streams[0]?.data) {
+			if(umpResp.redirectUrl && i < maxRedirect - 1) {
+				bridge.toast("UMP Redirect..");
+				abrUrl = umpResp.redirectUrl;
+				log("UMP Redirecting to:\n" + umpResp.redirectUrl);
+				initialResp = http.POST(abrUrl, postData, {
+					"Origin": "https://www.youtube.com",
+					"Accept": "*/*",
+					"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+				}, false, true);
+				if(!initialResp.isOk)
+					throw new ScriptException("Failed initial stream request [ " + initialResp.code + "]");
+			
+				const data = initialResp.body;
+				let byteArray = undefined;
+				if(data instanceof ArrayBuffer)
+					byteArray = new Uint8Array(data);
+				else
+					byteArray = Uint8Array.from(data);
+			}
+			else {
+				log("No stream data in initial UMP Response:\n" + JSON.stringify(umpResp));
+				log("Failed to load UMP, try restarting plugin/app.\n" + umpResp.opcodes.map(x=>x.opcode + ":" + x.length).join(", "));
+				bridge.toast("Failed to load UMP, try restarting plugin/app.\n" + umpResp.opcodes.map(x=>x.opcode + ":" + x.length).join(", "));
+				throw new ScriptException("No stream data in initial UMP response");
+			}
+		}
+	}
 	const webmHeaderData = umpResp.streams[0].data;
 	const webmHeader = new WEBMHeader(webmHeaderData, 
 		sourceObj.mimeType.split(";")[0],
@@ -3314,7 +3366,7 @@ function extractPage_Tabs(initialData, contextData) {
 
 
 //#region Layout Extractors
-function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextData, jsUrl, useLogin) {
+function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextData, jsUrl, useLogin, useAbr) {
 	const contents = initialData.contents;
 	const contentsContainer = contents.twoColumnWatchNextResults?.results?.results ??
 		null;
@@ -3339,6 +3391,7 @@ function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextDa
 
 	const abrStreamingUrl = (initialPlayerData.streamingData.serverAbrStreamingUrl) ? 
 		decryptUrlN(initialPlayerData.streamingData.serverAbrStreamingUrl, jsUrl, false) : undefined;
+	useAbr = abrStreamingUrl && (!!useAbr || USE_ABR_VIDEOS);
 	const video = {
 		id: new PlatformID(PLATFORM, videoDetails.videoId, config.id),
 		name: videoDetails.title,
@@ -3352,136 +3405,12 @@ function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextDa
 		hls: (videoDetails?.isLive ?? false) ? hlsSource : null,
 		dash: (videoDetails?.isLive ?? false) ? dashSource : null,
 		live: (videoDetails?.isLive ?? false) ? (hlsSource ?? dashSource) : null,
-		video: initialPlayerData?.streamingData?.adaptiveFormats ? new UnMuxVideoSourceDescriptor(
-			((!abrStreamingUrl || !initialPlayerData?.playerConfig?.mediaCommonConfig?.mediaUstreamerRequestConfig?.videoPlaybackUstreamerConfig) || !USE_ABR_VIDEOS) ? 
-				(initialPlayerData.streamingData.adaptiveFormats
-					.filter(x=>x.mimeType.startsWith("video/"))
-					.map(y=>{
-						const codecs = y.mimeType.substring(y.mimeType.indexOf('codecs=\"') + 8).slice(0, -1);
-						const container = y.mimeType.substring(0, y.mimeType.indexOf(';'));
-						if(codecs.startsWith("av01"))
-							return null; //AV01 is unsupported.
-
-						const logItag = y.itag ==  134;
-						if(logItag) {
-							log(videoDetails.title + " || Format " + container + " - " + y.itag + " - " + y.width);
-							log("Source Parameters:\n" + JSON.stringify({
-								url: y.url,
-								cipher: y.cipher,
-								signatureCipher: y.signatureCipher
-							}, null, "   "));
-						}
-						
-						let url = decryptUrlN(y.url, jsUrl, logItag) ?? decryptUrl(y.cipher, jsUrl, logItag) ?? decryptUrl(y.signatureCipher, jsUrl, logItag);
-						if(url.indexOf("&cpn=") < 0)
-							url = url + "&cpn=" + nonce;
-
-						const duration = parseInt(parseInt(y.approxDurationMs) / 1000) ?? 0;
-						if(isNaN(duration))
-							return null;
-
-						if(!y.initRange?.end || !y.indexRange?.end)
-							return null;
-
-						return new YTVideoSource({
-							name: y.height + "p" + (y.fps ? y.fps : "") + " " + container,
-							url: url,
-							width: y.width,
-							height: y.height,
-							duration: (!isNaN(duration)) ? duration : 0,
-							container: y.mimeType.substring(0, y.mimeType.indexOf(';')),
-							codec: codecs,
-							bitrate: y.bitrate,
-
-							itagId: y.itag,
-							initStart: parseInt(y.initRange?.start),
-							initEnd: parseInt(y.initRange?.end),
-							indexStart: parseInt(y.indexRange?.start),
-							indexEnd: parseInt(y.indexRange?.end)
-						}, contextData.url);
-					})).filter(x=>!!x) : 
-				(initialPlayerData.streamingData.adaptiveFormats
-					.filter(x=>x.mimeType.startsWith("video/webm"))
-					.map(y =>{
-						const codecs = y.mimeType.substring(y.mimeType.indexOf('codecs=\"') + 8).slice(0, -1);
-						const container = y.mimeType.substring(0, y.mimeType.indexOf(';'));
-						if(codecs.startsWith("av01"))
-							return null; //AV01 is unsupported.
-
-						const duration = parseInt(parseInt(y.approxDurationMs) / 1000) ?? 0;
-						if(isNaN(duration))
-							return null;
-						return new YTABRVideoSource({
-							name: "UMP " + y.height + "p" + (y.fps ? y.fps : "") + " " + container,
-							url: abrStreamingUrl,
-							width: y.width,
-							height: y.height,
-							duration: (!isNaN(duration)) ? duration : 0,
-							container: y.mimeType.substring(0, y.mimeType.indexOf(';')),
-							codec: codecs,
-							bitrate: y.bitrate,
-						}, abrStreamingUrl, y, initialPlayerData.playerConfig.mediaCommonConfig.mediaUstreamerRequestConfig.videoPlaybackUstreamerConfig);
-					})).filter(x=>x != null),
-			//Audio
-			(((!abrStreamingUrl || !initialPlayerData?.playerConfig?.mediaCommonConfig?.mediaUstreamerRequestConfig?.videoPlaybackUstreamerConfig) || !USE_ABR_VIDEOS) ? 
-				initialPlayerData.streamingData.adaptiveFormats.filter(x=>x.mimeType.startsWith("audio/")).map(y=>{
-					const codecs = y.mimeType.substring(y.mimeType.indexOf('codecs=\"') + 8).slice(0, -1);
-					const container = y.mimeType.substring(0, y.mimeType.indexOf(';'));
-
-					let url = decryptUrlN(y.url, jsUrl) ?? decryptUrl(y.cipher, jsUrl) ?? decryptUrl(y.signatureCipher, jsUrl);
-					if(url.indexOf("&cpn=") < 0)
-						url = url + "&cpn=" + nonce;
-					
-					const duration = parseInt(parseInt(y.approxDurationMs) / 1000);
-					if(isNaN(duration))
-						return null;
-
-					if(!y.initRange?.end || !y.indexRange?.end)
-						return null;
-
-					return new YTAudioSource({
-						name: y.audioTrack?.displayName ? y.audioTrack.displayName : codecs,
-						container: container,
-						bitrate: y.bitrate,
-						url: url,
-						duration: (!isNaN(duration)) ? duration : 0,
-						container: y.mimeType.substring(0, y.mimeType.indexOf(';')),
-						codec: codecs,
-						language: ytLangIdToLanguage(y.audioTrack?.id),
-
-						itagId: y.itag,
-						initStart: parseInt(y.initRange?.start),
-						initEnd: parseInt(y.initRange?.end),
-						indexStart: parseInt(y.indexRange?.start),
-						indexEnd: parseInt(y.indexRange?.end),
-						audioChannels: y.audioChannels
-					}, contextData.url);
-				}).filter(x=>x!=null) :
-				(initialPlayerData.streamingData.adaptiveFormats
-					.filter(x=>x.mimeType.startsWith("audio/webm"))
-					.map(y =>{
-						const codecs = y.mimeType.substring(y.mimeType.indexOf('codecs=\"') + 8).slice(0, -1);
-						const container = y.mimeType.substring(0, y.mimeType.indexOf(';'));
-						if(codecs.startsWith("av01"))
-							return null; //AV01 is unsupported.
-
-						const duration = parseInt(parseInt(y.approxDurationMs) / 1000) ?? 0;
-						if(isNaN(duration))
-							return null;
-						return new YTABRAudioSource({
-							name: "UMP " + (y.audioTrack?.displayName ? y.audioTrack.displayName : codecs),
-							url: abrStreamingUrl,
-							width: y.width,
-							height: y.height,
-							duration: (!isNaN(duration)) ? duration : 0,
-							container: y.mimeType.substring(0, y.mimeType.indexOf(';')),
-							codec: codecs,
-							bitrate: y.bitrate,
-							audioChannels: y.audioChannels,
-							language: ytLangIdToLanguage(y.audioTrack?.id)
-						}, abrStreamingUrl, y, initialPlayerData.playerConfig.mediaCommonConfig.mediaUstreamerRequestConfig.videoPlaybackUstreamerConfig);
-					})).filter(x=>x != null)),
-		) : new VideoSourceDescriptor([]),
+		video: 
+			((!useAbr) ?
+				extractAdaptiveFormats_VideoDescriptor(initialPlayerData?.streamingData?.adaptiveFormats, jsUrl, contextData, "") :
+				extractABR_VideoDescriptor(initialPlayerData, jsUrl)
+			)
+			?? new VideoSourceDescriptor([]),
 		subtitles: initialPlayerData
 			.captions
 			?.playerCaptionsTracklistRenderer
@@ -3651,6 +3580,65 @@ function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextDa
 	}
     return result;
 }
+
+function extractABR_VideoDescriptor(initialPlayerData, jsUrl) {
+	
+	const abrStreamingUrl = (initialPlayerData.streamingData.serverAbrStreamingUrl) ? 
+		decryptUrlN(initialPlayerData.streamingData.serverAbrStreamingUrl, jsUrl, false) : undefined;
+	if(!abrStreamingUrl)
+		return undefined;
+
+	return new UnMuxVideoSourceDescriptor(
+		(initialPlayerData.streamingData.adaptiveFormats
+			.filter(x => x.mimeType.startsWith("video/webm"))
+			.map(y => {
+				const codecs = y.mimeType.substring(y.mimeType.indexOf('codecs=\"') + 8).slice(0, -1);
+				const container = y.mimeType.substring(0, y.mimeType.indexOf(';'));
+				if (codecs.startsWith("av01"))
+					return null; //AV01 is unsupported.
+
+				const duration = parseInt(parseInt(y.approxDurationMs) / 1000) ?? 0;
+				if (isNaN(duration))
+					return null;
+				return new YTABRVideoSource({
+					name: "UMP " + y.height + "p" + (y.fps ? y.fps : "") + " " + container,
+					url: abrStreamingUrl,
+					width: y.width,
+					height: y.height,
+					duration: (!isNaN(duration)) ? duration : 0,
+					container: y.mimeType.substring(0, y.mimeType.indexOf(';')),
+					codec: codecs,
+					bitrate: y.bitrate,
+				}, abrStreamingUrl, y, initialPlayerData.playerConfig.mediaCommonConfig.mediaUstreamerRequestConfig.videoPlaybackUstreamerConfig);
+			})).filter(x => x != null),
+		//Audio
+		(initialPlayerData.streamingData.adaptiveFormats
+			.filter(x => x.mimeType.startsWith("audio/webm"))
+			.map(y => {
+				const codecs = y.mimeType.substring(y.mimeType.indexOf('codecs=\"') + 8).slice(0, -1);
+				const container = y.mimeType.substring(0, y.mimeType.indexOf(';'));
+				if (codecs.startsWith("av01"))
+					return null; //AV01 is unsupported.
+
+				const duration = parseInt(parseInt(y.approxDurationMs) / 1000) ?? 0;
+				if (isNaN(duration))
+					return null;
+				return new YTABRAudioSource({
+					name: "UMP " + (y.audioTrack?.displayName ? y.audioTrack.displayName : codecs),
+					url: abrStreamingUrl,
+					width: y.width,
+					height: y.height,
+					duration: (!isNaN(duration)) ? duration : 0,
+					container: y.mimeType.substring(0, y.mimeType.indexOf(';')),
+					codec: codecs,
+					bitrate: y.bitrate,
+					audioChannels: y.audioChannels,
+					language: ytLangIdToLanguage(y.audioTrack?.id)
+				}, abrStreamingUrl, y, initialPlayerData.playerConfig.mediaCommonConfig.mediaUstreamerRequestConfig.videoPlaybackUstreamerConfig);
+			})).filter(x => x != null)
+	);
+}
+
 function extractAdaptiveFormats_VideoDescriptor(adaptiveSources, jsUrl, contextData, prefix) {   
 	const nonce = randomString(16);   
 	return adaptiveSources ? new UnMuxVideoSourceDescriptor(   
@@ -4295,7 +4283,7 @@ function extractVideoWithContextRenderer_Video(videoRenderer, contextData) {
 	let plannedDate = null;
 	if(videoRenderer.upcomingEventData?.startTime)
 		plannedDate = parseInt(videoRenderer.upcomingEventData.startTime);
-
+	isLive = isLive || !!plannedDate
 	//if(!isLive && !videoRenderer.publishedTimeText?.simpleText)
 	//	return  null; //Not a normal video
 
@@ -4512,7 +4500,7 @@ function extractVideoRenderer_AuthorLink(videoRenderer) {
 	return new PlatformAuthorLink(new PlatformID(PLATFORM, id, config.id, PLATFORM_CLAIMTYPE), name, channelUrl, thumbUrl);
 }
 function extractCommentRenderer_Comment(contextUrl, commentRenderer, replyCount, replyContinuation, useLogin, useMobile) {
-	const authorName = commentRenderer.authorText?.simpleText ?? "";
+	const authorName = extractText_String(commentRenderer.authorText) ?? "";
 	const authorEndpoint = commentRenderer.authorEndpoint?.commandMetadata?.webCommandMetadata?.url ?? "";
 	const authorThumbnail = (commentRenderer.authorThumbnail?.thumbnails ? 
 		commentRenderer.authorThumbnail.thumbnails[commentRenderer.authorThumbnail.thumbnails.length - 1].url :
@@ -5463,6 +5451,9 @@ class UMPResponse {
 						if(stream22)
 							stream22.completed = true;
 					break;
+					case 43://Message
+						const opCode43 = pb.Opcode43_pb.Opcode43.deserializeBinary(segment);
+						this.redirectUrl = opCode43?.getRedirecturl();
 				}
 			}
 			else {

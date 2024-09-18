@@ -1,15 +1,17 @@
 {
-	"name": "Youtube (Alt)",
+	"name": "Youtube",
 	"description": "One of the biggest video platforms owned by Google",
 	"author": "FUTO",
 	"authorUrl": "https://futo.org",
 	"platformUrl": "https://youtube.com",
-	"sourceUrl": "",
+	"sourceUrl": "https://plugins.grayjay.app/Youtube/YoutubeConfig.json",
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
-	"version": 201,
-	"iconUrl": "./youtubeAlt.png",
-	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
+
+	"version": 204,
+	"iconUrl": "./youtube.png",
+	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
+	
 	"scriptSignature": "",
 	"scriptPublicKey": "",
 	"packages": ["Http", "Utilities", "DOMParser"],
@@ -82,10 +84,10 @@
 		},
 		{
 			"variable": "useUMP",
-			"name": "Use Experimental UMP Streams",
-			"description": "Use an early experimental implementation of UMP. May cause videos to fail & use more memory. (Requires newest Grayjay)",
+			"name": "Force Experimental UMP Streams",
+			"description": "Force usage of experimental implementation of UMP. May be unstable and cost more performance.",
 			"type": "Boolean",
-			"default": "true"
+			"default": "false"
 		},
 		{
 			"variable": "showVerboseToasts",
