@@ -493,7 +493,8 @@ else {
 				log("Unavailable video found with new cipher, clearing cipher");
 				clearCipher(jsUrl);
 			}
-			throw new UnavailableException("No sources found");
+			if(!simplify)
+				throw new UnavailableException("No sources found");
 		}
 
 		//Substitute Dash manifest from Android
@@ -1960,6 +1961,7 @@ class YTABRExecutor {
 	constructor(url, source, ustreamerConfig, header, initialUmp) {
 		this.executorId = executorCounter++;
 		this.source = source;
+		this.itag = source.itag;
 		this.header = header;
 		this.initialUmp = initialUmp;
 		this.abrUrl = url;
@@ -2063,7 +2065,9 @@ class YTABRExecutor {
 		this.freeAllSegments();
 	}
 
-	executeRequest(url, headers) {
+	executeRequest(url, headers, retryCount) {
+		if(!retryCount)
+			retryCount = 0;
 		log("UMP: " + url + "");
 		const u = new URL(url);
 		const isInternal = u.pathname.startsWith('/internal');
@@ -2082,9 +2086,9 @@ class YTABRExecutor {
 				log("UMP [" + this.type + "] Cached segment " + segment + " was undefined, refetching");
 		}
 
-		log("UMP [" + this.type + "] requesting segment: " + segment + ", time: " + time);
+		log("UMP [" + this.type + "] requesting segment: " + segment + ", time: " + time + ", itag: " + this.itag);
 		const now = (new Date()).getTime();
-		const initialReq = getVideoPlaybackRequest(this.source, this.ustreamerConfig, time, segment, this.lastRequest, this.lastAction, now);
+		const initialReq = getVideoPlaybackRequest(this.source, this.ustreamerConfig, time, segment, this.lastRequest, this.lastAction, now, undefined, -6);
 		const postData = initialReq.serializeBinary();
 		const initialResp = http.POST(this.abrUrl, postData, {
 			"Origin": "https://www.youtube.com",
@@ -2106,24 +2110,35 @@ class YTABRExecutor {
 
 		const umpResp = new UMPResponse(byteArray, this.reusableBuffer);
 		
-		log("UMP [" + this.type + "] stream resps: \n" + Object.keys(umpResp.streams)
-			.map(x=>`itag:${umpResp.streams[x].itag}, segmentIndex: ${umpResp.streams[x].segmentIndex}, segmentLength: ${umpResp.streams[x].segmentSize}, completed: ${umpResp.streams[x].completed}`)
+		let streamsArr = [];
+		for(let key of Object.keys(umpResp.streams)) {
+			if(umpResp.streams[key].itag == this.itag && umpResp.streams[key].segmentIndex >= segment)
+				streamsArr.push(umpResp.streams[key]);
+		}
+		log("UMP [" + this.type + "] stream resps: \n" + streamsArr
+			.map(x=>`itag:${x.itag}, segmentIndex: ${x.segmentIndex}, segmentLength: ${x.segmentSize}, completed: ${streamsArr.completed}`)
 			.join("\n"));
 
 		this.lastRequest = (new Date()).getTime();
 
-		for(let key of Object.keys(umpResp.streams)) {
-			if(umpResp.streams[key].completed)
-				this.cacheSegment(umpResp.streams[key]);
+		for(let stream of streamsArr) {
+			if(stream.completed)
+				this.cacheSegment(stream);
 		}
 
 		if(data instanceof ArrayBuffer) {
 			log("Clearing POST ArrayBuffer?");
 		}
 		
-		const stream = umpResp.streams[0];
+		const stream = streamsArr[0];
 		if(stream && stream.segmentIndex != segment) {
-			throw new ScriptException("Retrieved wrong segment: " + stream.segmentIndex + " != " + segment);
+			log("Retrieved wrong segment: " + stream.segmentIndex + " != " + segment + ", retrying (" + (retryCount + 1) + ")") 
+			if(true && retryCount >= 2)
+				throw new ScriptException("Retrieved wrong segment: " + stream.segmentIndex + " != " + segment + " (" + retryCount + " attempts)");
+			else { //Disabled retry for now, doesnt make a diff.
+				log("Retrieved wrong segment: " + stream.segmentIndex + " != " + segment + ", retrying (" + (retryCount + 1) + ")");
+				return this.executeRequest(url, headers, retryCount + 1);
+			}
 		}
 		if(!stream || !stream.data)
 			throw new ScriptException("NO STREAMDATA FOUND (" + Object.keys(umpResp.streams).join(", ") + "): " + !!umpResp.streams[0]?.data);
@@ -3642,7 +3657,7 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl) {
 function extractAdaptiveFormats_VideoDescriptor(adaptiveSources, jsUrl, contextData, prefix) {   
 	const nonce = randomString(16);   
 	return adaptiveSources ? new UnMuxVideoSourceDescriptor(   
-			adaptiveSources.filter(x=>x.mimeType.startsWith("video/")).map(y=>{   
+			adaptiveSources.filter(x=>x.mimeType.startsWith("video/") && (x.url || x.cipher || x.signatureCipher)).map(y=>{   
 					const codecs = y.mimeType.substring(y.mimeType.indexOf('codecs=\"') + 8).slice(0, -1);   
 					const container = y.mimeType.substring(0, y.mimeType.indexOf(';'));   
 					if(codecs.startsWith("av01"))   
@@ -3686,7 +3701,7 @@ function extractAdaptiveFormats_VideoDescriptor(adaptiveSources, jsUrl, contextD
 							indexEnd: parseInt(y.indexRange?.end)   
 					}, contextData.url);   
 			}).filter(x=>x != null),   
-			adaptiveSources.filter(x=>x.mimeType.startsWith("audio/")).map(y=>{   
+			adaptiveSources.filter(x=>x.mimeType.startsWith("audio/") && (x.url || x.cipher || x.signatureCipher)).map(y=>{   
 					const codecs = y.mimeType.substring(y.mimeType.indexOf('codecs=\"') + 8).slice(0, -1);   
 					const container = y.mimeType.substring(0, y.mimeType.indexOf(';'));   
 
