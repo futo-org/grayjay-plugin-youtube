@@ -1678,7 +1678,7 @@ class YTABRVideoSource extends DashManifestRawSource {
 			return this.lastDash;
 		log("Generating ABR Video Dash");
 		getMediaReusableVideoBuffers()?.freeAll();
-		let [dash, umpResp, fileHeader] = generateDash(this.sourceObj, this.ustreamerConfig, this.abrUrl);
+		let [dash, umpResp, fileHeader] = generateDash(this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag);
 		this.initialHeader = fileHeader;
 		this.initialUMP = umpResp;
 		this.lastDash = dash;
@@ -1706,7 +1706,7 @@ class YTABRAudioSource extends DashManifestRawAudioSource {
 			return this.lastDash;
 		log("Generating ABR Audio Dash");
 		getMediaReusableAudioBuffers()?.freeAll();
-		let [dash, umpResp, fileHeader] = generateDash(this.sourceObj, this.ustreamerConfig, this.abrUrl);
+		let [dash, umpResp, fileHeader] = generateDash(this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag);
 		this.initialHeader = fileHeader;
 		this.initialUMP = umpResp;
 		this.lastDash = dash;
@@ -1719,7 +1719,7 @@ class YTABRAudioSource extends DashManifestRawAudioSource {
 			this.initialUMP);
 	}
 }
-function generateDash(sourceObj, ustreamerConfig, abrUrl) {
+function generateDash(sourceObj, ustreamerConfig, abrUrl, itag) {
 	const now = (new Date()).getTime();
 	const lastAction = (new Date()).getTime() - (Math.random() * 5000);
 	const initialReq = getVideoPlaybackRequest(sourceObj, ustreamerConfig, 0, 0, 0, lastAction, now);
@@ -1779,7 +1779,15 @@ function generateDash(sourceObj, ustreamerConfig, abrUrl) {
 			}
 		}
 	}
-	const webmHeaderData = umpResp.streams[0].data;
+
+	let streams = [];
+	for(let key in umpResp.streams) {
+		const stream = umpResp.streams[key];
+		if(!itag || stream.itag == itag)
+			streams.push(stream);
+	}
+
+	const webmHeaderData = streams[0].data;
 	const webmHeader = new WEBMHeader(webmHeaderData, 
 		sourceObj.mimeType.split(";")[0],
 		/codecs=\"(.+)\"/.exec(sourceObj.mimeType)[1],
@@ -1969,8 +1977,10 @@ class YTABRExecutor {
 		this.lastRequest = 0;
 		this.requestStarted = (new Date()).getTime();
 		this.lastAction = (new Date()).getTime() - (Math.random() * 1000 * 5);
+		this.segmentOffsets = undefined;
 		log("UMP New executor: " + source.name + " - " + source.mimeType + " (segments: " + header?.cues?.length + ")");
 		log("UMP Cues: " + header?.cues?.join(", "));
+		this.isVideo = source.mimeType.startsWith("video/");
 		if(source.mimeType.startsWith("video/")) {
 			this.urlPrefix = "https://grayjay.internal/video";
 			this.reusableBuffer = (useReusableBuffers) ? 
@@ -1991,11 +2001,22 @@ class YTABRExecutor {
 		this.segments = {};
 		if(initialUmp)
 		{
-			log("UMP [" + this.type + "] Caching initial segments: " + Object.keys(initialUmp.streams).join(", "))
 			for(let segment of Object.keys(initialUmp.streams)) {
-				this.cacheSegment(initialUmp.streams[segment]);
+				const stream = initialUmp.streams[segment];
+				if(stream.itag == this.itag) {
+					log(`Caching initial Segment: itag:${stream.itag}, segmentIndex: ${stream.segmentIndex}, segmentLength: ${stream.segmentSize}, completed: ${stream.completed}`)
+					this.cacheSegment(initialUmp.streams[segment]);
+				}
 			}
 		}
+	}
+	getOffset(index) {
+		if(this.segmentOffset && this.segmentOffset.actual <= index)
+			return this.segmentOffset.offset;
+		return 0;
+	}
+	registerOffset(index, found) {
+		this.segmentOffset = {index: index, actual: found, offset: found - index};
 	}
 	findSegmentTime(index) {
 		if(this.header && this.header.cues) {
@@ -2014,7 +2035,7 @@ class YTABRExecutor {
 	}
 
 	cacheSegment(segment) {
-		this.segments[segment.segmentIndex] = segment;
+		this.segments[segment.segmentIndex - this.getOffset(segment.segmentIndex)] = segment;
 	}
 	getCachedSegmentCount() {
 		return Object.keys(this.segments).length;
@@ -2028,7 +2049,7 @@ class YTABRExecutor {
 		for(let key of Object.keys(this.segments)) {
 			key = parseInt(key);
 
-			if(key < index || key > index + 6) {
+			if(key < index || key > index + 7) {
 				log("UMP [" + this.type + "]: disposing segment " + key + " (<" + index + " || >" + (index + 6) + ")");
 				reusable?.free(this.segments[key].data);
 				const segment = this.segments[key];
@@ -2065,15 +2086,20 @@ class YTABRExecutor {
 		this.freeAllSegments();
 	}
 
-	executeRequest(url, headers, retryCount) {
+	executeRequest(url, headers, retryCount, overrideSegment) {
 		if(!retryCount)
 			retryCount = 0;
 		log("UMP: " + url + "");
 		const u = new URL(url);
 		const isInternal = u.pathname.startsWith('/internal');
 		const isInit = u.pathname.startsWith('/internal/init');
-		const segment = u.searchParams.has("segIndex") ? u.searchParams.get("segIndex") : 0;
-		const time = (segment > 0) ? this.findSegmentTime(segment - 1) : 0;
+		let segment = u.searchParams.has("segIndex") ? u.searchParams.get("segIndex") : 0;
+		let time = (segment > 0) ? this.findSegmentTime(segment - 1) : 0;
+		if(overrideSegment && overrideSegment > 0) {
+			const oldTime = time;
+			time = this.findSegmentTime(overrideSegment - 1);
+			log("UMP [" + this.type + "], overriding timestamp " + oldTime + " => " + time);
+		}
 
 		this.freeOldSegments(segment);
 		const cached = this.getCachedSegment(segment);
@@ -2087,8 +2113,10 @@ class YTABRExecutor {
 		}
 
 		log("UMP [" + this.type + "] requesting segment: " + segment + ", time: " + time + ", itag: " + this.itag);
+		if(overrideSegment)
+			log("UMP [" + this.type + "] requesting with overrided segment: " + overrideSegment)
 		const now = (new Date()).getTime();
-		const initialReq = getVideoPlaybackRequest(this.source, this.ustreamerConfig, time, segment, this.lastRequest, this.lastAction, now, undefined, -6);
+		const initialReq = getVideoPlaybackRequest(this.source, this.ustreamerConfig, time, (overrideSegment) ? overrideSegment : segment, this.lastRequest, this.lastAction, now, undefined, -6);
 		const postData = initialReq.serializeBinary();
 		const initialResp = http.POST(this.abrUrl, postData, {
 			"Origin": "https://www.youtube.com",
@@ -2112,14 +2140,63 @@ class YTABRExecutor {
 		
 		let streamsArr = [];
 		for(let key of Object.keys(umpResp.streams)) {
-			if(umpResp.streams[key].itag == this.itag && umpResp.streams[key].segmentIndex >= segment)
-				streamsArr.push(umpResp.streams[key]);
+			const stream = umpResp.streams[key]
+			if(stream.itag == this.itag && stream.segmentIndex >= segment)
+				streamsArr.push(stream);
+			else
+				log(`IGNORING itag:${stream.itag}, segmentIndex: ${stream.segmentIndex}, segmentLength: ${stream.segmentSize}, completed: ${stream.completed}`)
 		}
 		log("UMP [" + this.type + "] stream resps: \n" + streamsArr
-			.map(x=>`itag:${x.itag}, segmentIndex: ${x.segmentIndex}, segmentLength: ${x.segmentSize}, completed: ${streamsArr.completed}`)
+			.map(x=>`itag:${x.itag}, segmentIndex: ${x.segmentIndex}, segmentLength: ${x.segmentSize}, completed: ${x.completed}`)
 			.join("\n"));
 
 		this.lastRequest = (new Date()).getTime();
+
+
+		const stream = streamsArr[0];
+		if(!stream)
+			throw new ScriptException("No streams for requesting segment " + segment + ((overrideSegment && overrideSegment > 0) ? (", override: " + overrideSegment) : ""));
+		const expectedSegment = parseInt(segment) + parseInt(this.getOffset(stream.segmentIndex));
+		log("Expected segment " + expectedSegment + " got " + stream.segmentIndex);
+		if(stream && stream.segmentIndex != expectedSegment) {
+			log("Retrieved wrong segment: " + stream.segmentIndex + " != " + segment + ", retrying (" + (retryCount + 1) + ")") 
+			if(true) {
+				let diff = stream.segmentIndex - segment;
+				if(diff < 0)
+					throw new ScriptException("Illegal negative offset");
+				else {
+					const doBackrequests = false;
+					if(!doBackrequests) {
+						log("Segment offset detected of " + diff + " (" + stream.segmentIndex + " - " + segment + ")");
+						this.registerOffset(parseInt(segment), parseInt(stream.segmentIndex));
+					}
+					else {
+						log("Requesting older data using offset (" + diff + ")");
+						if(retryCount == 0) {
+							for(let stream of streamsArr) {
+								log("Caching future segment " + stream.segmentIndex);
+								if(stream.completed)
+									this.cacheSegment(stream);
+							}
+						}
+						if(retryCount < 3) {
+							return this.executeRequest(url, headers, retryCount + 1, (parseInt(segment) - diff));
+						}
+						else {
+							throw new ScriptException("Too many back-requests");
+						}
+					}
+				}
+			}
+			else {
+				if(true || retryCount >= 2)
+					throw new ScriptException("Retrieved wrong segment: " + stream.segmentIndex + " != " + segment + " (" + retryCount + " attempts)");
+				else { //Disabled retry for now, doesnt make a diff.
+					log("Retrieved wrong segment: " + stream.segmentIndex + " != " + segment + ", retrying (" + (retryCount + 1) + ")");
+					return this.executeRequest(url, headers, retryCount + 1);
+				}
+			}
+		}
 
 		for(let stream of streamsArr) {
 			if(stream.completed)
@@ -2130,16 +2207,6 @@ class YTABRExecutor {
 			log("Clearing POST ArrayBuffer?");
 		}
 		
-		const stream = streamsArr[0];
-		if(stream && stream.segmentIndex != segment) {
-			log("Retrieved wrong segment: " + stream.segmentIndex + " != " + segment + ", retrying (" + (retryCount + 1) + ")") 
-			if(true && retryCount >= 2)
-				throw new ScriptException("Retrieved wrong segment: " + stream.segmentIndex + " != " + segment + " (" + retryCount + " attempts)");
-			else { //Disabled retry for now, doesnt make a diff.
-				log("Retrieved wrong segment: " + stream.segmentIndex + " != " + segment + ", retrying (" + (retryCount + 1) + ")");
-				return this.executeRequest(url, headers, retryCount + 1);
-			}
-		}
 		if(!stream || !stream.data)
 			throw new ScriptException("NO STREAMDATA FOUND (" + Object.keys(umpResp.streams).join(", ") + "): " + !!umpResp.streams[0]?.data);
 		
@@ -2202,6 +2269,7 @@ function getVideoPlaybackRequest(source, ustreamerConfig, playerPosMs, segmentIn
 		bufferedStream.setBufferedsegmentstartindex(1);
 		bufferedStream.setBufferedsegmentendindex(segmentIndex - 1);
 		bufferedStream.setBufferedstarttimems(0);
+		//bufferedStream.setBuffereddurationms(playerPosMs);
 		vidReq.setBufferedstreamsList[bufferedStream];
 		vidReq.setDesiredstreamsList([format]);
 	}
@@ -5689,6 +5757,7 @@ class WEBMHeader {
 										case 0x2AD7B1:
 											console.log("found timescale in info");
 											this.timescale = binaryReadUInt(bytes, pointer, infoFieldSize);
+											log("Timescale: " + this.timescale);
 											break;
 										case 0x4489:
 											console.log("Found duration in info");
