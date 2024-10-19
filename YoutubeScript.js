@@ -3866,7 +3866,7 @@ function extractTwoColumnWatchNextResultContents_CommentsPager(contextUrl, conte
 							}
 						},
 						continuationItemRenderer(continueRenderer) {
-							if(totalComments > 0 && itemSectionRenderer.targetId == 'comments-section' && continueRenderer?.continuationEndpoint?.continuationCommand) {
+							if(itemSectionRenderer.targetId == 'comments-section' && continueRenderer?.continuationEndpoint?.continuationCommand) {
 								commentsToken = continueRenderer.continuationEndpoint.continuationCommand.token;
 							}
 						}
