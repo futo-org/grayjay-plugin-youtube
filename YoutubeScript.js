@@ -20,6 +20,8 @@ const URL_SUBSCRIPTIONS_M = "https://m.youtube.com/feed/subscriptions";
 const URL_PLAYLIST = "https://youtube.com/playlist?list=";
 const URL_PLAYLISTS_M = "https://m.youtube.com/feed/library";
 
+const URL_CHANNEL_BASE = URL_BASE + "/channel/";
+
 const URL_LIVE_CHAT_HTML = "https://www.youtube.com/live_chat";
 const URL_LIVE_CHAT = "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat";
 
@@ -1304,11 +1306,76 @@ source.getPlaylist = function (url) {
 	if(IS_TESTING)
 	    console.log("Initial data", initialData);
 
-    const playlistHeaderRenderer = initialData?.header?.playlistHeaderRenderer;
-    if(!playlistHeaderRenderer) {
-        throw new ScriptException("No playlist header found");
-        return null;
+    const playlistHeaderRenderer1 = initialData?.header?.playlistHeaderRenderer;
+	const playlistHeaderRenderer2 = initialData?.header?.pageHeaderRenderer;
+	let author = undefined;
+	let title = undefined;
+	let videoCount = undefined;
+	let playlistId = undefined;
+    if(playlistHeaderRenderer1) {
+		title = extractText_String(playlistHeaderRenderer1.title);
+		author = extractRuns_AuthorLink(playlistHeaderRenderer1?.ownerText?.runs);
+		videoCount = extractFirstNumber_Integer(extractText_String(playlistHeaderRenderer1?.numVideosText));
+		playlistId = playlistHeaderRenderer1?.playlistId;
     }
+	else if(playlistHeaderRenderer2) {
+		title = playlistHeaderRenderer2.pageTitle
+
+		const actions = playlistHeaderRenderer2?.pageHeaderViewModel?.actions?.flexibleActionsViewModel?.actionsRows;
+		if(actions) {
+			for(let action of actions){
+				for(let subAction of action.actions) {
+					if(subAction.buttonViewModel?.onTap?.innertubeCommand?.watchEndpoint?.playlistId) {
+						playlistId = subAction.buttonViewModel?.onTap?.innertubeCommand?.watchEndpoint?.playlistId;
+					}
+					if(playlistId)
+						break;
+				}
+				if(playlistId)
+					break;
+			}
+		}
+
+		const metaDataRows = playlistHeaderRenderer2?.content?.pageHeaderViewModel?.metadata?.contentMetadataViewModel?.metadataRows;
+		if(!metaDataRows)
+			throw new ScriptException("No playlist header found");
+			
+		for(let row of metaDataRows) {
+			if(row.metadataParts) {
+				for(let part of row.metadataParts) {
+					if(part.avatarStack?.avatarStackViewModel) {
+						let model = part.avatarStack?.avatarStackViewModel
+						let authorName = model?.text?.content?.trim();
+						let authorThumbnail = 
+							(model.avatars && model.avatars.length > 0) ?
+								model.avatars[0].avatarViewModel?.image?.sources[0].url :
+								undefined;
+						let authorId = 
+							(model.text.commandRuns && model.text.commandRuns.length > 0) ?
+								model.text.commandRuns[0].onTap?.innertubeCommand?.browseEndpoint?.browseId :
+								undefined;
+						let authorUrl = authorId ? URL_CHANNEL_BASE + authorId : undefined;
+						
+						author = new PlatformAuthorLink(new PlatformID(PLATFORM, null, config?.id, PLATFORM_CLAIMTYPE), authorName, authorUrl, authorThumbnail);
+							
+						if(author)
+							break;
+					}
+					else if(part.text) {
+						const partText = part.text.content;
+						if(partText && !videoCount && /[0-9]+ videos?/.test(partText)) {
+							videoCount = extractFirstNumber_Integer(partText);
+						}
+					}
+				}
+			}
+			if(author && videoCount)
+				break;
+		}
+	}
+	else 
+		throw new ScriptException("No playlist header found");
+
 
 	if(IS_TESTING)
 	    console.log("initialData", initialData);
@@ -1327,8 +1394,6 @@ source.getPlaylist = function (url) {
             return null;
 		}
 		
-        const id = playlistHeaderRenderer.playlistId;
-		const title = extractText_String(playlistHeaderRenderer.title);
 		const videos = [];
 		let continuationToken = null;
         for(let playlistRenderer of playlistList.contents) {
@@ -1377,8 +1442,7 @@ source.getPlaylist = function (url) {
 			videos[0].thumbnails?.sources && 
 			videos[0].thumbnails.sources.length > 0)
 			thumbnail = videos[0].thumbnails.sources[videos[0].thumbnails.sources.length - 1].url;
-
-		let author = extractRuns_AuthorLink(playlistHeaderRenderer?.ownerText?.runs);
+			
 		if(!author && videos && videos.length > 0 && videos.filter(x=>x.author.url != videos[0].author.url).length == 0) {
 			//Assume author = video owner if all videos by same & author null
 			author = videos[0].author;
@@ -1386,11 +1450,11 @@ source.getPlaylist = function (url) {
 		
         return new PlatformPlaylistDetails({
             url: url,
-			id: new PlatformID(PLATFORM, playlistHeaderRenderer?.playlistId, config.id),
+			id: new PlatformID(PLATFORM, playlistId, config.id),
 			author: author,
             name: title,
             thumbnail: thumbnail,
-            videoCount: extractFirstNumber_Integer(extractText_String(playlistHeaderRenderer?.numVideosText)),
+            videoCount: videoCount,
             contents: new PlaylistVideoPager(videos, continuationToken)
         });
     }
