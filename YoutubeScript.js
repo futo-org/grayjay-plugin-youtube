@@ -1682,6 +1682,12 @@ class YTABRVideoSource extends DashManifestRawSource {
 		this.initialHeader = fileHeader;
 		this.initialUMP = umpResp;
 		this.lastDash = dash;
+
+		this.initStart = 0;
+		this.initEnd = fileHeader.indexRangeStart - 1;
+		this.indexStart = fileHeader.indexRangeStart;
+		this.indexEnd = fileHeader.indexRangeEnd;
+
 		return dash;
 	}
 	getRequestExecutor() {
@@ -1710,6 +1716,11 @@ class YTABRAudioSource extends DashManifestRawAudioSource {
 		this.initialHeader = fileHeader;
 		this.initialUMP = umpResp;
 		this.lastDash = dash;
+
+		this.initStart = 0;
+		this.initEnd = fileHeader.indexRangeStart - 1;
+		this.indexStart = fileHeader.indexRangeStart;
+		this.indexEnd = fileHeader.indexRangeEnd;
 		
 		return dash;
 	}
@@ -5742,6 +5753,7 @@ class WEBMHeader {
 					console.log("Found segment");
 					const startOffset = pointer.index;
 					while(pointer.index - startOffset < fieldSize && pointer.index < bytes.length) {
+						const subFieldOffset = pointer.index;
 						const subFieldId = binaryReadVariableUInt(bytes, pointer);
 						const subFieldSize = binaryReadVariableInt(bytes, pointer);
 		
@@ -5775,6 +5787,8 @@ class WEBMHeader {
 							case 0x1C53BB6B: //Cues
 								console.log("Found Cues in segment");
 								const cuesStartOffset = pointer.index;
+								this.indexRangeStart = subFieldOffset;
+								this.indexRangeEnd = cuesStartOffset + subFieldSize;
 								while(pointer.index - cuesStartOffset < subFieldSize && pointer.index < bytes.length) {
 									const cuesFieldId = binaryReadVariableUInt(bytes, pointer);
 									if(cuesFieldId != 0xBB)
