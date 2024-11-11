@@ -4496,9 +4496,10 @@ function extractVideoRenderer_Video(videoRenderer, contextData) {
 	
 	isLive = isLive || ((videoRenderer.badges?.filter(x=>x.metadataBadgeRenderer?.style == "BADGE_STYLE_TYPE_LIVE_NOW")?.length ?? 0) > 0)
 
-	if(!isLive && !videoRenderer.publishedTimeText?.simpleText)
-		return  null; //Not a normal video
-
+	if (!isLive && !videoRenderer.publishedTimeText?.simpleText) {
+		// Music videos have no dates in search results
+		videoRenderer.publishedTimeText = { simpleText: "" };
+	}
 
 
 	const author = (contextData && contextData.authorLink) ?
