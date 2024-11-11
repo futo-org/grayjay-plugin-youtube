@@ -7,10 +7,11 @@
 	"sourceUrl": "https://plugins.grayjay.app/Youtube/YoutubeConfig.json",
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
-	"version": 182,
+
+	"version": 209,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
-
+	
 	"scriptSignature": "",
 	"scriptPublicKey": "",
 	"packages": ["Http", "Utilities", "DOMParser"],
@@ -32,7 +33,8 @@
 		"www.google.com",
 		"google.com",
 		"returnyoutubedislikeapi.com",
-		"sponsor.ajay.app"
+		"sponsor.ajay.app",
+		".googlevideo.com"
 	],
 
 	"settings": [
@@ -53,6 +55,13 @@
 			"warningDialog": "Only enable this if you need it for channel membership content.\n\nTry disabling if you have issues when loading videos and comments."
 		},
 		{
+			"variable": "allowLoginFallback",
+			"name": "Allow Loginfallback",
+			"description": "Allow usage of login in case where login required (eg. bot check)",
+			"type": "Boolean",
+			"default": "true"
+		},
+		{
 			"variable": "youtubeActivity",
 			"name": "Provide Youtube Activity",
 			"description": "Use authenticated client for playback, telling Youtube what you watched.",
@@ -70,6 +79,20 @@
 			"variable": "allowControversialRestricted",
 			"name": "Allow Controversial Restricted",
 			"description": "Allow watching of controversial restricted videos",
+			"type": "Boolean",
+			"default": "false"
+		},
+		{
+			"variable": "useUMP",
+			"name": "Force Experimental UMP Streams",
+			"description": "Force usage of experimental implementation of UMP. May be unstable and cost more performance.",
+			"type": "Boolean",
+			"default": "false"
+		},
+		{
+			"variable": "showVerboseToasts",
+			"name": "Show Verbose Messages",
+			"description": "Show messages that give more information about what is happening, might be considered annoying for some.",
 			"type": "Boolean",
 			"default": "false"
 		},
