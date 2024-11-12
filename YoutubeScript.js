@@ -600,6 +600,20 @@ else {
 	};
 }
 
+function getSkipTypeSetting(setting){
+	const val = _settings["setting"];
+	if(val == "true" || val == "True")
+		return Type.Chapter.SKIPPABLE;
+	if(val == "false" || val == "False" || isNaN(val))
+		return Type.Chapter.NORMAL;
+	const valInt = parseInt(val);
+	if(valInt < 1)
+		return Type.Chapter.NORMAL;
+	if(valInt == 1)
+		return Type.Chapter.SKIPPABLE;
+	return Type.Chapter.SKIP;
+}
+
 source.getContentChapters = function(url, initialData) {
     //return [];
     if(REGEX_VIDEO_URL_CLIP.test(url)) {
@@ -646,19 +660,30 @@ source.getContentChapters = function(url, initialData) {
     let sbResp = null;
     const sbChapters = [];
 
+	const skipCategoryTypes = {
+		"sponsor": getSkipTypeSetting("sponsorBlockCat_Sponsor"),
+		"intro": getSkipTypeSetting("sponsorBlockCat_Intro"),
+		"outro": getSkipTypeSetting("sponsorBlockCat_Outro"),
+		"selfpromo": getSkipTypeSetting("sponsorBlockCat_Self"),
+		"music_offtopic": getSkipTypeSetting("sponsorBlockCat_Offtopic"),
+		"preview": getSkipTypeSetting("sponsorBlockCat_Preview"),
+		"filler": getSkipTypeSetting("sponsorBlockCat_Filler"),
+		other: Type.Chapter.SKIPPABLE
+	}
+
 	if(initialData == null) {
 		const reqs = http.batch()
 		    .GET(url, getRequestHeaders({}), false);
 
         if(_settings["sponsorBlock"] && videoId) {
 			const cats = [
-				(!!_settings["sponsorBlockCat_Sponsor"]) ? "sponsor" : null,
-				(!!_settings["sponsorBlockCat_Intro"]) ? "intro" : null,
-				(!!_settings["sponsorBlockCat_Outro"]) ? "outro" : null,
-				(!!_settings["sponsorBlockCat_Self"]) ? "selfpromo" : null,
-				(!!_settings["sponsorBlockCat_Offtopic"]) ? "music_offtopic" : null,
-				(!!_settings["sponsorBlockCat_Preview"]) ? "preview" : null,
-				(!!_settings["sponsorBlockCat_Filler"]) ? "filler" : null
+				(skipCategoryTypes.sponsor && skipCategoryTypes.sponsor > 1) ? "sponsor" : null,
+				(skipCategoryTypes.intro && skipCategoryTypes.intro > 1) ? "intro" : null,
+				(skipCategoryTypes.outro && skipCategoryTypes.outro > 1) ? "outro" : null,
+				(skipCategoryTypes.selfpromo && skipCategoryTypes.selfpromo > 1) ? "selfpromo" : null,
+				(skipCategoryTypes.music_offtopic && skipCategoryTypes.music_offtopic > 1) ? "music_offtopic" : null,
+				(skipCategoryTypes.preview && skipCategoryTypes.preview > 1) ? "preview" : null,
+				(skipCategoryTypes.filler && skipCategoryTypes.filler > 1) ? "filler" : null
 			].filter(x=>!!x);
 			const catsArg = "&categories=[" + cats.map(x=>"\"" + x + "\"").join(",") + "]";
             reqs.GET(URL_YOUTUBE_SPONSORBLOCK + videoId + catsArg, {}, false);
@@ -680,10 +705,18 @@ source.getContentChapters = function(url, initialData) {
 
 	if(sbResp && sbResp.isOk) {
 	    try {
+
 	        const allowNoVoteSkip = !!(_settings["sponsorBlockNoVotes"]);
 	        const skipType = (_settings["sponsorBlockType"]) ? Type.Chapter.SKIP : Type.Chapter.SKIPPABLE;
 	        const sbData = JSON.parse(sbResp.body);
+
 	        for(let block of sbData) {
+				let sponsorConfiguredType = skipType;
+				if(isNaN(skipCategoryTypes[block.category]))
+					sponsorConfiguredType = Type.Chapter.SKIPPABLE;
+				else
+					sponsorConfiguredType = skipCategoryTypes[block.category];
+
 	            if(block.actionType == "skip" &&
 	                block.segment && block.segment.length == 2 &&
 	                (allowNoVoteSkip || block.votes >= 1)) {
