@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 209,
+	"version": 211,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -17,6 +17,8 @@
 	"packages": ["Http", "Utilities", "DOMParser"],
 
 	"subscriptionRateLimit": 140,
+
+	"reduceFunctionsInLimitedVersion": true,
 	
 	"allowEval": false,
 	"allowUrls": [

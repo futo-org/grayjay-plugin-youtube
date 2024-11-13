@@ -603,7 +603,7 @@ else {
 }
 
 function getSkipTypeSetting(setting){
-	const val = _settings["setting"];
+	const val = _settings[setting];
 	if(val == "true" || val == "True")
 		return Type.Chapter.SKIPPABLE;
 	if(val == "false" || val == "False" || isNaN(val))
@@ -679,17 +679,17 @@ source.getContentChapters = function(url, initialData) {
 
         if(_settings["sponsorBlock"] && videoId) {
 			const cats = [
-				(skipCategoryTypes.sponsor && skipCategoryTypes.sponsor > 1) ? "sponsor" : null,
-				(skipCategoryTypes.intro && skipCategoryTypes.intro > 1) ? "intro" : null,
-				(skipCategoryTypes.outro && skipCategoryTypes.outro > 1) ? "outro" : null,
-				(skipCategoryTypes.selfpromo && skipCategoryTypes.selfpromo > 1) ? "selfpromo" : null,
-				(skipCategoryTypes.music_offtopic && skipCategoryTypes.music_offtopic > 1) ? "music_offtopic" : null,
-				(skipCategoryTypes.preview && skipCategoryTypes.preview > 1) ? "preview" : null,
-				(skipCategoryTypes.filler && skipCategoryTypes.filler > 1) ? "filler" : null
+				(skipCategoryTypes.sponsor && skipCategoryTypes.sponsor >= 1) ? "sponsor" : null,
+				(skipCategoryTypes.intro && skipCategoryTypes.intro >= 1) ? "intro" : null,
+				(skipCategoryTypes.outro && skipCategoryTypes.outro >= 1) ? "outro" : null,
+				(skipCategoryTypes.selfpromo && skipCategoryTypes.selfpromo >= 1) ? "selfpromo" : null,
+				(skipCategoryTypes.music_offtopic && skipCategoryTypes.music_offtopic >= 1) ? "music_offtopic" : null,
+				(skipCategoryTypes.preview && skipCategoryTypes.preview >= 1) ? "preview" : null,
+				(skipCategoryTypes.filler && skipCategoryTypes.filler >= 1) ? "filler" : null
 			].filter(x=>!!x);
 			const catsArg = "&categories=[" + cats.map(x=>"\"" + x + "\"").join(",") + "]";
             reqs.GET(URL_YOUTUBE_SPONSORBLOCK + videoId + catsArg, {}, false);
-
+			log("Sponsorblock Config:\n" + JSON.stringify(skipCategoryTypes, undefined, "   "));
 		}
 
         const resps = reqs.execute();
@@ -714,8 +714,9 @@ source.getContentChapters = function(url, initialData) {
 
 	        for(let block of sbData) {
 				let sponsorConfiguredType = skipType;
-				if(isNaN(skipCategoryTypes[block.category]))
+				if(isNaN(skipCategoryTypes[block.category])) {
 					sponsorConfiguredType = Type.Chapter.SKIPPABLE;
+				}
 				else
 					sponsorConfiguredType = skipCategoryTypes[block.category];
 
@@ -726,7 +727,7 @@ source.getContentChapters = function(url, initialData) {
 	                    name: block.category,
 	                    timeStart: parseFloat(block.segment[0]),
 	                    timeEnd: parseFloat(block.segment[1]),
-	                    type: skipType
+	                    type: sponsorConfiguredType
 	                });
 	            }
 	        }
