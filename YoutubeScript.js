@@ -163,6 +163,7 @@ source.enable = (conf, settings, saveStateStr) => {
     }
     if(!didSaveState) {
 	    log(config);
+		log("Settings:\n" + JSON.stringify(_settings, null, "   "));
 
         const isLoggedIn = bridge.isLoggedIn();
         let batchReq = http.batch()
@@ -603,17 +604,24 @@ else {
 }
 
 function getSkipTypeSetting(setting){
+	//Overkill comparisons to catch any edgecases from old value types.
 	const val = _settings[setting];
-	if(val == "true" || val == "True")
+	if(val === "true" || val === "True" || val === true)
 		return Type.Chapter.SKIPPABLE;
-	if(val == "false" || val == "False" || isNaN(val))
+	if(val === "false" || val === "False" || val === false || isNaN(val))
 		return Type.Chapter.NORMAL;
 	const valInt = parseInt(val);
+	if(isNaN(valInt)) //Cuz IsNaN(false) == false && isNaN(parseInt(false)) == true
+		return Type.Chapter.NORMAL;
+	//Very explicit to prevent edge cases from skipping.
 	if(valInt < 1)
 		return Type.Chapter.NORMAL;
-	if(valInt == 1)
+	if(valInt === 1)
 		return Type.Chapter.SKIPPABLE;
-	return Type.Chapter.SKIP;
+	if(valInt === 2)
+		return Type.Chapter.SKIP;
+	else
+		return Type.Chapter.NORMAL;
 }
 
 source.getContentChapters = function(url, initialData) {
@@ -731,6 +739,7 @@ source.getContentChapters = function(url, initialData) {
 	                });
 	            }
 	        }
+			log("Sponsorblock Chapters:\n" + JSON.stringify(sbChapters, null, "   "));
 	    }
 	    catch(ex) {
 	        //SB Failed

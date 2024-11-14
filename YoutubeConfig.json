@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 211,
+	"version": 212,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -183,15 +183,6 @@
 			"name": "Skip Preview",
 			"description": "Skip segments labeled as previews",
 			"type": "Dropdown",
-			"default": "0",
-			"dependency": "sponsorBlock",
-			"options": ["No skip", "Manual", "Automatic"]
-		},
-		{
-			"variable": "sponsorBlockCat_Interaction",
-			"name": "Skip Interaction",
-			"description": "Skip segments labeled as interactions",
-			"type": "Boolean",
 			"default": "0",
 			"dependency": "sponsorBlock",
 			"options": ["No skip", "Manual", "Automatic"]
