@@ -4355,6 +4355,11 @@ function extractGridRenderer_Shelf(gridRenderer, contextData) {
 			    if(playlist)
 			        playlists.push(playlist);
 			},
+			lockupViewModel(renderer) {
+				const playlist = extractPlaylistLockupViewModel_Playlist(renderer, contextData);
+				if(playlist)
+					playlists.push(playlist);
+			},
 			default() {
 				const video = switchKeyVideo(item, contextData);
 				if(video)
@@ -4641,6 +4646,53 @@ function extractPlaylistRenderer_Playlist(playlistRenderer, contextData) {
     });
 }
 
+const REGEX_VIDEO_COUNT = /[0-9]+ videos/;
+function extractPlaylistLockupViewModel_Playlist(playlistRenderer, contextData) {
+	const author = (contextData && contextData.authorLink) ?
+		contextData.authorLink : null;
+	
+		const thumbnailViewModel = playlistRenderer?.contentImage?.collectionThumbnailViewModel?.primaryThumbnail?.thumbnailViewModel;
+		let thumbnail = (thumbnailViewModel?.image?.sources?.length > 0) ?
+			thumbnailViewModel.image.sources[0].url :
+			null;
+		thumbnail = thumbnail ?? "";
+
+		let videoCount = -1;
+		if(thumbnailViewModel?.overlays?.length > 0) {
+			for(let overlay of thumbnailViewModel?.overlays) {
+				if(overlay.thumbnailOverlayBadgeViewModel?.thumbnailBadges) {
+					for(let subOverlay of overlay.thumbnailOverlayBadgeViewModel.thumbnailBadges) {
+						if(subOverlay.thumbnailBadgeViewModel?.text) {
+							if(REGEX_VIDEO_COUNT.test(subOverlay.thumbnailBadgeViewModel.text)) {
+								videoCount = extractFirstNumber_Integer(subOverlay.thumbnailBadgeViewModel.text);
+								break;
+							}
+						}
+					}
+				}
+				if(videoCount >= 0)
+					break;
+			}
+		}
+
+		let id = playlistRenderer?.rendererContext?.commandContext?.onTap?.innertubeCommand?.watchEndpoint?.playlistId;
+
+		if(IS_TESTING) {
+			console.log("New playlist model: ", [
+				thumbnail, author, id, videoCount
+			]);
+		}
+		return new PlatformPlaylist({
+			id: new PlatformID(PLATFORM, playlistRenderer.playlistId, config.id),
+			author: author,
+			name: extractText_String(playlistRenderer.metadata?.lockupMetadataViewModel?.title),
+			thumbnail: thumbnail,
+			url: URL_PLAYLIST + id,
+			videoCount: videoCount,
+		});
+}
+
+
 function extractChannelRenderer_AuthorLink(channelRenderer) {
     const id = channelRenderer.channelId;
     const name = extractText_String(channelRenderer.title);
@@ -4761,6 +4813,8 @@ function extractText_String(item) {
         return item.simpleText;
     if(item?.runs)
         return extractRuns_String(item.runs);
+	if(item?.content && typeof item.content == 'string')
+		return item.content;
 
 	if(item)
 		log("Unknown string object: " + JSON.stringify(item, null, "   "));
