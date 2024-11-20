@@ -2804,8 +2804,12 @@ class RichGridPager extends VideoPager {
 }
 class RichGridPlaylistPager extends PlaylistPager {
 	constructor(tab, context, useMobile = false, useAuth = false) {
-		super(tab.playlists, tab.videos.length > 0 && !!tab.continuation, context);
+		super(tab.playlists, tab.playlists.length > 0 && !!tab.continuation, context);
 		this.continuation = tab.continuation;
+		if(!this.continuation && tab.subContinuations && tab.subContinuations.length == 1) {
+			this.continuation = tab.subContinuations[0];
+			this.hasMore = true;
+		}
 		this.useMobile = useMobile;
 		this.useAuth = useAuth;
 	}
@@ -2814,7 +2818,7 @@ class RichGridPlaylistPager extends PlaylistPager {
 		this.context.page = this.context.page + 1;
 		if(this.continuation) {
 			const newData = validateContinuation(()=>requestBrowse({
-				continuation: this.continuation.token
+				continuation: (this.continuation.token) ? this.continuation.token : this.continuation
 			}, !!this.useMobile, !!this.useAuth));
 			if(newData && newData.length > 0) {
 				const fakeRichGrid = {
@@ -2834,7 +2838,16 @@ class RichGridPlaylistPager extends PlaylistPager {
 				}
 
 				if(newItemSection.playlists)
-					return new RichGridPager(newItemSection, this.context, this.useMobile, this.useAuth);
+					return new RichGridPlaylistPager(newItemSection, this.context, this.useMobile, this.useAuth);
+				if(!newItemSection.playlists) {
+					log("No results from RichGridRenderer extraction, trying single-shelf");
+					const shelf = extractGridRenderer_Shelf({
+						items: newData
+					}, this.context);
+					if(shelf.playlists && shelf.playlists.length > 0) {
+						return new RichGridPlaylistPager(shelf, this.context, this.useMobile, this.useAuth);
+					}
+				}
 			}
 			else
 				log("Call [RichGridPager.nextPage] continuation gave no appended items, setting empty page with hasMore to false");
@@ -4250,6 +4263,7 @@ function extractSectionListRenderer_Sections(sectionListRenderer, contextData) {
 	let playlists = [];
 	let continuation = null;
 
+	let subContinuations = [];
 	for(let i = 0; i < contents.length; i++) {
 		const item = contents[i];
 		switchKey(item, {
@@ -4263,6 +4277,8 @@ function extractSectionListRenderer_Sections(sectionListRenderer, contextData) {
 					playlists.push(...items.playlists);
 				if(items.shelves)
 					shelves.push(...items.shelves);
+				if(items.continuation)
+					subContinuations.push(items.continuation);
 			},
 			continuationItemRenderer(renderer) {
 				continuation = extractContinuationItemRenderer_Continuation(renderer, contextData);
@@ -4274,7 +4290,8 @@ function extractSectionListRenderer_Sections(sectionListRenderer, contextData) {
 		videos: videos,
 		channels: channels,
 		playlists: playlists,
-		continuation: continuation
+		continuation: continuation,
+		subContinuations: subContinuations
 	};
 }
 function extractItemSectionRenderer_Shelves(itemSectionRenderer, contextData) {
@@ -4318,6 +4335,8 @@ function extractItemSectionRenderer_Shelves(itemSectionRenderer, contextData) {
 				const shelf = extractGridRenderer_Shelf(renderer, contextData);
 				if(shelf.playlists.length > 0)
 					playlists.push(...shelf.playlists);
+				if(shelf.continuation)
+					continuationToken = shelf.continuation;
 			},
 			continuationItemRenderer(renderer) {
 				const token = renderer?.continuationEndpoint?.continuationCommand?.token
@@ -4348,6 +4367,7 @@ function extractGridRenderer_Shelf(gridRenderer, contextData) {
 	let channels = [];
 	let playlists = [];
 
+	let continuation = undefined;
 	contents.forEach((item)=>{
 		switchKey(item, {
 			gridPlaylistRenderer(renderer) {
@@ -4359,6 +4379,10 @@ function extractGridRenderer_Shelf(gridRenderer, contextData) {
 				const playlist = extractPlaylistLockupViewModel_Playlist(renderer, contextData);
 				if(playlist)
 					playlists.push(playlist);
+			},
+			continuationItemRenderer(renderer) {
+				if(renderer?.continuationEndpoint?.continuationCommand?.token)
+					continuation = renderer.continuationEndpoint.continuationCommand.token;
 			},
 			default() {
 				const video = switchKeyVideo(item, contextData);
@@ -4372,7 +4396,8 @@ function extractGridRenderer_Shelf(gridRenderer, contextData) {
 	return {
 		videos: videos.filter(x=>x != null),
 		channels: channels.filter(x=>x != null),
-		playlists: playlists.filter(x=>x != null)
+		playlists: playlists.filter(x=>x != null),
+		continuation: continuation
 	};
 }
 function switchKeyVideos(contents, contextData) {
