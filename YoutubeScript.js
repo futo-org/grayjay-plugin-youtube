@@ -1219,6 +1219,12 @@ source.getChannelContents = (url, type, order, filters) => {
 	const initialData = requestInitialData(url, useAuth, useAuth);
 	if(!initialData)
 	    throw new ScriptException("No channel data found for: " + url);
+
+	const errorAlerts = initialData?.alerts?.filter(x=>x.alertRenderer?.type == "ERROR") ?? [];
+	if(errorAlerts.length > 0){
+		throw new UnavailableException(extractText_String(errorAlerts[0].alertRenderer.text));
+	}
+
 	const channel = extractChannel_PlatformChannel(initialData, url);
 	const contextData = {
 		authorLink: new PlatformAuthorLink(new PlatformID(PLATFORM, channel.id.value, config.id, PLATFORM_CLAIMTYPE), channel.name, channel.url, channel.thumbnail)
@@ -3458,6 +3464,11 @@ function extractSearch_SearchResults(data, contextData) {
  * @returns {PlatformChannel}
  */
 function extractChannel_PlatformChannel(initialData, sourceUrl = null) {
+	const errorAlerts = initialData?.alerts?.filter(x=>x.alertRenderer?.type == "ERROR") ?? [];
+	if(errorAlerts.length > 0){
+		throw new UnavailableException(extractText_String(errorAlerts[0].alertRenderer.text));
+	}
+
     if(initialData?.header?.c4TabbedHeaderRenderer) {
         const headerRenderer = initialData?.header?.c4TabbedHeaderRenderer;
 
@@ -4325,6 +4336,11 @@ function extractItemSectionRenderer_Shelves(itemSectionRenderer, contextData) {
 			    const playlist = extractPlaylistRenderer_Playlist(renderer);
 			    if(playlist)
 			        playlists.push(playlist);
+			},
+			lockupViewModel(renderer) {
+				const playlist = extractPlaylistLockupViewModel_Playlist(renderer);
+				if(playlist)
+					playlists.push(playlist);
 			},
 			shelfRenderer(renderer) {
 			    const shelf = extractShelfRenderer_Shelf(renderer);
