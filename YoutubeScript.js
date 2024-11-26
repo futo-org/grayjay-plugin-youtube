@@ -20,6 +20,8 @@ const URL_SUBSCRIPTIONS_M = "https://m.youtube.com/feed/subscriptions";
 const URL_PLAYLIST = "https://youtube.com/playlist?list=";
 const URL_PLAYLISTS_M = "https://m.youtube.com/feed/library";
 
+const URL_VERIFY_AGE = URL_BASE + "/youtubei/v1/verify_age";
+
 const URL_CHANNEL_BASE = URL_BASE + "/channel/";
 
 const URL_LIVE_CHAT_HTML = "https://www.youtube.com/live_chat";
@@ -453,6 +455,9 @@ else {
 				if (!initialPlayerData.streamingData && sts) {
 					initialPlayerData = requestTvHtml5EmbedStreamingData(initialPlayerData.videoDetails.videoId, sts);
 					console.log("Filled missing streaming data using TvHtml5Embed.");
+					if(initialPlayerData.playabilityStatus?.reason?.indexOf("sign in") >= 0){
+						throw new ScriptLoginRequiredException("Age restricted video requires login to retrieve"); 
+					}
 				}
 			} else {
 				throw new AgeException("Age restricted videos can be allowed using the plugin settings");
@@ -461,10 +466,24 @@ else {
 		const controversial = initialPlayerData.playabilityStatus?.errorScreen?.playerErrorMessageRenderer?.reason?.simpleText?.indexOf("following content may") > 0 ?? false;
 		if(controversial) {
 			if (_settings["allowControversialRestricted"]) {
+				bridge.toast("Controversial video, bypassing..");
 				const sts = _sts[jsUrl];
 				if (!initialPlayerData.streamingData && sts) {
 					initialPlayerData = requestTvHtml5EmbedStreamingData(initialPlayerData.videoDetails.videoId, sts);
 					console.log("Filled missing streaming data using TvHtml5Embed.");
+					if(initialPlayerData.playabilityStatus?.status == "UNPLAYABLE") {
+						if(bridge.isLoggedIn() && !!_settings?.allowLoginFallback) {
+							bridge.toast("Bypass failed, trying login fallback");
+							initialPlayerData = verifyAgePlayerData(videoId, sts, true);
+						}
+						else if(initialPlayerData.playabilityStatus?.reason?.indexOf("sign in") >= 0){
+							throw new ScriptLoginRequiredException("Controversial video requires login to retrieve"); 
+						}
+
+						if(initialPlayerData.playabilityStatus?.status == "UNPLAYABLE") {
+							throw new ScriptException("Bypass failed due to:\n" + initialPlayerData.playabilityStatus?.reason);
+						}
+					}
 				}
 			} else {
 				throw new UnavailableException("Controversial restricted videos can be allowed using the plugin settings");
@@ -602,6 +621,69 @@ else {
 		return finalResult;
 	};
 }
+
+function isVerifyAge(initialPlayerData){
+	return (initialPlayerData.playabilityStatus.status == "CONTENT_CHECK_REQUIRED")
+}
+function verifyAgePlayerData(videoId, sts, useLogin = true) {
+	/*
+	const context = getClientContext(useLogin);
+	const authHeaders = useLogin ? getAuthContextHeaders(false) : {};
+	authHeaders["Accept-Language"] = "en-US";
+	authHeaders["Cookie"] = "PREF=hl=en&gl=US"
+	const body = {
+		"context": context.INNERTUBE_CONTEXT,
+		"nextEndpoint": {
+		  "watchEndpoint": {
+			"videoId": videoId,
+			"playerParams": "QAA%3D",
+			"racyCheckOk": true,
+			"contentCheckOk": true
+		  }
+		},
+		"setControvercy": true
+	  };
+	const resp = http.POST(URL_VERIFY_AGE, JSON.stringify(body), authHeaders, useLogin);
+	if(!resp.isOk)
+		throw new ScriptException("Failed to verify age");
+	*/
+	return getPlayerData(videoId, sts, useLogin);
+}
+function getPlayerData(videoId, sts, useLogin = true) {
+	const context = getClientContext(useLogin);
+	const authHeaders = useLogin ? getAuthContextHeaders(false) : {};
+	authHeaders["Accept-Language"] = "en-US";
+	authHeaders["Cookie"] = "PREF=hl=en&gl=US"
+	const body = {
+		contentCheckOk: true,
+		context: context.INNERTUBE_CONTEXT,
+		params: "QAA%3D",
+		playbackContext: {
+			contentPlaybackContext: {
+				autoCaptionsDefaultOne: false,
+				autonavState: "STATE_OFF",
+				currentUrl: "/watch?v=" + videoId + "&pp=QAA%3D&rco=1",
+				html5Preference: "HTML5_PREF_WANTS",
+				lactMilliseconds: "-1",
+				referer: "https://www.youtube.com/watch?v=" + videoId,
+				signatureTimestamp: parseInt(sts),
+				splay: false,
+				vis: 0,
+				watchAmbientModeContext: {hasShownAmbientMode: true, watchAmbientModeEnabled: true}
+			}
+		},
+		racyCheckOk: true,
+		videoId: videoId
+	}
+	const newResp = http.POST("https://www.youtube.com/youtubei/v1/player?prettyPrint=false", JSON.stringify(body), authHeaders, useLogin);
+	if(!newResp.isOk) {
+		console.log(newResp.body);
+		throw new ScriptException("Failed to fetch player data");
+	}
+	const json = JSON.parse(newResp.body);
+	return json;
+}
+
 
 function getSkipTypeSetting(setting){
 	//Overkill comparisons to catch any edgecases from old value types.
@@ -3215,7 +3297,7 @@ function requestAndroidStreamingData(videoId) {
 	else
 		return null;
 }
-function requestTvHtml5EmbedStreamingData(videoId, sts) {
+function requestTvHtml5EmbedStreamingData(videoId, sts, withLogin = false) {
 	const body = {
 		videoId: videoId,
 		cpn: "" + randomString(16),
@@ -3258,7 +3340,7 @@ function requestTvHtml5EmbedStreamingData(videoId, sts) {
 		"&t=" + token +
 		"&id=" + videoId
 
-	const resp = http.POST(url, JSON.stringify(body), headers, false);
+	const resp = http.POST(url, JSON.stringify(body), headers, !!withLogin);
 	if(resp.isOk)
 		return JSON.parse(resp.body);
 	else
