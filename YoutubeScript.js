@@ -483,6 +483,9 @@ else {
 						if(initialPlayerData.playabilityStatus?.status == "UNPLAYABLE") {
 							throw new ScriptException("Bypass failed due to:\n" + initialPlayerData.playabilityStatus?.reason);
 						}
+						if(initialPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED") {
+							throw new ScriptException("Login bypass failed for controversial video");
+						}
 					}
 				}
 			} else {
@@ -626,7 +629,7 @@ function isVerifyAge(initialPlayerData){
 	return (initialPlayerData.playabilityStatus.status == "CONTENT_CHECK_REQUIRED")
 }
 function verifyAgePlayerData(videoId, sts, useLogin = true) {
-	/*
+	
 	const context = getClientContext(useLogin);
 	const authHeaders = useLogin ? getAuthContextHeaders(false) : {};
 	authHeaders["Accept-Language"] = "en-US";
@@ -646,12 +649,12 @@ function verifyAgePlayerData(videoId, sts, useLogin = true) {
 	const resp = http.POST(URL_VERIFY_AGE, JSON.stringify(body), authHeaders, useLogin);
 	if(!resp.isOk)
 		throw new ScriptException("Failed to verify age");
-	*/
+	
 	return getPlayerData(videoId, sts, useLogin);
 }
 function getPlayerData(videoId, sts, useLogin = true) {
 	const context = getClientContext(useLogin);
-	const authHeaders = useLogin ? getAuthContextHeaders(false) : {};
+	const authHeaders = useLogin ? getAuthContextHeaders(true) : {};
 	authHeaders["Accept-Language"] = "en-US";
 	authHeaders["Cookie"] = "PREF=hl=en&gl=US"
 	const body = {
