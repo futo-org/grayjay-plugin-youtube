@@ -448,6 +448,12 @@ else {
 		const jsUrl = (jsUrlMatch) ? jsUrlMatch[1] : clientContext.PLAYER_JS_URL;
 		const isNewCipher = prepareCipher(jsUrl);
 
+		if(jsUrl && _settings?.notify_cipher) {
+			const hashMatch = /player\/([a-zA-Z0-9]+)\/player/.exec(jsUrl);
+			if(hashMatch && hashMatch.length > 1)
+				bridge.toast("Cipher: " + hashMatch[1]);
+		}
+
 		ageRestricted = initialPlayerData.playabilityStatus?.reason?.indexOf("your age") > 0 ?? false;
 		if (ageRestricted) {
 			if (_settings["allowAgeRestricted"]) {
@@ -5669,9 +5675,9 @@ function getNDecryptorFunctionCode(code, jsUrl) {
 	const nDecryptFunctionName = nDecryptArray[nDecryptFunctionArrIndex]
 	
 	const nDecryptFunctionCodeMatches = [
-		escapeRegex(nDecryptFunctionName) + "=function\\(a\\)\\{[\\s\\S]*?join\\(\\\"\\\"\\)};",
-		escapeRegex(nDecryptFunctionName) + "=function\\(a\\)\\{[\\s\\S]*?join\\.call\\([a-zA-Z$_]+,\\\"\\\"\\)};",
-		new RegExp(escapeRegex(nDecryptFunctionName) + "=function\\(a\\)\\{[\\s\\S]*?join\\.call\\(.*?\\).*?};", "s")
+		escapeRegex(nDecryptFunctionName) + "=function\\(\\w\\)\\{[\\s\\S]*?join\\(\\\"\\\"\\)};",
+		escapeRegex(nDecryptFunctionName) + "=function\\(\\w\\)\\{[\\s\\S]*?join\\.call\\([a-zA-Z$_]+,\\\"\\\"\\)};",
+		new RegExp(escapeRegex(nDecryptFunctionName) + "=function\\(\\w\\)\\{[\\s\\S]*?join\\.call\\(.*?\\).*?};", "s")
 	]
 	let nDecryptFunctionCodeMatch = undefined;
 	for(let functionRegex of nDecryptFunctionCodeMatches) {

@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 217,
+	"version": 218,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -195,6 +195,19 @@
 			"default": "0",
 			"dependency": "sponsorBlock",
 			"options": ["No skip", "Manual", "Automatic"]
+		},
+		{
+			"variable": "advanced",
+			"name": "Advanced",
+			"description": "These are settings not intended for most users, but may help development or power users.",
+			"type": "Header"
+		},
+		{
+			"variable": "notify_cipher",
+			"name": "Show Cipher every Video",
+			"description": "Shows a toast with the cipher when loading a video",
+			"type": "Boolean",
+			"default": "false"
 		}
 	],
 
