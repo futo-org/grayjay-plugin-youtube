@@ -631,6 +631,17 @@ else {
 	};
 }
 
+source.testUMP = function(url) {
+	USE_ABR_VIDEOS = true;
+
+	const video = source.getContentDetails(url);
+
+	const src = video.video.videoSources.find(x=>x.height = 720);
+	if(!src.generate)
+		throw "Not a UMP source?";
+	return src.generate();
+}
+
 function isVerifyAge(initialPlayerData){
 	return (initialPlayerData.playabilityStatus.status == "CONTENT_CHECK_REQUIRED")
 }
@@ -5617,6 +5628,7 @@ function prepareCipher(jsUrl) {
 		_cipherDecode[jsUrl] = eval(cipherFunctionCode);
 
 		const decryptFunctionCode = getNDecryptorFunctionCode(playerCode, jsUrl);
+
 		console.log("DecryptN Function: " + decryptFunctionCode);
 		_nDecrypt[jsUrl] = eval(decryptFunctionCode);
 
@@ -5689,8 +5701,20 @@ function getNDecryptorFunctionCode(code, jsUrl) {
         if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (code)", jsUrl, code);
 		throw new ScriptException("Failed to find n decryptor (code)\n" + jsUrl);
 	}
+
+	const regex = new RegExp(/typeof ([a-zA-Z0-9]+)/gs);
+	const typeChecks = [];
+	let prefix = "";
+	let typeCheck = undefined;
+	while((typeCheck = regex.exec(nDecryptFunctionCodeMatch)) != null) {
+		if(typeCheck && typeCheck.length > 1) {
+			console.log("TypeCheck found in cipher: " + typeCheck[1]);
+			prefix += "var " + typeCheck[1] + " = {}; ";
+		}
+	}
 	
 	return "(function(){" + 
+		prefix + " " +
 		"var " + nDecryptFunctionCodeMatch + "\n" +
 		"return function decryptN(nEncrypted){ return " + nDecryptFunctionName + "(nEncrypted); } \n" +
 	"})()";
