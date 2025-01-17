@@ -1,5 +1,5 @@
 {
-	"name": "Youtube (Alt)",
+	"name": "Youtube (Unstable)",
 	"description": "One of the biggest video platforms owned by Google",
 	"author": "FUTO",
 	"authorUrl": "https://futo.org",
@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 219,
+	"version": 220,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -36,7 +36,8 @@
 		"google.com",
 		"returnyoutubedislikeapi.com",
 		"sponsor.ajay.app",
-		".googlevideo.com"
+		".googlevideo.com",
+		"jnn-pa.googleapis.com"
 	],
 
 	"settings": [
@@ -206,6 +207,13 @@
 			"variable": "notify_cipher",
 			"name": "Show Cipher every Video",
 			"description": "Shows a toast with the cipher when loading a video",
+			"type": "Boolean",
+			"default": "false"
+		},
+		{
+			"variable": "notify_bg",
+			"name": "Show every new Botguard Token",
+			"description": "Shows a toast with the botguard token used changed",
 			"type": "Boolean",
 			"default": "false"
 		}
