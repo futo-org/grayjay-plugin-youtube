@@ -1,0 +1,237 @@
+{
+	"name": "Youtube (Alt)",
+	"description": "One of the biggest video platforms owned by Google",
+	"author": "FUTO",
+	"authorUrl": "https://futo.org",
+	"platformUrl": "https://youtube.com",
+	"sourceUrl": "https://plugins.grayjay.app/YoutubeUnstable/YoutubeConfig.json",
+	"repositoryUrl": "https://futo.org",
+	"scriptUrl": "./YoutubeScript.js",
+
+	"version": 219,
+	"iconUrl": "./youtube.png",
+	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
+	
+	"scriptSignature": "",
+	"scriptPublicKey": "",
+	"packages": ["Http", "Utilities", "DOMParser"],
+
+	"subscriptionRateLimit": 140,
+
+	"reduceFunctionsInLimitedVersion": true,
+	
+	"allowEval": false,
+	"allowUrls": [
+		"youtube.com",
+		"m.youtube.com",
+		"www.youtube.com",
+		"youtu.be",
+		"www.youtu.be",
+		"m.youtu.be",
+		"s.youtube.com",
+		"consent.youtube.com",
+		"suggestqueries-clients6.youtube.com",
+		"youtubei.googleapis.com",
+		"www.google.com",
+		"google.com",
+		"returnyoutubedislikeapi.com",
+		"sponsor.ajay.app",
+		".googlevideo.com"
+	],
+
+	"settings": [
+		{
+			"variable": "authChannels",
+			"name": "Use Login for Channels",
+			"description": "Use authenticated client for channel (videos) requests. (eg. for member videos)",
+			"type": "Boolean",
+			"default": "false",
+			"warningDialog": "Only enable this if you need it for channel membership content.\n\nTry disabling if you have issues when loading channels."
+		},
+		{
+			"variable": "authDetails",
+			"name": "Use Login for video details",
+			"description": "Use authenticated client for video requests. (eg. for member videos)",
+			"type": "Boolean",
+			"default": "false",
+			"warningDialog": "Only enable this if you need it for channel membership content.\n\nTry disabling if you have issues when loading videos and comments."
+		},
+		{
+			"variable": "allowLoginFallback",
+			"name": "Allow Loginfallback",
+			"description": "Allow usage of login in case where login required (eg. bot check)",
+			"type": "Boolean",
+			"default": "true"
+		},
+		{
+			"variable": "youtubeActivity",
+			"name": "Provide Youtube Activity",
+			"description": "Use authenticated client for playback, telling Youtube what you watched.",
+			"type": "Boolean",
+			"default": "false"
+		},
+		{
+			"variable": "allowAgeRestricted",
+			"name": "Allow Age Restricted",
+			"description": "Allow watching of age restricted videos",
+			"type": "Boolean",
+			"default": "false"
+		},
+		{
+			"variable": "allowControversialRestricted",
+			"name": "Allow Controversial Restricted",
+			"description": "Allow watching of controversial restricted videos",
+			"type": "Boolean",
+			"default": "false"
+		},
+		{
+			"variable": "useUMP",
+			"name": "Force Experimental UMP Streams",
+			"description": "Force usage of experimental implementation of UMP. May be unstable and cost more performance.",
+			"type": "Boolean",
+			"default": "false"
+		},
+		{
+			"variable": "showVerboseToasts",
+			"name": "Show Verbose Messages",
+			"description": "Show messages that give more information about what is happening, might be considered annoying for some.",
+			"type": "Boolean",
+			"default": "false"
+		},
+		{
+			"variable": "youtubeDislikerHeader",
+			"name": "Return Youtube Dislike",
+			"description": "This is a third-party database of video dislikes that combines historic data, crowd-sourced data, and estimations, and may not be accurate.\n\n(Using https://returnyoutubedislike.com)",
+			"type": "Header"
+		},
+		{
+			"variable": "youtubeDislikes",
+			"name": "Enable",
+			"description": "Use Return YoutubeDislike to provide dislikes for videos",
+			"type": "Boolean",
+			"default": "false"
+		},
+		{
+			"variable": "sponsorBlockHeader",
+			"name": "SponsorBlock",
+			"description": "This is NOT Adblock. SponsorBlock allows you to (automatically) skip in-video sponsor segments.\nIt will harm creators.\n\n(Using https://sponsor.ajay.app)\n\nFUTO respects your decision to use SponsorBlock. But only if you're supporting creators in other ways.",
+			"type": "Header"
+		},
+		{
+			"variable": "sponsorBlock",
+			"name": "Enable",
+			"description": "If enabled support creators in other ways.\nDo not freeload.",
+			"type": "Boolean",
+			"default": "false",
+			"warningDialog": "SponsorBlock will harm creators.\nDo not freeload, support creators in other ways."
+		},
+		{
+			"variable": "sponsorBlockNoVotes",
+			"name": "Allow No Vote Segments",
+			"description": "Allow segments without votes, this may cause questionable video skips.",
+			"type": "Boolean",
+			"default": "false",
+			"dependency": "sponsorBlock"
+		},
+		{
+			"variable": "sponsorBlockCat_Sponsor",
+			"name": "Skip Sponsors",
+			"description": "Skip segments labeled as sponsors",
+			"type": "Dropdown",
+			"default": "1",
+			"dependency": "sponsorBlock",
+			"options": ["No skip", "Manual", "Automatic"]
+		},
+		{
+			"variable": "sponsorBlockCat_Intro",
+			"name": "Skip Intros",
+			"description": "Skip segments labeled as intros",
+			"type": "Dropdown",
+			"default": "0",
+			"dependency": "sponsorBlock",
+			"options": ["No skip", "Manual", "Automatic"]
+		},
+		{
+			"variable": "sponsorBlockCat_Outro",
+			"name": "Skip Outros",
+			"description": "Skip segments labeled as outros",
+			"type": "Dropdown",
+			"default": "0",
+			"dependency": "sponsorBlock",
+			"options": ["No skip", "Manual", "Automatic"]
+		},
+		{
+			"variable": "sponsorBlockCat_Self",
+			"name": "Skip Self-Promos",
+			"description": "Skip segments labeled as self-promos",
+			"type": "Dropdown",
+			"default": "0",
+			"dependency": "sponsorBlock",
+			"options": ["No skip", "Manual", "Automatic"]
+		},
+		{
+			"variable": "sponsorBlockCat_Offtopic",
+			"name": "Skip Music-Offtopic",
+			"description": "Skip segments labeled as music-offtopic",
+			"type": "Dropdown",
+			"default": "0",
+			"dependency": "sponsorBlock",
+			"options": ["No skip", "Manual", "Automatic"]
+		},
+		{
+			"variable": "sponsorBlockCat_Preview",
+			"name": "Skip Preview",
+			"description": "Skip segments labeled as previews",
+			"type": "Dropdown",
+			"default": "0",
+			"dependency": "sponsorBlock",
+			"options": ["No skip", "Manual", "Automatic"]
+		},
+		{
+			"variable": "sponsorBlockCat_Filler",
+			"name": "Skip Fillers",
+			"description": "Skip segments labeled as fillers",
+			"type": "Dropdown",
+			"default": "0",
+			"dependency": "sponsorBlock",
+			"options": ["No skip", "Manual", "Automatic"]
+		},
+		{
+			"variable": "advanced",
+			"name": "Advanced",
+			"description": "These are settings not intended for most users, but may help development or power users.",
+			"type": "Header"
+		},
+		{
+			"variable": "notify_cipher",
+			"name": "Show Cipher every Video",
+			"description": "Shows a toast with the cipher when loading a video",
+			"type": "Boolean",
+			"default": "false"
+		}
+	],
+
+	"developerSubmitUrl": "https://dev.grayjay.app/api/Dev/Submit",
+
+	"captcha": {
+		"userAgent": "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.5481.153 Mobile Safari/537.36",
+		"captchaUrl": null,
+		"cookiesToFind": ["GOOGLE_ABUSE_EXEMPTION"]
+	},
+	
+	"authentication": {
+		"userAgent": "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.230 Mobile Safari/537.36",
+		"completionUrl": "https://m.youtube.com/youtubei/v1/guide?*",
+		"loginUrl": "https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3Dhttps%253A%252F%252Fwww.youtube.com%252Fchannel_switcher&hl=en&ec=65620",
+		"headersToFind": ["authorization"],
+		"domainHeadersToFind": {
+			".youtube.com": ["authorization"]
+		},
+		"cookiesToFind": ["SIDCC"],
+		"cookiesExclOthers": false,
+		"loginWarning": "You must select a profile after login for authentication to complete."
+	},
+
+	"supportedClaimTypes": [2],
+	"primaryClaimFieldType": 1
+}
