@@ -6523,7 +6523,7 @@ class BotGuardGenerator {
 			this.generatedTokens[visitorId] = newPoToken;
 			log("New PO Token: " + newPoToken.tokenBase64);
 			if(_settings?.notify_bg)
-				toast("New Botguard Token: " + newPoToken?.tokenBase64?.substring(0, 10) + "...");
+				bridge.toast("New Botguard Token: " + newPoToken?.tokenBase64?.substring(0, 10) + "...");
 			cb(poToken);
 		});
 	}
