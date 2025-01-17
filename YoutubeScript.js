@@ -589,14 +589,14 @@ else {
 					log("Failed to get iOS stream data, fallback to UMP")
 					if(!!_settings["showVerboseToasts"])
 						bridge.toast("Failed to get iOS stream data, fallback to UMP");
-					videoDetails.video = extractABR_VideoDescriptor(initialPlayerData, jsUrl) ?? new VideoSourceDescriptor([]);
+					videoDetails.video = extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig) ?? new VideoSourceDescriptor([]);
 				}
 			}
 			else {
 				log("Failed to get iOS stream data, fallback to UMP (" + iosDataResp?.code + ")")
 				if(!!_settings["showVerboseToasts"])
 					bridge.toast("Failed to get iOS stream data, fallback to UMP");
-				videoDetails.video = extractABR_VideoDescriptor(initialPlayerData, jsUrl) ?? new VideoSourceDescriptor([]);
+				videoDetails.video = extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig) ?? new VideoSourceDescriptor([]);
 			}
 		}
 
