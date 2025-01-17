@@ -1,4 +1,5 @@
 stages:
+- deploy_unstable
 - deploy
 
 deploy:
@@ -7,3 +8,12 @@ deploy:
     - sh deploy.sh
   only:
     - master
+  when: manual
+
+deploy_unstable:
+  stage: deploy_unstable
+  script:
+    - sh deploy_unstable.sh
+  only:
+    - master
+  when: manual
