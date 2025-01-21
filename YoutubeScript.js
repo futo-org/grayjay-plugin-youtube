@@ -1272,8 +1272,8 @@ source.getChannel = (url) => {
 
 source.getChannelCapabilities = () => {
 	return {
-		types: [Type.Feed.Videos, Type.Feed.Streams],
-		sorts: [Type.Order.Chronological, "Popular"]
+		types: (!!_settings?.channelRssOnly) ? [Type.Feed.Mixed] : [Type.Feed.Videos, Type.Feed.Streams],
+		sorts: (!!_settings?.channelRssOnly) ? [Type.Order.Chronological] : [Type.Order.Chronological, "Popular"]//
 	};
 }
 function filterChannelUrl(url) {
@@ -1299,6 +1299,12 @@ function filterChannelUrl(url) {
 source.getChannelContents = (url, type, order, filters) => {
 	let targetTab = null;
 	url = filterChannelUrl(url);
+
+	if(!!_settings?.channelRssOnly) {
+		log("Using Channel RSS Only");
+		return new VideoPager(source.peekChannelContents(url, type, true), false);
+	}
+
 
 	log("GetChannelContents - " + type);
 	switch(type) {
@@ -1387,9 +1393,14 @@ source.getChannelPlaylists = (url) => {
 source.getPeekChannelTypes = () => {
 	return [Type.Feed.Videos, Type.Feed.Mixed];
 }
-source.peekChannelContents = function(url, type) {
+source.peekChannelContents = function(url, type, allowChannelFetch) {
     if(type != Type.Feed.Mixed && type != Type.Feed.Videos)
         return [];
+
+	if(allowChannelFetch && !REGEX_VIDEO_CHANNEL_URL.test(url)) {
+		const channelDetails = source.getChannel(url);
+		url = URL_CHANNEL_BASE + channelDetails.id.value;
+	}
 
     const match = url.match(REGEX_VIDEO_CHANNEL_URL);
     if(!match || match.length != 3)
@@ -2223,13 +2234,17 @@ class YTABRExecutor {
 		this.lastAction = (new Date()).getTime() - (Math.random() * 1000 * 5);
 		this.segmentOffsets = undefined;
 		
-		if(bgData)
+		if(bgData) {
+			if(!bgData.visitorId && !bgData.dataSyncId) {
+				log("Botguard no visitorId or dataSyncId found, not using botguard!");
+			}
 			tryGetBotguard((bg)=>{
 				bg.getTokenOrCreate(bgData.visitorData, bgData.dataSyncId, (pot)=>{
 					console.log("Botguard Token to use:", pot);
 					this.pot = pot;
 				});
 			});
+		}
 
 		log("UMP New executor: " + source.name + " - " + source.mimeType + " (segments: " + header?.cues?.length + ")");
 		log("UMP Cues: " + header?.cues?.join(", "));
@@ -6483,13 +6498,16 @@ class BotGuardGenerator {
 		return this.mint;
 	}
 
-	getTokenOrCreate(visitorId, dataSync, cb) {
+	getTokenOrCreate(visitorId, dataSyncId, cb) {
+		if(!visitorId && !dataSyncId)
+			throw new ScriptException("No visitor or datasync Id provided for botguard");
 
-		//TODO: Handle datasync scenario
-		const existing = this.generatedTokens[visitorId];
+		let idToUse = visitorId ?? dataSyncId;
+
+		const existing = this.generatedTokens[idToUse];
 		if(!existing) {
 			log("No existing botguard token, generating new");
-			this.generateBase64(visitorId, dataSync, (token)=>{
+			this.generateBase64(visitorId, dataSyncId, (token)=>{
 				cb(token);
 			});
 		}
@@ -6497,8 +6515,8 @@ class BotGuardGenerator {
 			cb(existing.tokenBase64);
 	}
 
-	generateBase64(visitorId, dataSync, cb) {
-		this.generate(visitorId, dataSync, (result) => {
+	generateBase64(visitorId, dataSyncId, cb) {
+		this.generate(visitorId, dataSyncId, (result) => {
 			const originId = visitorId;
 			let poToken = btoa(String.fromCharCode(...result))
 				.replace(/\+/g, '-')
@@ -6506,25 +6524,37 @@ class BotGuardGenerator {
 			cb(poToken);
 		});
 	}
-	generate(visitorId, dataSync, cb) {
-		this.getMinter((minter, expire) => {
-			console.log("Minting visitor: ", visitorId);
-			const poToken = minter(new TextEncoder().encode(visitorId));
-			const poTokenBase64 = btoa(String.fromCharCode(...poToken))
-				.replace(/\+/g, '-')
-				.replace(/\//g, '_');
+	generate(visitorId, dataSyncId, cb) {
+		if(!visitorId && !dataSyncId)
+			throw new ScriptException("No visitor or datasync Id provided for botguard");
+		
+		const idToUse = visitorId ?? dataSyncId;
+		if(idToUse == dataSyncId)
+			log("BOTGUARD USING DATASYNCID");
 
-			//TODO: Handle dataSync
-			const newPoToken = {
-				token: poToken,
-				tokenBase64: poTokenBase64,
-				expires: expire
-			};
-			this.generatedTokens[visitorId] = newPoToken;
-			log("New PO Token: " + newPoToken.tokenBase64);
-			if(_settings?.notify_bg)
-				bridge.toast("New Botguard Token: " + newPoToken?.tokenBase64?.substring(0, 10) + "...");
-			cb(poToken);
+		this.getMinter((minter, expire) => {
+			try {
+				console.log("Minting visitor: " + idToUse);
+				const poToken = minter(new TextEncoder().encode(idToUse));
+				const poTokenBase64 = btoa(String.fromCharCode(...poToken))
+					.replace(/\+/g, '-')
+					.replace(/\//g, '_');
+
+				//TODO: Handle dataSync
+				const newPoToken = {
+					token: poToken,
+					tokenBase64: poTokenBase64,
+					expires: expire
+				};
+				this.generatedTokens[idToUse] = newPoToken;
+				log("New PO Token: " + newPoToken.tokenBase64);
+				if(_settings?.notify_bg)
+					bridge.toast("New Botguard Token: " + newPoToken?.tokenBase64?.substring(0, 10) + "...");
+				cb(poToken);
+			}
+			catch(ex) {
+				log("Minting failed due to: " + ex);
+			}
 		});
 	}
 }

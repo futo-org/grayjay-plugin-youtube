@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 220,
+	"version": 222,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -70,6 +70,14 @@
 			"description": "Use authenticated client for playback, telling Youtube what you watched.",
 			"type": "Boolean",
 			"default": "false"
+		},
+		{
+			"variable": "channelRssOnly",
+			"name": "Only Use Channel RSS Feeds (Inferior)",
+			"description": "Exclusively use channel RSS feeds for channel content, may result in inferior results, and only recent videos. But may be faster and reduce rate limiting.",
+			"type": "Boolean",
+			"default": "false",
+			"warningDialog": "Using RSS feeds will have inferior results, and may add shorts in the channel videos and subscriptions.\n\nOld videos may also be unavailable."
 		},
 		{
 			"variable": "allowAgeRestricted",
