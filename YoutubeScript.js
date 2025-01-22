@@ -4000,6 +4000,7 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 				if (codecs.startsWith("av01"))
 					return null; //AV01 is unsupported.
 
+				const visitorData = clientConfig?.EOM_VISITOR_DATA ?? clientConfig?.VISITOR_DATA;
 				const duration = parseInt(parseInt(y.approxDurationMs) / 1000) ?? 0;
 				if (isNaN(duration))
 					return null;
@@ -4015,7 +4016,7 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 					audioChannels: y.audioChannels,
 					language: ytLangIdToLanguage(y.audioTrack?.id)
 				}, abrStreamingUrl, y, initialPlayerData.playerConfig.mediaCommonConfig.mediaUstreamerRequestConfig.videoPlaybackUstreamerConfig,
-					{ visitorData: clientConfig?.EOM_VISITOR_DATA?.replaceAll("%3D", "="), dataSyncId: clientConfig?.DATASYNC_ID});
+					{ visitorData: visitorData?.replaceAll("%3D", "="), dataSyncId: clientConfig?.DATASYNC_ID});
 			})).filter(x => x != null)
 	);
 }
