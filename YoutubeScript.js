@@ -3977,7 +3977,8 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 				const duration = parseInt(parseInt(y.approxDurationMs) / 1000) ?? 0;
 				if (isNaN(duration))
 					return null;
-				console.log("VisitorData: ", clientConfig?.EOM_VISITOR_DATA);
+				const visitorData = clientConfig?.EOM_VISITOR_DATA ?? clientConfig?.VISITOR_DATA;
+				console.log("VisitorData: ", visitorData);
 				return new YTABRVideoSource({
 					name: "UMP " + y.height + "p" + (y.fps ? y.fps : "") + " " + container,
 					url: abrStreamingUrl,
@@ -3988,7 +3989,7 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 					codec: codecs,
 					bitrate: y.bitrate,
 				}, abrStreamingUrl, y, initialPlayerData.playerConfig.mediaCommonConfig.mediaUstreamerRequestConfig.videoPlaybackUstreamerConfig,
-					{ visitorData: clientConfig?.EOM_VISITOR_DATA?.replaceAll("%3D", "="), dataSyncId: clientConfig?.DATASYNC_ID});
+					{ visitorData: visitorData?.replaceAll("%3D", "="), dataSyncId: clientConfig?.DATASYNC_ID});
 			})).filter(x => x != null),
 		//Audio
 		(initialPlayerData.streamingData.adaptiveFormats
