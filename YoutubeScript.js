@@ -423,6 +423,7 @@ else {
 		let initialData = getInitialData(html);
 		let initialPlayerData = getInitialPlayerData(html);
 		let clientConfig = getClientConfig(html);
+		let usedLogin = useLogin && bridge.isLoggedIn();
 		
 		let ageRestricted = initialPlayerData.playabilityStatus?.reason?.indexOf("your age") > 0 ?? false;
 		if (initialPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED" && (bridge.isLoggedIn() || !ageRestricted)) {
@@ -434,6 +435,7 @@ else {
 				initialData = getInitialData(html);
 				initialPlayerData = getInitialPlayerData(html);
 				clientConfig = getClientConfig(html);
+				usedLogin = true && bridge.isLoggedIn();
 
 				if (initialPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED")
 					throw new ScriptLoginRequiredException("Login required\nReason: " + initialPlayerData?.playabilityStatus?.reason);
@@ -518,7 +520,7 @@ else {
 
 		const videoDetails = extractVideoPage_VideoDetails(initialData, initialPlayerData, {
 			url: url
-		}, jsUrl, useLogin, USE_ABR_VIDEOS, clientConfig);
+		}, jsUrl, useLogin, USE_ABR_VIDEOS, clientConfig, usedLogin);
 		if(videoDetails == null)
 			throw new UnavailableException("No video found");
 
@@ -589,14 +591,14 @@ else {
 					log("Failed to get iOS stream data, fallback to UMP")
 					if(!!_settings["showVerboseToasts"])
 						bridge.toast("Failed to get iOS stream data, fallback to UMP");
-					videoDetails.video = extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig) ?? new VideoSourceDescriptor([]);
+					videoDetails.video = extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig, usedLogin) ?? new VideoSourceDescriptor([]);
 				}
 			}
 			else {
 				log("Failed to get iOS stream data, fallback to UMP (" + iosDataResp?.code + ")")
 				if(!!_settings["showVerboseToasts"])
 					bridge.toast("Failed to get iOS stream data, fallback to UMP");
-				videoDetails.video = extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig) ?? new VideoSourceDescriptor([]);
+				videoDetails.video = extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig, usedLogin) ?? new VideoSourceDescriptor([]);
 			}
 		}
 
@@ -1907,6 +1909,7 @@ class YTABRVideoSource extends DashManifestRawSource {
 		this.bgData = bgData;
 		this.visitorId = bgData.visitorData;
 		this.dataSyncId = bgData.dataSyncId
+		this.visitorDataType = bgData.visitorDataType;
     }
 
 	generate() {
@@ -1944,6 +1947,7 @@ class YTABRAudioSource extends DashManifestRawAudioSource {
 		this.bgData = bgData;
 		this.visitorId = bgData.visitorData;
 		this.dataSyncId = bgData.dataSyncId
+		this.visitorDataType = bgData.visitorDataType;
     }
 
 	generate() {
@@ -2242,7 +2246,7 @@ class YTABRExecutor {
 				bg.getTokenOrCreate(bgData.visitorData, bgData.dataSyncId, (pot)=>{
 					console.log("Botguard Token to use:", pot);
 					this.pot = pot;
-				});
+				}, bgData.visitorDataType);
 			});
 		}
 
@@ -3743,7 +3747,7 @@ function extractPage_Tabs(initialData, contextData) {
 
 
 //#region Layout Extractors
-function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextData, jsUrl, useLogin, useAbr, clientConfig) {
+function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextData, jsUrl, useLogin, useAbr, clientConfig, usedLogin) {
 	const contents = initialData.contents;
 	const contentsContainer = contents.twoColumnWatchNextResults?.results?.results ??
 		null;
@@ -3785,7 +3789,7 @@ function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextDa
 		video: 
 			((!useAbr) ?
 				extractAdaptiveFormats_VideoDescriptor(initialPlayerData?.streamingData?.adaptiveFormats, jsUrl, contextData, "") :
-				extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig)
+				extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig, usedLogin)
 			)
 			?? new VideoSourceDescriptor([]),
 		subtitles: initialPlayerData
@@ -3958,12 +3962,22 @@ function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextDa
     return result;
 }
 
-function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig) {
+function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig, usedLogin) {
 	
 	const abrStreamingUrl = (initialPlayerData.streamingData.serverAbrStreamingUrl) ? 
 		decryptUrlN(initialPlayerData.streamingData.serverAbrStreamingUrl, jsUrl, false) : undefined;
 	if(!abrStreamingUrl)
 		return undefined;
+
+	let visitorDataType = "Unknown";
+	if(usedLogin)
+		visitorDataType = "DataSyncID";
+	else if(clientConfig?.EOM_VISITOR_DATA)
+		visitorDataType = "EOM";
+	else if(clientConfig?.VISITOR_DATA)
+		visitorDataType = "VisitorData";
+	else
+		visitorDataType = "Unknown";
 
 	return new UnMuxVideoSourceDescriptor(
 		(initialPlayerData.streamingData.adaptiveFormats
@@ -3977,8 +3991,10 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 				const duration = parseInt(parseInt(y.approxDurationMs) / 1000) ?? 0;
 				if (isNaN(duration))
 					return null;
-				const visitorData = clientConfig?.EOM_VISITOR_DATA ?? clientConfig?.VISITOR_DATA;
+				const visitorData = usedLogin ? null : (clientConfig?.EOM_VISITOR_DATA ?? clientConfig?.VISITOR_DATA);
 				console.log("VisitorData: ", visitorData);
+				log("VisitorDataType: " + visitorDataType);
+				log("")
 				return new YTABRVideoSource({
 					name: "UMP " + y.height + "p" + (y.fps ? y.fps : "") + " " + container,
 					url: abrStreamingUrl,
@@ -3989,7 +4005,7 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 					codec: codecs,
 					bitrate: y.bitrate,
 				}, abrStreamingUrl, y, initialPlayerData.playerConfig.mediaCommonConfig.mediaUstreamerRequestConfig.videoPlaybackUstreamerConfig,
-					{ visitorData: visitorData?.replaceAll("%3D", "="), dataSyncId: clientConfig?.DATASYNC_ID});
+					{ visitorData: visitorData?.replaceAll("%3D", "="), dataSyncId: clientConfig?.DATASYNC_ID, visitorDataType: visitorDataType});
 			})).filter(x => x != null),
 		//Audio
 		(initialPlayerData.streamingData.adaptiveFormats
@@ -4000,7 +4016,8 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 				if (codecs.startsWith("av01"))
 					return null; //AV01 is unsupported.
 
-				const visitorData = clientConfig?.EOM_VISITOR_DATA ?? clientConfig?.VISITOR_DATA;
+				const visitorData = usedLogin ? null : (clientConfig?.EOM_VISITOR_DATA ?? clientConfig?.VISITOR_DATA);
+				log("VisitorDataType: " + visitorDataType);
 				const duration = parseInt(parseInt(y.approxDurationMs) / 1000) ?? 0;
 				if (isNaN(duration))
 					return null;
@@ -4016,7 +4033,7 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 					audioChannels: y.audioChannels,
 					language: ytLangIdToLanguage(y.audioTrack?.id)
 				}, abrStreamingUrl, y, initialPlayerData.playerConfig.mediaCommonConfig.mediaUstreamerRequestConfig.videoPlaybackUstreamerConfig,
-					{ visitorData: visitorData?.replaceAll("%3D", "="), dataSyncId: clientConfig?.DATASYNC_ID});
+					{ visitorData: visitorData?.replaceAll("%3D", "="), dataSyncId: clientConfig?.DATASYNC_ID, visitorDataType: visitorDataType});
 			})).filter(x => x != null)
 	);
 }
@@ -6500,7 +6517,7 @@ class BotGuardGenerator {
 		return this.mint;
 	}
 
-	getTokenOrCreate(visitorId, dataSyncId, cb) {
+	getTokenOrCreate(visitorId, dataSyncId, cb, type) {
 		if(!visitorId && !dataSyncId)
 			throw new ScriptException("No visitor or datasync Id provided for botguard");
 
@@ -6511,22 +6528,22 @@ class BotGuardGenerator {
 			log("No existing botguard token, generating new");
 			this.generateBase64(visitorId, dataSyncId, (token)=>{
 				cb(token);
-			});
+			}, type);
 		}
 		else //TODO: check expiry?
 			cb(existing.tokenBase64);
 	}
 
-	generateBase64(visitorId, dataSyncId, cb) {
+	generateBase64(visitorId, dataSyncId, cb, type) {
 		this.generate(visitorId, dataSyncId, (result) => {
 			const originId = visitorId;
 			let poToken = btoa(String.fromCharCode(...result))
 				.replace(/\+/g, '-')
 				.replace(/\//g, '_');
 			cb(poToken);
-		});
+		}, type);
 	}
-	generate(visitorId, dataSyncId, cb) {
+	generate(visitorId, dataSyncId, cb, type) {
 		if(!visitorId && !dataSyncId)
 			throw new ScriptException("No visitor or datasync Id provided for botguard");
 		
@@ -6551,7 +6568,7 @@ class BotGuardGenerator {
 				this.generatedTokens[idToUse] = newPoToken;
 				log("New PO Token: " + newPoToken.tokenBase64);
 				if(_settings?.notify_bg)
-					bridge.toast("New Botguard Token: " + newPoToken?.tokenBase64?.substring(0, 10) + "...");
+					bridge.toast("New Botguard Token: " + (type ? "(" + type + ") " : "") + newPoToken?.tokenBase64?.substring(0, 10) + "...");
 				cb(poToken);
 			}
 			catch(ex) {
