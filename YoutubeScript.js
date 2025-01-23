@@ -1930,7 +1930,7 @@ class YTABRVideoSource extends DashManifestRawSource {
 		return dash;
 	}
 	getRequestExecutor() {
-		return new YTABRExecutor(this.abrUrl, this.sourceObj, this.ustreamerConfig, 
+		return new YTABRExecutor(this, this.abrUrl, this.sourceObj, this.ustreamerConfig, 
 			this.initialHeader,
 			this.initialUMP, this.bgData);
 	}
@@ -1968,7 +1968,7 @@ class YTABRAudioSource extends DashManifestRawAudioSource {
 		return dash;
 	}
 	getRequestExecutor() {
-		return new YTABRExecutor(this.abrUrl, this.sourceObj, this.ustreamerConfig,
+		return new YTABRExecutor(this, this.abrUrl, this.sourceObj, this.ustreamerConfig,
 			this.initialHeader,
 			this.initialUMP, this.bgData);
 	}
@@ -2224,7 +2224,8 @@ let executorCounter = 0;
 let _executorsVideo = [];
 let _executorsAudio = [];
 class YTABRExecutor {
-	constructor(url, source, ustreamerConfig, header, initialUmp, bgData) {
+	constructor(parentSource, url, source, ustreamerConfig, header, initialUmp, bgData) {
+		this.parentSource = parentSource;
 		this.executorId = executorCounter++;
 		this.source = source;
 		this.itag = source.itag;
@@ -2237,6 +2238,10 @@ class YTABRExecutor {
 		this.requestStarted = (new Date()).getTime();
 		this.lastAction = (new Date()).getTime() - (Math.random() * 1000 * 5);
 		this.segmentOffsets = undefined;
+		this.pot  = undefined;
+		this.lastWorkingPot = undefined;
+		this.bgData = bgData;
+		this.level = 0;
 		
 		if(bgData) {
 			if(!bgData.visitorId && !bgData.dataSyncId) {
@@ -2431,10 +2436,38 @@ class YTABRExecutor {
 
 		this.lastRequest = (new Date()).getTime();
 
+		if(umpResp.redirectUrl) {
+			log("UMP Responded with redirect Url: " + umpResp.redirectUrl);
+		}
 
 		const stream = streamsArr[0];
-		if(!stream)
+		if(!stream) {
+			if(pot && this.lastWorkingPot == pot && umpResp.redirectUrl) {
+				this.lastWorkingPot = undefined;
+				log("UMP [" + this.type + "] No stream despite POT working before, swapping url..\nBEFORE: " + this.abrUrl + "\n" + umpResp.redirectUrl);
+				this.abrUrl = umpResp.redirectUrl;
+				
+				const botGuard = getExistingBotguard();
+				if(!botGuard) {
+					log("Botguard generator didn't exist? Letting it throw");
+				}
+				else {
+					log("Botguard re-initializing");
+					if(this.level > 3) {
+						log("UMP [" + this.type + "] Max nested executor level exceeded");
+						return;
+					}
+					botGuard.initialize();
+					botGuard.getTokenOrCreate(this.bgData.visitorData, this.bgData.dataSyncId, (pot)=>{
+						log("Botguard Token to use:" + pot);
+						this.pot = pot;
+					}, this.bgData.visitorDataType);
+				}
+				return this.executeRequest(url, headers, retryCount + 1, overrideSegment);
+			}
+
 			throw new ScriptException("No streams for requesting segment " + segment + ((overrideSegment && overrideSegment > 0) ? (", override: " + overrideSegment) : ""));
+		}
 		const expectedSegment = parseInt(segment) + parseInt(this.getOffset(stream.segmentIndex));
 		log("Expected segment " + expectedSegment + " got " + stream.segmentIndex);
 		if(stream && stream.segmentIndex != expectedSegment) {
@@ -2489,6 +2522,10 @@ class YTABRExecutor {
 		if(!stream || !stream.data)
 			throw new ScriptException("NO STREAMDATA FOUND (" + Object.keys(umpResp.streams).join(", ") + "): " + !!umpResp.streams[0]?.data);
 		
+		if(pot && this.lastWorkingPot != pot) {
+			this.lastWorkingPot = pot;
+		}
+
 		log("UMP [" + this.type + "]: segment " + segment + " - " + stream.data?.length);
 		return stream.data;
 	}
@@ -5941,6 +5978,7 @@ class UMPResponse {
 					case 43://Message
 						const opCode43 = pb.Opcode43_pb.Opcode43.deserializeBinary(segment);
 						this.redirectUrl = opCode43?.getRedirecturl();
+						log("Redirect url found: " + this.redirectUrl);
 				}
 			}
 			else {
@@ -5950,7 +5988,7 @@ class UMPResponse {
 			}
 		}
 		if(this.streamCount == 0) {
-			log("UMP: No streams found?");
+			log("UMP: No streams found? (Opcodes: " + this.opcodes.map(x=>`${x.opcode}:${x.length}`).join(", ") + ")");
 			if(bytes.length < 200) {
 				log("UMP Resp: " + bytes.join(" ") + "\nOpcodes: " + this.opcodes.map(x=>`${x.opcode}:${x.length}`).join(", "));
 				return undefined;
@@ -6326,6 +6364,9 @@ function tryGetBotguard(cb) {
 		cb(botguard);
 	}, 100);
 }
+function getExistingBotguard(){
+	return existingBotguard;
+}
 
 //#region BotGuard
 class BotGuardGeneratorInput {
@@ -6355,6 +6396,10 @@ class BotGuardGenerator {
 	}
 
 	initialize() {
+		this.mint = undefined;
+		this.mintConstructor = undefined;
+		this.minterFailure = undefined;
+		this.ready = false;
 		console.log("VM Initializing");
 
 		const requestKey = this.requestKey;
