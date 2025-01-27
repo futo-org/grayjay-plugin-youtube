@@ -2404,7 +2404,7 @@ class YTABRExecutor {
 		
 		
 		//this.abrUrl = newSource.abrUrl;
-		bridge.toast("UMP Recovered");
+		bridge.toast("UMP [" + this.type + "] Recovered");
 	}
 
 	executeRequest(url, headers, retryCount, overrideSegment) {
@@ -2501,7 +2501,6 @@ class YTABRExecutor {
 				//TODO: Implement proper recovery instead of this hackfix.
 				
 				if(!!_settings.useAggressiveUMPRecovery) {
-					bridge.toast("UMP [" + this.type + "] broke, attempting aggressive recovery");
 					const botGuard = getExistingBotguard();
 					if(!botGuard) {
 						log("Botguard generator didn't exist? Letting it throw");
