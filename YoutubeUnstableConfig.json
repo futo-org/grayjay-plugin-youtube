@@ -101,6 +101,13 @@
 			"default": "false"
 		},
 		{
+			"variable": "useAggressiveUMPRecovery",
+			"name": "Use Aggressive UMP Recovery",
+			"description": "This feature allows UMP to refetch the entire page to recover from ip changes and such.",
+			"type": "Boolean",
+			"default": "true"
+		},
+		{
 			"variable": "showVerboseToasts",
 			"name": "Show Verbose Messages",
 			"description": "Show messages that give more information about what is happening, might be considered annoying for some.",

@@ -376,10 +376,11 @@ if(false && (bridge.buildSpecVersion ?? 1) > 1) {
 	//TODO: Implement more compact version using new api batch spec
 }
 else {
-	source.getContentDetails = (url, useAuth, simplify) => {
+	source.getContentDetails = (url, useAuth, simplify, forceUmp) => {
 		useAuth = !!_settings?.authDetails || !!useAuth;
 
 		log("ABR Enabled: " + USE_ABR_VIDEOS);
+		const defaultUMP = USE_ABR_VIDEOS || forceUmp;
 
 		url = convertIfOtherUrl(url);
 
@@ -407,7 +408,7 @@ else {
 		}
 
 		let batchIOS = -1;
-		if(USE_IOS_VIDEOS_FALLBACK) {
+		if(USE_IOS_VIDEOS_FALLBACK && !defaultUMP && !simplify) {
 			requestIOSStreamingData(videoId, batch);
 			batchIOS = batchCounter++;
 		}
@@ -518,9 +519,9 @@ else {
 			jsUrl: jsUrl
 		};
 
-		const videoDetails = extractVideoPage_VideoDetails(initialData, initialPlayerData, {
+		const videoDetails = extractVideoPage_VideoDetails(url, initialData, initialPlayerData, {
 			url: url
-		}, jsUrl, useLogin, USE_ABR_VIDEOS, clientConfig, usedLogin);
+		}, jsUrl, useLogin, defaultUMP, clientConfig, usedLogin);
 		if(videoDetails == null)
 			throw new UnavailableException("No video found");
 
@@ -591,14 +592,14 @@ else {
 					log("Failed to get iOS stream data, fallback to UMP")
 					if(!!_settings["showVerboseToasts"])
 						bridge.toast("Failed to get iOS stream data, fallback to UMP");
-					videoDetails.video = extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig, usedLogin) ?? new VideoSourceDescriptor([]);
+					videoDetails.video = extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig, url, usedLogin) ?? new VideoSourceDescriptor([]);
 				}
 			}
 			else {
 				log("Failed to get iOS stream data, fallback to UMP (" + iosDataResp?.code + ")")
 				if(!!_settings["showVerboseToasts"])
 					bridge.toast("Failed to get iOS stream data, fallback to UMP");
-				videoDetails.video = extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig, usedLogin) ?? new VideoSourceDescriptor([]);
+				videoDetails.video = extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig, url, usedLogin) ?? new VideoSourceDescriptor([]);
 			}
 		}
 
@@ -1896,8 +1897,9 @@ class YTVideoSource extends VideoUrlRangeSource {
 }
 
 class YTABRVideoSource extends DashManifestRawSource {
-    constructor(obj, url, sourceObj, ustreamerConfig, bgData) {
+    constructor(itag, obj, url, sourceObj, ustreamerConfig, bgData, parentUrl, usedLogin) {
 		super(obj);
+		this.itag = itag;
 		this.url = url;
 		this.abrUrl = url;
 		this.ustreamerConfig = ustreamerConfig;
@@ -1910,6 +1912,8 @@ class YTABRVideoSource extends DashManifestRawSource {
 		this.visitorId = bgData.visitorData;
 		this.dataSyncId = bgData.dataSyncId
 		this.visitorDataType = bgData.visitorDataType;
+		this.parentUrl = parentUrl;
+		this.usedLogin = !!usedLogin;
     }
 
 	generate() {
@@ -1936,8 +1940,9 @@ class YTABRVideoSource extends DashManifestRawSource {
 	}
 }
 class YTABRAudioSource extends DashManifestRawAudioSource {
-    constructor(obj, url, sourceObj, ustreamerConfig, bgData) {
+    constructor(itag, obj, url, sourceObj, ustreamerConfig, bgData, parentUrl, usedLogin) {
 		super(obj);
+		this.itag = itag;
 		this.url = url;
 		this.abrUrl = url;
 		this.ustreamerConfig = ustreamerConfig;
@@ -1948,6 +1953,8 @@ class YTABRAudioSource extends DashManifestRawAudioSource {
 		this.visitorId = bgData.visitorData;
 		this.dataSyncId = bgData.dataSyncId
 		this.visitorDataType = bgData.visitorDataType;
+		this.parentUrl = parentUrl;
+		this.usedLogin = !!usedLogin;
     }
 
 	generate() {
@@ -2223,6 +2230,7 @@ const useReusableBuffers = false;
 let executorCounter = 0;
 let _executorsVideo = [];
 let _executorsAudio = [];
+let _recoveryCache = {};
 class YTABRExecutor {
 	constructor(parentSource, url, source, ustreamerConfig, header, initialUmp, bgData) {
 		this.parentSource = parentSource;
@@ -2242,6 +2250,7 @@ class YTABRExecutor {
 		this.lastWorkingPot = undefined;
 		this.bgData = bgData;
 		this.level = 0;
+		this.childExecutor = undefined;
 		
 		if(bgData) {
 			if(!bgData.visitorId && !bgData.dataSyncId) {
@@ -2346,6 +2355,8 @@ class YTABRExecutor {
 	}
 
 	cleanup() {
+		if(this.childExecutor)
+			return this.childExecutor.cleanup();
 		log("UMP: Cleaning up!");
 		this.initialUmp = undefined;
 		this.header = undefined;
@@ -2363,7 +2374,42 @@ class YTABRExecutor {
 		this.freeAllSegments();
 	}
 
+	recreateExecutor(){
+		const parentUrl = this.parentSource.parentUrl;
+		console.warn("Re-fetching [" + parentUrl + "] for executor");
+		if(!parentUrl)
+			throw new ScriptException("Failed to recreate object");
+		const video = source.getContentDetails(parentUrl, this.parentSource.usedLogin, true, true);
+
+		let newSource = undefined;
+		if(this.source.mimeType.startsWith("video/"))
+			newSource = video.video.videoSources.find(x=>x.itag == this.itag);
+		else
+			newSource = video.video.audioSources.find(x=>x.itag == this.itag);
+		console.warn("Re-fetched source", newSource);
+		if(!newSource)
+			throw new ScriptException("Could not re-find itag " + this.itag);
+
+		//TODO: Cache video
+
+		console.warn("Re-generate UMP Dash");
+		
+		newSource.generate();
+		
+		const newExecutor = newSource.getRequestExecutor();
+		if(!newExecutor)
+			throw new ScriptException("No executor found in re-fetched source for " + this.itag);
+		this.cleanup();
+		this.childExecutor = newExecutor;
+		
+		
+		//this.abrUrl = newSource.abrUrl;
+		bridge.toast("UMP Recovered");
+	}
+
 	executeRequest(url, headers, retryCount, overrideSegment) {
+		if(this.childExecutor)
+			return this.childExecutor.executeRequest(url, headers, retryCount, overrideSegment);
 		if(!retryCount)
 			retryCount = 0;
 		log("UMP: " + url + "");
@@ -2389,11 +2435,11 @@ class YTABRExecutor {
 				log("UMP [" + this.type + "] Cached segment " + segment + " was undefined, refetching");
 		}
 
-		log("UMP [" + this.type + "] requesting segment: " + segment + ", time: " + time + ", itag: " + this.itag);
+		const pot = this.pot;
+		log("UMP [" + this.type + "] requesting segment: " + segment + ", time: " + time + ", itag: " + this.itag + (pot ? (", pot:" + pot.substring(0, 5) + "..") : ""));
 		if(overrideSegment)
 			log("UMP [" + this.type + "] requesting with overrided segment: " + overrideSegment)
 		const now = (new Date()).getTime();
-		const pot = this.pot;
 		const initialReq = getVideoPlaybackRequest(this.source, this.ustreamerConfig, time, (overrideSegment) ? overrideSegment : segment, this.lastRequest, this.lastAction, now, this.playbackCookie, pot);
 		const postData = initialReq.serializeBinary();
 		const initialResp = http.POST(this.abrUrl, postData, {
@@ -2436,34 +2482,37 @@ class YTABRExecutor {
 
 		this.lastRequest = (new Date()).getTime();
 
-		if(umpResp.redirectUrl) {
-			log("UMP Responded with redirect Url: " + umpResp.redirectUrl);
-		}
-
 		const stream = streamsArr[0];
 		if(!stream) {
-			if(pot && this.lastWorkingPot == pot && umpResp.redirectUrl) {
+
+			if(umpResp.redirectUrl) {
+				log("UMP Responded with redirect Url: " + umpResp.redirectUrl);
+			}
+			log("UMP no stream, try recovery: \n" +
+				" - Had POT: " + !!pot + "\n" +
+				" - POT Worked: " + (this.lastWorkingPot == pot) + "\n" +
+				" - Has Redirect: " + !!umpResp.redirectUrl);
+			if(pot && this.lastWorkingPot == pot && !!umpResp.redirectUrl) {
 				this.lastWorkingPot = undefined;
 				log("UMP [" + this.type + "] No stream despite POT working before, swapping url..\nBEFORE: " + this.abrUrl + "\n" + umpResp.redirectUrl);
+				console.warn("UMP [" + this.type + "] broke, attempting recovery")
 				this.abrUrl = umpResp.redirectUrl;
+
+				//TODO: Implement proper recovery instead of this hackfix.
 				
-				const botGuard = getExistingBotguard();
-				if(!botGuard) {
-					log("Botguard generator didn't exist? Letting it throw");
-				}
-				else {
-					log("Botguard re-initializing");
-					if(this.level > 3) {
-						log("UMP [" + this.type + "] Max nested executor level exceeded");
-						return;
+				if(!!_settings.useAggressiveUMPRecovery) {
+					bridge.toast("UMP [" + this.type + "] broke, attempting aggressive recovery");
+					const botGuard = getExistingBotguard();
+					if(!botGuard) {
+						log("Botguard generator didn't exist? Letting it throw");
 					}
-					botGuard.initialize();
-					botGuard.getTokenOrCreate(this.bgData.visitorData, this.bgData.dataSyncId, (pot)=>{
-						log("Botguard Token to use:" + pot);
-						this.pot = pot;
-					}, this.bgData.visitorDataType);
+					else {
+						console.warn("Regenerating executor due to missing streams");
+						bridge.toast("UMP [" + this.type + "] no streams, attempting recovery (ip change?)");
+						this.recreateExecutor();
+						return this.executeRequest(url, headers, retryCount, overrideSegment);
+					}
 				}
-				return this.executeRequest(url, headers, retryCount + 1, overrideSegment);
 			}
 
 			throw new ScriptException("No streams for requesting segment " + segment + ((overrideSegment && overrideSegment > 0) ? (", override: " + overrideSegment) : ""));
@@ -3784,7 +3833,7 @@ function extractPage_Tabs(initialData, contextData) {
 
 
 //#region Layout Extractors
-function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextData, jsUrl, useLogin, useAbr, clientConfig, usedLogin) {
+function extractVideoPage_VideoDetails(parentUrl, initialData, initialPlayerData, contextData, jsUrl, useLogin, useAbr, clientConfig, usedLogin) {
 	const contents = initialData.contents;
 	const contentsContainer = contents.twoColumnWatchNextResults?.results?.results ??
 		null;
@@ -3826,7 +3875,7 @@ function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextDa
 		video: 
 			((!useAbr) ?
 				extractAdaptiveFormats_VideoDescriptor(initialPlayerData?.streamingData?.adaptiveFormats, jsUrl, contextData, "") :
-				extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig, usedLogin)
+				extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig, parentUrl, usedLogin)
 			)
 			?? new VideoSourceDescriptor([]),
 		subtitles: initialPlayerData
@@ -3999,7 +4048,7 @@ function extractVideoPage_VideoDetails(initialData, initialPlayerData, contextDa
     return result;
 }
 
-function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig, usedLogin) {
+function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig, parentUrl, usedLogin) {
 	
 	const abrStreamingUrl = (initialPlayerData.streamingData.serverAbrStreamingUrl) ? 
 		decryptUrlN(initialPlayerData.streamingData.serverAbrStreamingUrl, jsUrl, false) : undefined;
@@ -4032,7 +4081,7 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 				console.log("VisitorData: ", visitorData);
 				log("VisitorDataType: " + visitorDataType);
 				log("")
-				return new YTABRVideoSource({
+				return new YTABRVideoSource(y.itag, {
 					name: "UMP " + y.height + "p" + (y.fps ? y.fps : "") + " " + container,
 					url: abrStreamingUrl,
 					width: y.width,
@@ -4042,7 +4091,7 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 					codec: codecs,
 					bitrate: y.bitrate,
 				}, abrStreamingUrl, y, initialPlayerData.playerConfig.mediaCommonConfig.mediaUstreamerRequestConfig.videoPlaybackUstreamerConfig,
-					{ visitorData: visitorData?.replaceAll("%3D", "="), dataSyncId: clientConfig?.DATASYNC_ID, visitorDataType: visitorDataType});
+					{ visitorData: visitorData?.replaceAll("%3D", "="), dataSyncId: clientConfig?.DATASYNC_ID, visitorDataType: visitorDataType}, parentUrl, usedLogin);
 			})).filter(x => x != null),
 		//Audio
 		(initialPlayerData.streamingData.adaptiveFormats
@@ -4058,7 +4107,7 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 				const duration = parseInt(parseInt(y.approxDurationMs) / 1000) ?? 0;
 				if (isNaN(duration))
 					return null;
-				return new YTABRAudioSource({
+				return new YTABRAudioSource(y.itag, {
 					name: "UMP " + (y.audioTrack?.displayName ? y.audioTrack.displayName : codecs),
 					url: abrStreamingUrl,
 					width: y.width,
@@ -4070,7 +4119,7 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 					audioChannels: y.audioChannels,
 					language: ytLangIdToLanguage(y.audioTrack?.id)
 				}, abrStreamingUrl, y, initialPlayerData.playerConfig.mediaCommonConfig.mediaUstreamerRequestConfig.videoPlaybackUstreamerConfig,
-					{ visitorData: visitorData?.replaceAll("%3D", "="), dataSyncId: clientConfig?.DATASYNC_ID, visitorDataType: visitorDataType});
+					{ visitorData: visitorData?.replaceAll("%3D", "="), dataSyncId: clientConfig?.DATASYNC_ID, visitorDataType: visitorDataType}, parentUrl, usedLogin);
 			})).filter(x => x != null)
 	);
 }
@@ -6156,6 +6205,40 @@ source.testing = function(url) {
 	return generated;
 }
 
+source.testUMPRecovery = async function(){
+	const url = ""
+	USE_ABR_VIDEOS = true;
+	const item = this.getContentDetails(url);
+	console.log(item);
+
+	const video = item.video.videoSources.find(x=>x.name.startsWith("UMP") && x.container == "video/webm" && x.height == 480);
+	
+	const generated = video.generate();
+	const executor = video.getRequestExecutor();
+
+
+	let failed = false;
+	for(let i = 12; i < 18; i++) {
+		for(let x = 0; x < 3; x++) {
+			try {
+				executor.executeRequest("https://grayjay.app/internal/video?segIndex=" + i, {});
+				break;
+			}
+			catch(ex) {
+				console.error("FAILED REQ (" + i + "): " + ex);
+				await delay(1000);
+			}
+			if(x == 2)
+				failed = true;
+		}
+		if(failed)
+			break;
+		await delay(2000);
+		if(i == 15)
+			alert("Change network and press ok");
+	}
+	return;
+};
 source.testUMP = async function(url, startSegment, endSegment, loops = 2){
 	USE_ABR_VIDEOS = true;
 	const item = this.getContentDetails(url);
@@ -6528,6 +6611,14 @@ class BotGuardGenerator {
 				});
 		}
 	}
+	recreateMinter() {
+		if (!this.mintConstructor)
+			throw "No Mint Constructor";
+		if (!this.snapshotResult)
+			throw "No Snapshot Result";
+		const minter = this.constructMinter();
+		return minter;
+	}
 	constructMinter() {
 		if (!this.mintConstructor)
 			throw "No Mint Constructor";
@@ -6620,6 +6711,49 @@ class BotGuardGenerator {
 				log("Minting failed due to: " + ex);
 			}
 		});
+	}
+	
+	generateBase64Sync(visitorId, dataSyncId, cb, type) {
+		const result = this.generateSync(visitorId, dataSyncId, type);
+		if(!result)
+			return undefined;
+		const originId = visitorId;
+		let poToken = btoa(String.fromCharCode(...result))
+			.replace(/\+/g, '-')
+			.replace(/\//g, '_');
+		return poToken;
+	}
+	generateSync(visitorId, dataSyncId, type){
+		if(!this.mint)
+			return undefined;
+		try {
+			const minter = this.mint;
+			if(!visitorId && !dataSyncId)
+				throw new ScriptException("No visitor or datasync Id provided for botguard");
+	
+			let idToUse = visitorId ?? dataSyncId;
+	
+			console.log("Minting visitor: " + idToUse);
+			const poToken = minter(new TextEncoder().encode(idToUse));
+			const poTokenBase64 = btoa(String.fromCharCode(...poToken))
+				.replace(/\+/g, '-')
+				.replace(/\//g, '_');
+
+			//TODO: Handle dataSync
+			const newPoToken = {
+				token: poToken,
+				tokenBase64: poTokenBase64,
+				expires: this.mintExpire
+			};
+			this.generatedTokens[idToUse] = newPoToken;
+			log("New PO Token: " + newPoToken.tokenBase64);
+			if(_settings?.notify_bg)
+				bridge.toast("New Botguard Token: " + (type ? "(" + type + ") " : "") + newPoToken?.tokenBase64?.substring(0, 10) + "...");
+			return poToken;
+		}
+		catch(ex) {
+			log("Minting failed due to: " + ex);
+		}
 	}
 }
 
