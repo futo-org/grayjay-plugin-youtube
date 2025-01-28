@@ -131,6 +131,11 @@ function getClientContext(isAuth = false) {
 	return (isAuth) ? _clientContextAuth : _clientContext;
 }
 
+var _setMetadata = false;
+source.enableMetadata = function() {
+	_setMetadata = true;
+}
+
 //#region Source Methods
 source.setSettings = function(settings) {
 	_settings = settings;
@@ -619,6 +624,12 @@ else {
 		}
 
 		const finalResult = videoDetails;
+
+		if(_setMetadata) {
+			finalResult.metaData = {
+				"initialData": JSON.stringify(initialData)
+			}
+		}
 		finalResult.__initialData = initialData;
 		if(!!_settings["youtubeActivity"] && useLogin) {
 			finalResult.__playerData = initialPlayerData;
