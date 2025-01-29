@@ -2063,20 +2063,34 @@ function generateDash(sourceObj, ustreamerConfig, abrUrl, itag) {
 			streams.push(stream);
 	}
 
-	const webmHeaderData = streams[0].data;
-	const webmHeader = new WEBMHeader(webmHeaderData, 
-		sourceObj.mimeType.split(";")[0],
-		/codecs=\"(.+)\"/.exec(sourceObj.mimeType)[1],
-		sourceObj.width, 
-		sourceObj.height);
-	const urlPrefix = (isVideo) ?
-		"https://grayjay.internal/video" :
-		"https://grayjay.internal/audio";
-	const dash = generateWEBMDash(webmHeader, 
-		urlPrefix + "/internal/segment.webm?segIndex=$Number$", 
-		urlPrefix + "/internal/init.webm");
-	
-	return [dash, umpResp, webmHeader];
+	const headerData = streams[0].data;
+	let header = undefined;
+	if(sourceObj.mimeType.indexOf("webm") > 0) {
+	 	const webmHeader = new WEBMHeader(headerData, sourceObj.mimeType.split(";")[0], /codecs=\"(.+)\"/.exec(sourceObj.mimeType)[1], sourceObj.width, sourceObj.height);
+		const urlPrefix = (isVideo) ?
+			 "https://grayjay.internal/video" :
+			 "https://grayjay.internal/audio";
+		const dash = generateWEBMDash(webmHeader, 
+			 urlPrefix + "/internal/segment.webm?segIndex=$Number$", 
+			 urlPrefix + "/internal/init.webm");
+		 
+		return [dash, umpResp, webmHeader];
+	}
+	else if(sourceObj.mimeType.indexOf("mp4") > 0) {
+		const mp4Header = new MP4Header(headerData, sourceObj.mimeType.split(";")[0], /codecs=\"(.+)\"/.exec(sourceObj.mimeType)[1], sourceObj.width, sourceObj.height);
+		if(IS_TESTING)
+			console.log("Parsed MP4: ", mp4Header);
+		const urlPrefix = (isVideo) ?
+			 "https://grayjay.internal/video" :
+			 "https://grayjay.internal/audio";
+		const dash = generateWEBMDash(mp4Header, 
+			 urlPrefix + "/internal/segment.mp4?segIndex=$Number$", 
+			 urlPrefix + "/internal/init.mp4");
+		 
+		return [dash, umpResp, mp4Header];
+	}
+	else
+		throw new ScriptException("Unsupported mimetype: " + sourceObj.mimeType);
 }
 
 function generateWEBMDash(webm, templateUrl, initUrl) {
@@ -2323,6 +2337,8 @@ class YTABRExecutor {
 					log("UMP Cues: " + this.header.cues.join(", "));
 					throw new ScriptException("Zero time for non-zero segment?");
 				}
+				if(this.header.cueTimeScale)
+					return parseInt((time / this.header.cueTimeScale) * 1000);
 				return time;
 			}
 			else
@@ -2518,7 +2534,8 @@ class YTABRExecutor {
 					}
 					else {
 						console.warn("Regenerating executor due to missing streams");
-						bridge.toast("UMP [" + this.type + "] no streams, attempting recovery (ip change?)");
+						if(!!_settings.notify_ump_recovery)
+							bridge.toast("UMP [" + this.type + "] no streams, attempting recovery (ip change?)");
 						this.recreateExecutor();
 						return this.executeRequest(url, headers, retryCount, overrideSegment);
 					}
@@ -4077,11 +4094,11 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 
 	return new UnMuxVideoSourceDescriptor(
 		(initialPlayerData.streamingData.adaptiveFormats
-			.filter(x => x.mimeType.startsWith("video/webm"))
+			.filter(x => x.mimeType.startsWith("video/webm") || x.mimeType.startsWith("video/mp4"))
 			.map(y => {
 				const codecs = y.mimeType.substring(y.mimeType.indexOf('codecs=\"') + 8).slice(0, -1);
 				const container = y.mimeType.substring(0, y.mimeType.indexOf(';'));
-				if (codecs.startsWith("av01"))
+				if (!_settings.allow_av1 && codecs.startsWith("av01"))
 					return null; //AV01 is unsupported.
 
 				const duration = parseInt(parseInt(y.approxDurationMs) / 1000) ?? 0;
@@ -4105,11 +4122,11 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 			})).filter(x => x != null),
 		//Audio
 		(initialPlayerData.streamingData.adaptiveFormats
-			.filter(x => x.mimeType.startsWith("audio/webm"))
+			.filter(x => x.mimeType.startsWith("audio/webm") || x.mimeType.startsWith("audio/mp4"))
 			.map(y => {
 				const codecs = y.mimeType.substring(y.mimeType.indexOf('codecs=\"') + 8).slice(0, -1);
 				const container = y.mimeType.substring(0, y.mimeType.indexOf(';'));
-				if (codecs.startsWith("av01"))
+				if (!_settings.allow_av1 && codecs.startsWith("av01"))
 					return null; //AV01 is unsupported.
 
 				const visitorData = usedLogin ? null : (clientConfig?.EOM_VISITOR_DATA ?? clientConfig?.VISITOR_DATA);
@@ -6169,17 +6186,6 @@ function binaryReadFloat(bytes, pointer, size) {
 //#endregion
 
 
-//#region MP4
-
-class MP4Header {
-	constructor(bytes) {
-
-	}
-}
-
-//#endregion
-
-
 let pb = {};
 source.testProtobuf = function() {
 	let test2 = new pb.VideoPlaybackRequest_pb.VideoPlaybackRequestInfo();
@@ -6249,19 +6255,18 @@ source.testUMPRecovery = async function(){
 	}
 	return;
 };
-source.testUMP = async function(url, startSegment, endSegment, loops = 2){
+source.testUMP = async function(url, startSegment, endSegment){
 	USE_ABR_VIDEOS = true;
 	const item = this.getContentDetails(url);
 	console.log(item);
 
-	const video = item.video.videoSources.find(x=>x.name.startsWith("UMP") && x.container == "video/webm" && x.height == 480);
+	const video = item.video.audioSources.find(x=>x.name.startsWith("UMP") && x.container == "audio/mp4");
 
-	for(let i = 0; i < loops; i++) {
-		console.log("Loop: " + i);
-		const generated = video.generate();
-		const executor = video.getRequestExecutor();
+	const generated = video.generate();
+	console.log("Generated:", generated);
+	const executor = video.getRequestExecutor();
 
-
+	if(endSegment && endSegment > 0) {
 		for(let i = startSegment; i < endSegment; i++) {
 			executor.executeRequest("https://grayjay.app/internal/video?segIndex=" + i, {});
 			await delay(2000);
@@ -6275,6 +6280,132 @@ const delay = (delayInms) => {
 
 console.log("LOADED");
 
+//#region MP4
+
+class MP4Header {
+	constructor(bytes, mimeType, codec, width, height) {
+		this.timescale = 0;
+		this.duration = 0;
+		this.cues = [];
+
+		this.mimeType = mimeType;
+		this.codec = codec;
+		this.width = width;
+		this.height = height;
+		this.samplingFrequency = 48000;
+
+		let pointer = {index: 0};
+		
+		function readBoxHeader(pointer) {
+			const size = binaryReadUInt(bytes, pointer, 4) - 8;
+			const type = String.fromCharCode(...binaryReadBytes(bytes, pointer, 4));
+			return [type, size];
+		}
+
+		let mp4Duration = -1;
+		let mp4DurationInCueTimescale = -1;
+		let mp4DurationTimescale = -1;
+		let mp4CueTimescale = -1;
+
+		
+		let foundTypes = [];
+		while(pointer.index < bytes.length) {
+			const [type, size] = readBoxHeader(pointer);
+			const startOffset = pointer.index;
+			foundTypes.push(type + ": " + size);
+
+			switch(type) {
+				case "moov":
+					while(pointer.index - startOffset < size && pointer.index < bytes.length) {
+						const [moovType, moovSize] = readBoxHeader(pointer);
+						switch(moovType) {
+							case "mvhd":
+								const mvhdStartOffset = pointer.index;
+								const version = binaryReadByte(bytes, pointer);
+								const flags = binaryReadBytes(bytes, pointer, 3);
+								if(version == 1) {
+									const creationTime = binaryReadUInt(bytes, pointer, 8);
+									const modifyTime = binaryReadUInt(bytes, pointer, 8);
+								}
+								else {
+									const creationTime = binaryReadUInt(bytes, pointer, 4);
+									const modifyTime = binaryReadUInt(bytes, pointer, 4);
+								}
+								mp4DurationTimescale = binaryReadUInt(bytes, pointer, 4);
+								if(version == 1)
+									mp4Duration = binaryReadUInt(bytes, pointer, 8);
+								else
+									mp4Duration = binaryReadUInt(bytes, pointer, 4);
+								pointer.index = mvhdStartOffset + moovSize;
+							break;
+							default:
+								pointer.index += moovSize;
+							break;
+						}
+					}
+					if(pointer.index > startOffset + size) {
+						throw new ScriptException("Invalid amount of bytes read from moov section.");
+					}
+				break;
+				case "sidx": 
+					this.indexRangeStart = startOffset;
+					this.indexRangeEnd = startOffset + size;
+					const version = binaryReadByte(bytes, pointer);
+					const flags = binaryReadBytes(bytes, pointer, 3);
+					const referenceID = binaryReadUInt(bytes, pointer, 4);
+					mp4CueTimescale = binaryReadUInt(bytes, pointer, 4);
+					mp4DurationInCueTimescale = (mp4Duration / mp4DurationTimescale) * mp4CueTimescale;
+					
+					let earliestPresentationTime = -1;
+					if(version == 0) {
+						earliestPresentationTime = binaryReadUInt(bytes, pointer, 4);
+						let firstOffset = binaryReadUInt(bytes, pointer, 4);
+					}
+					else {
+						earliestPresentationTime = binaryReadUInt(bytes, pointer, 8);
+						let firstOffset = binaryReadUInt(bytes, pointer, 8);
+					}
+
+					binaryReadUInt(bytes, pointer, 2);
+					const referenceCount = binaryReadUInt(bytes, pointer, 2);
+
+					let currentPresentationTime = earliestPresentationTime;
+					this.cues.push(currentPresentationTime);
+					for(let i = 0; i < referenceCount - 1; i++) {
+						const referenceSize = binaryReadUInt(bytes, pointer, 4);
+						const segmentDuration = binaryReadUInt(bytes, pointer, 4);
+						const deltaTimeStartsWith = binaryReadUInt(bytes, pointer, 4);
+
+						currentPresentationTime += segmentDuration;
+						this.cues.push(currentPresentationTime);
+					}
+
+					binaryReadUInt(bytes, pointer, 4); //referenceSize
+					const lastSegmentDuration = binaryReadUInt(bytes, pointer, 4);
+					binaryReadUInt(bytes, pointer, 4);
+
+					if(this.cues[this.cues.length - 1] + lastSegmentDuration != mp4DurationInCueTimescale)
+						throw new ScriptException("Cue points not lining up.");
+					
+					if(pointer.index != startOffset + size)
+						throw new ScriptException("Invalid amount of bytes read from sidx section.");
+				break;
+				default:
+					pointer.index += size;
+					break;
+			}
+		}
+		console.log("MP4 Segments:", foundTypes);
+		this.durationSeconds = mp4Duration / mp4DurationTimescale;
+		this.durationCueTimescale = (mp4Duration / mp4DurationTimescale) * mp4CueTimescale;
+		this.cueTimeScale = mp4CueTimescale;
+		this.timescale = mp4CueTimescale * 1000;
+		this.duration = (mp4Duration / mp4DurationTimescale) * 1000;
+	}
+
+}
+
+//#endregion
 
 //#region WEBM
 class WEBMHeader {

@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 226,
+	"version": 227,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -219,6 +219,14 @@
 			"type": "Header"
 		},
 		{
+			"variable": "allow_av1",
+			"name": "Allow AV1",
+			"description": "Adds AV1 option when available, MAY NOT BE SUPPORTED YET!",
+			"type": "Boolean",
+			"default": "false",
+			"warningDialog": "AV1 support might not work yet, this allows you to return the stream even if its not supported (for testing)"
+		},
+		{
 			"variable": "notify_cipher",
 			"name": "Show Cipher every Video",
 			"description": "Shows a toast with the cipher when loading a video",
@@ -229,6 +237,13 @@
 			"variable": "notify_bg",
 			"name": "Show every new Botguard Token",
 			"description": "Shows a toast with the botguard token used changed",
+			"type": "Boolean",
+			"default": "false"
+		},
+		{
+			"variable": "notify_ump_recovery",
+			"name": "Show every time UMP disconnects",
+			"description": "Shows a toast whenever UMP goes into a reconnection mode",
 			"type": "Boolean",
 			"default": "false"
 		}
@@ -256,5 +271,14 @@
 	},
 
 	"supportedClaimTypes": [2],
-	"primaryClaimFieldType": 1
+	"primaryClaimFieldType": 1,
+
+
+	"changelog": {
+		"227": [
+			"UMP MP4 support (fixes no audio or only 360p for older videos)",
+			"UMP Disconnect toasts now optional",
+			"Opt-in AV1 support"
+		]
+	}
 }
