@@ -4098,7 +4098,9 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 			.map(y => {
 				const codecs = y.mimeType.substring(y.mimeType.indexOf('codecs=\"') + 8).slice(0, -1);
 				const container = y.mimeType.substring(0, y.mimeType.indexOf(';'));
-				if (!_settings.allow_av1 && codecs.startsWith("av01"))
+
+				const isAV1 = codecs.startsWith("av01");
+				if (!_settings.allow_av1 && isAV1)
 					return null; //AV01 is unsupported.
 
 				const duration = parseInt(parseInt(y.approxDurationMs) / 1000) ?? 0;
@@ -4107,9 +4109,10 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 				const visitorData = usedLogin ? null : (clientConfig?.EOM_VISITOR_DATA ?? clientConfig?.VISITOR_DATA);
 				console.log("VisitorData: ", visitorData);
 				log("VisitorDataType: " + visitorDataType);
-				log("")
+				if(isAV1)
+					log("FOUND AV1: " + "UMP " + y.height + "p" + (y.fps ? y.fps : "") + " " + container + ((isAV1) ? " [AV1]" : ""));
 				return new YTABRVideoSource(y.itag, {
-					name: "UMP " + y.height + "p" + (y.fps ? y.fps : "") + " " + container,
+					name: "UMP " + y.height + "p" + (y.fps ? y.fps : "") + " " + container + ((isAV1) ? " [AV1]" : ""),
 					url: abrStreamingUrl,
 					width: y.width,
 					height: y.height,
@@ -4126,7 +4129,9 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 			.map(y => {
 				const codecs = y.mimeType.substring(y.mimeType.indexOf('codecs=\"') + 8).slice(0, -1);
 				const container = y.mimeType.substring(0, y.mimeType.indexOf(';'));
-				if (!_settings.allow_av1 && codecs.startsWith("av01"))
+
+				const isAV1 = codecs.startsWith("av01");
+				if (!_settings.allow_av1 && isAV1)
 					return null; //AV01 is unsupported.
 
 				const visitorData = usedLogin ? null : (clientConfig?.EOM_VISITOR_DATA ?? clientConfig?.VISITOR_DATA);
@@ -4135,7 +4140,7 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 				if (isNaN(duration))
 					return null;
 				return new YTABRAudioSource(y.itag, {
-					name: "UMP " + (y.audioTrack?.displayName ? y.audioTrack.displayName : codecs),
+					name: "UMP " + (y.audioTrack?.displayName ? y.audioTrack.displayName : codecs) + ((isAV1) ? " [AV1]" : ""),
 					url: abrStreamingUrl,
 					width: y.width,
 					height: y.height,
