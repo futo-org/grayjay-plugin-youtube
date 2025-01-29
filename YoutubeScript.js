@@ -4111,7 +4111,7 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 				log("VisitorDataType: " + visitorDataType);
 				if(isAV1)
 					log("FOUND AV1: " + "UMP " + y.height + "p" + (y.fps ? y.fps : "") + " " + container + ((isAV1) ? " [AV1]" : ""));
-				return new YTABRVideoSource(y.itag, {
+				const result =  new YTABRVideoSource(y.itag, {
 					name: "UMP " + y.height + "p" + (y.fps ? y.fps : "") + " " + container + ((isAV1) ? " [AV1]" : ""),
 					url: abrStreamingUrl,
 					width: y.width,
@@ -4119,9 +4119,11 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 					duration: (!isNaN(duration)) ? duration : 0,
 					container: y.mimeType.substring(0, y.mimeType.indexOf(';')),
 					codec: codecs,
-					bitrate: y.bitrate,
+					bitrate: y.bitrate
 				}, abrStreamingUrl, y, initialPlayerData.playerConfig.mediaCommonConfig.mediaUstreamerRequestConfig.videoPlaybackUstreamerConfig,
 					{ visitorData: visitorData?.replaceAll("%3D", "="), dataSyncId: clientConfig?.DATASYNC_ID, visitorDataType: visitorDataType}, parentUrl, usedLogin);
+				result.priority = isAV1;
+				return result;
 			})).filter(x => x != null),
 		//Audio
 		(initialPlayerData.streamingData.adaptiveFormats
@@ -6265,7 +6267,7 @@ source.testUMP = async function(url, startSegment, endSegment){
 	const item = this.getContentDetails(url);
 	console.log(item);
 
-	const video = item.video.videoSources.find(x=>x.name.startsWith("UMP") && x.container == "video/mp4" && x.itag == 136);
+	const video = item.video.videoSources.find(x=>x.name.startsWith("UMP") && x.container == "video/mp4" && x.itag == 299);
 	
 	const generated = video.generate();
 	console.log("Generated:", generated);
@@ -6389,7 +6391,7 @@ class MP4Header {
 					const lastSegmentDuration = binaryReadUInt(bytes, pointer, 4);
 					binaryReadUInt(bytes, pointer, 4);
 
-					if(this.cues[this.cues.length - 1] + lastSegmentDuration != mp4DurationInCueTimescale)
+					if(((this.cues[this.cues.length - 1] + lastSegmentDuration) - mp4DurationInCueTimescale) > 2)
 						throw new ScriptException("Cue points not lining up.");
 					
 					if(pointer.index != startOffset + size)
