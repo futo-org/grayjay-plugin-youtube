@@ -1930,7 +1930,7 @@ class YTABRVideoSource extends DashManifestRawSource {
 	generate() {
 		if(this.lastDash)
 			return this.lastDash;
-		log("Generating ABR Video Dash");
+		log("Generating ABR Video Dash for " + this.sourceObj.itag);
 		getMediaReusableVideoBuffers()?.freeAll();
 		let [dash, umpResp, fileHeader] = generateDash(this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag);
 		this.initialHeader = fileHeader;
@@ -2095,7 +2095,7 @@ function generateDash(sourceObj, ustreamerConfig, abrUrl, itag) {
 
 function generateWEBMDash(webm, templateUrl, initUrl) {
 	const duration = splitMS(webm.duration);
-	const durationFormatted = `PT${duration.hours}H${duration.minutes}M${duration.seconds}.${((duration.miliseconds + "").padStart(3, '0'))}S`;
+	const durationFormatted = `PT${duration.hours}H${duration.minutes}M${parseInt(duration.seconds)}.${((parseInt(duration.miliseconds) + "").padStart(3, '0'))}S`;
 
 	let repCounter = 1;
 	let mpd = `<?xml version="1.0" encoding="UTF-8"?>\n`;
@@ -2128,7 +2128,7 @@ function generateWEBMDash(webm, templateUrl, initUrl) {
 			, indent + " ")
 		, indent + " ")
 	, "");
-
+								log(mpd);
 	return mpd;
 }
 function splitMS(ms) {
@@ -6265,8 +6265,8 @@ source.testUMP = async function(url, startSegment, endSegment){
 	const item = this.getContentDetails(url);
 	console.log(item);
 
-	const video = item.video.audioSources.find(x=>x.name.startsWith("UMP") && x.container == "audio/mp4");
-
+	const video = item.video.videoSources.find(x=>x.name.startsWith("UMP") && x.container == "video/mp4" && x.itag == 136);
+	
 	const generated = video.generate();
 	console.log("Generated:", generated);
 	const executor = video.getRequestExecutor();
@@ -6359,7 +6359,7 @@ class MP4Header {
 					const flags = binaryReadBytes(bytes, pointer, 3);
 					const referenceID = binaryReadUInt(bytes, pointer, 4);
 					mp4CueTimescale = binaryReadUInt(bytes, pointer, 4);
-					mp4DurationInCueTimescale = (mp4Duration / mp4DurationTimescale) * mp4CueTimescale;
+					mp4DurationInCueTimescale = parseInt((mp4Duration / mp4DurationTimescale) * mp4CueTimescale);
 					
 					let earliestPresentationTime = -1;
 					if(version == 0) {
@@ -6402,10 +6402,10 @@ class MP4Header {
 		}
 		console.log("MP4 Segments:", foundTypes);
 		this.durationSeconds = mp4Duration / mp4DurationTimescale;
-		this.durationCueTimescale = (mp4Duration / mp4DurationTimescale) * mp4CueTimescale;
+		this.durationCueTimescale = parseInt((mp4Duration / mp4DurationTimescale) * mp4CueTimescale);
 		this.cueTimeScale = mp4CueTimescale;
 		this.timescale = mp4CueTimescale * 1000;
-		this.duration = (mp4Duration / mp4DurationTimescale) * 1000;
+		this.duration = parseInt((mp4Duration / mp4DurationTimescale) * 1000);
 	}
 
 }
