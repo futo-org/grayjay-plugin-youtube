@@ -2123,7 +2123,8 @@ function generateWEBMDash(webm, templateUrl, initUrl) {
 									xmlTag("S", {t: cue, d: (webm.cues.length > i + 1) ? webm.cues[i + 1] - cue : webm.durationCueTimescale - cue}, undefined, indent + " ")
 								).join("")
 							,indent + " ")
-						,indent + " ")
+						,indent + " ") 
+						+ "                                                                                          \n"//TEMPORARY FIX, FIX MATCH REPLACEMENT
 				,indent + " ")
 			, indent + " ")
 		, indent + " ")
