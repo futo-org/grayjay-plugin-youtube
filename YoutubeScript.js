@@ -413,8 +413,8 @@ else {
 			batchYoutubeDislikesIndex = batchCounter++;
 		}
 
-		/*
 		let batchIOS = -1;
+		/*
 		if(USE_IOS_VIDEOS_FALLBACK && !defaultUMP && !simplify) {
 			requestIOSStreamingData(videoId, batch, getBGDataFromClientConfig(clientConfig, usedLogin));
 			batchIOS = batchCounter++;
