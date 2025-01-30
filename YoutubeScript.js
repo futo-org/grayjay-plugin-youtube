@@ -383,6 +383,7 @@ if(false && (bridge.buildSpecVersion ?? 1) > 1) {
 else {
 	source.getContentDetails = (url, useAuth, simplify, forceUmp) => {
 		useAuth = !!_settings?.authDetails || !!useAuth;
+		console.clear(); //Temp fix for memory leaking
 
 		log("ABR Enabled: " + USE_ABR_VIDEOS);
 		const defaultUMP = USE_ABR_VIDEOS || forceUmp;
@@ -412,11 +413,12 @@ else {
 			batchYoutubeDislikesIndex = batchCounter++;
 		}
 
+		/*
 		let batchIOS = -1;
 		if(USE_IOS_VIDEOS_FALLBACK && !defaultUMP && !simplify) {
-			requestIOSStreamingData(videoId, batch);
+			requestIOSStreamingData(videoId, batch, getBGDataFromClientConfig(clientConfig, usedLogin));
 			batchIOS = batchCounter++;
-		}
+		}*/
 
 		const resps = batch.execute();
 
@@ -431,6 +433,12 @@ else {
 		let clientConfig = getClientConfig(html);
 		let usedLogin = useLogin && bridge.isLoggedIn();
 		
+
+		if(USE_IOS_VIDEOS_FALLBACK && !defaultUMP && !simplify) {
+			resps.push(requestIOSStreamingData(videoId, undefined, getBGDataFromClientConfig(clientConfig, usedLogin)));
+			batchIOS = batchCounter++;
+		}
+
 		let ageRestricted = initialPlayerData.playabilityStatus?.reason?.indexOf("your age") > 0 ?? false;
 		if (initialPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED" && (bridge.isLoggedIn() || !ageRestricted)) {
 			if(!!_settings?.allowLoginFallback && !useLogin) {
@@ -648,6 +656,18 @@ else {
 			return source.getContentRecommendations(url, initialData);
 		}
 
+		if(false) {
+			const bgData = getBGDataFromClientConfig(clientConfig, usedLogin);
+			tryGetBotguard((bg)=>{
+				bg.getTokenOrCreate(bgData.visitorData, bgData.dataSyncId, (pot)=>{
+					console.log("Botguard Token to use:", pot);
+					for(let src of finalResult.video.videoSources)
+						src.pot = pot;
+					for(let src of finalResult.video.audioSources)
+						src.pot = pot;
+				}, bgData.visitorDataType);
+			});
+		}
 		return finalResult;
 	};
 }
@@ -1932,7 +1952,7 @@ class YTABRVideoSource extends DashManifestRawSource {
 			return this.lastDash;
 		log("Generating ABR Video Dash for " + this.sourceObj.itag);
 		getMediaReusableVideoBuffers()?.freeAll();
-		let [dash, umpResp, fileHeader] = generateDash(this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag);
+		let [dash, umpResp, fileHeader] = generateDash(this, this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag);
 		this.initialHeader = fileHeader;
 		this.initialUMP = umpResp;
 		this.lastDash = dash;
@@ -1973,7 +1993,7 @@ class YTABRAudioSource extends DashManifestRawAudioSource {
 			return this.lastDash;
 		log("Generating ABR Audio Dash");
 		getMediaReusableAudioBuffers()?.freeAll();
-		let [dash, umpResp, fileHeader] = generateDash(this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag);
+		let [dash, umpResp, fileHeader] = generateDash(this, this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag);
 		this.initialHeader = fileHeader;
 		this.initialUMP = umpResp;
 		this.lastDash = dash;
@@ -1991,10 +2011,12 @@ class YTABRAudioSource extends DashManifestRawAudioSource {
 			this.initialUMP, this.bgData);
 	}
 }
-function generateDash(sourceObj, ustreamerConfig, abrUrl, itag) {
+function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag) {
 	const now = (new Date()).getTime();
 	const lastAction = (new Date()).getTime() - (Math.random() * 5000);
-	const initialReq = getVideoPlaybackRequest(sourceObj, ustreamerConfig, 0, 0, 0, lastAction, now);
+	if(parentSource.pot)
+		log("Using POT for initial stream request");
+	const initialReq = getVideoPlaybackRequest(sourceObj, ustreamerConfig, 0, 0, 0, lastAction, now, undefined, parentSource.pot);
 	const postData = initialReq.serializeBinary();
 	let initialResp = http.POST(abrUrl, postData, {
 		"Origin": "https://www.youtube.com",
@@ -2378,6 +2400,9 @@ class YTABRExecutor {
 		const reusable = this.reusableBuffer;
 		for(let key of Object.keys(this.segments)) {
 			reusable?.free(this.segments[key].data);
+			const buffer = this.segments[key]?.data?.buffer;
+			if(buffer && !buffer.detached)
+				buffer?.transfer();
 			delete this.segments[key];
 		}
 	}
@@ -2400,6 +2425,7 @@ class YTABRExecutor {
 			log("Remaining audio executors: " + _executorsAudio.length);
 		}
 		this.freeAllSegments();
+		console.clear(); //Temp fix for memory leaking
 	}
 
 	recreateExecutor(){
@@ -2436,6 +2462,7 @@ class YTABRExecutor {
 	}
 
 	executeRequest(url, headers, retryCount, overrideSegment) {
+		console.clear();
 		if(this.childExecutor)
 			return this.childExecutor.executeRequest(url, headers, retryCount, overrideSegment);
 		if(!retryCount)
@@ -3396,7 +3423,7 @@ function requestClientConfig(useMobile = false, useAuth = false) {
 	return getClientConfig(resp.body);
 }
 
-function requestIOSStreamingData(videoId, batch) {
+function requestIOSStreamingData(videoId, batch, visitorData) {
 	const body = {
 		videoId: videoId,
 		cpn: "" + randomString(16),
@@ -3413,12 +3440,17 @@ function requestIOSStreamingData(videoId, batch) {
 				"osVersion": IOS_OS_VERSION_DETAILED,//"15.6.0.19G71",^M
 				"hl": langDisplay,
 				"gl": langRegion,
+				"utcOffsetMinutes": 0
 			},
 			user: {
 				"lockedSafetyMode": false
 			}
 		}
 	};
+	const visitorToken = visitorData?.visitorData ?? visitorData?.dataSyncId;
+	if(visitorData?.visitorData) {
+		body.context.client.visitorData = visitorToken;
+	}
 	const headers = {
 		"Content-Type": "application/json",
 		"User-Agent": USER_AGENT_IOS,
@@ -4076,12 +4108,7 @@ function extractVideoPage_VideoDetails(parentUrl, initialData, initialPlayerData
     return result;
 }
 
-function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig, parentUrl, usedLogin) {
-	
-	const abrStreamingUrl = (initialPlayerData.streamingData.serverAbrStreamingUrl) ? 
-		decryptUrlN(initialPlayerData.streamingData.serverAbrStreamingUrl, jsUrl, false) : undefined;
-	if(!abrStreamingUrl)
-		return undefined;
+function getBGDataFromClientConfig(clientConfig, usedLogin) {
 
 	let visitorDataType = "Unknown";
 	if(usedLogin)
@@ -4092,6 +4119,24 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 		visitorDataType = "VisitorData";
 	else
 		visitorDataType = "Unknown";
+
+	const visitorData = usedLogin ? null : (clientConfig?.EOM_VISITOR_DATA ?? clientConfig?.VISITOR_DATA);
+	console.log("VisitorData: ", visitorData);
+	log("VisitorDataType: " + visitorDataType);
+
+	return { 
+		visitorData: visitorData?.replaceAll("%3D", "="), 
+		dataSyncId: clientConfig?.DATASYNC_ID, 
+		visitorDataType: visitorDataType
+	}
+}
+
+function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig, parentUrl, usedLogin) {
+	
+	const abrStreamingUrl = (initialPlayerData.streamingData.serverAbrStreamingUrl) ? 
+		decryptUrlN(initialPlayerData.streamingData.serverAbrStreamingUrl, jsUrl, false) : undefined;
+	if(!abrStreamingUrl)
+		return undefined;
 
 	return new UnMuxVideoSourceDescriptor(
 		(initialPlayerData.streamingData.adaptiveFormats
@@ -4107,9 +4152,6 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 				const duration = parseInt(parseInt(y.approxDurationMs) / 1000) ?? 0;
 				if (isNaN(duration))
 					return null;
-				const visitorData = usedLogin ? null : (clientConfig?.EOM_VISITOR_DATA ?? clientConfig?.VISITOR_DATA);
-				console.log("VisitorData: ", visitorData);
-				log("VisitorDataType: " + visitorDataType);
 				if(isAV1)
 					log("FOUND AV1: " + "UMP " + y.height + "p" + (y.fps ? y.fps : "") + " " + container + ((isAV1) ? " [AV1]" : ""));
 				const result =  new YTABRVideoSource(y.itag, {
@@ -4122,7 +4164,7 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 					codec: codecs,
 					bitrate: y.bitrate
 				}, abrStreamingUrl, y, initialPlayerData.playerConfig.mediaCommonConfig.mediaUstreamerRequestConfig.videoPlaybackUstreamerConfig,
-					{ visitorData: visitorData?.replaceAll("%3D", "="), dataSyncId: clientConfig?.DATASYNC_ID, visitorDataType: visitorDataType}, parentUrl, usedLogin);
+					getBGDataFromClientConfig(clientConfig, usedLogin), parentUrl, usedLogin);
 				result.priority = isAV1;
 				return result;
 			})).filter(x => x != null),
@@ -4137,8 +4179,6 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 				if (!_settings.allow_av1 && isAV1)
 					return null; //AV01 is unsupported.
 
-				const visitorData = usedLogin ? null : (clientConfig?.EOM_VISITOR_DATA ?? clientConfig?.VISITOR_DATA);
-				log("VisitorDataType: " + visitorDataType);
 				const duration = parseInt(parseInt(y.approxDurationMs) / 1000) ?? 0;
 				if (isNaN(duration))
 					return null;
@@ -4154,7 +4194,7 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 					audioChannels: y.audioChannels,
 					language: ytLangIdToLanguage(y.audioTrack?.id)
 				}, abrStreamingUrl, y, initialPlayerData.playerConfig.mediaCommonConfig.mediaUstreamerRequestConfig.videoPlaybackUstreamerConfig,
-					{ visitorData: visitorData?.replaceAll("%3D", "="), dataSyncId: clientConfig?.DATASYNC_ID, visitorDataType: visitorDataType}, parentUrl, usedLogin);
+					getBGDataFromClientConfig(clientConfig, usedLogin), parentUrl, usedLogin);
 			})).filter(x => x != null)
 	);
 }
@@ -6235,7 +6275,7 @@ source.testUMPRecovery = async function(){
 	const item = this.getContentDetails(url);
 	console.log(item);
 
-	const video = item.video.videoSources.find(x=>x.name.startsWith("UMP") && x.container == "video/webm" && x.height == 480);
+	const video = item.video.videoSources.find(x=>x.name.startsWith("UMP") && x.container == "video/mp4" && x.height == 720);
 	
 	const generated = video.generate();
 	const executor = video.getRequestExecutor();
@@ -6263,23 +6303,33 @@ source.testUMPRecovery = async function(){
 	}
 	return;
 };
-source.testUMP = async function(url, startSegment, endSegment){
+source.testUMP = async function(url, startSegment, endSegment, itag, isAudio){
 	USE_ABR_VIDEOS = true;
 	const item = this.getContentDetails(url);
 	console.log(item);
 
-	const video = item.video.videoSources.find(x=>x.name.startsWith("UMP") && x.container == "video/mp4" && x.itag == 299);
+	let video = (!isAudio) ? 
+		item.video.videoSources.find(x=>x.name.startsWith("UMP") && x.itag == itag) :
+		item.video.audioSources.find(x=>x.name.startsWith("UMP") && x.itag == itag);
+		
+	if(!video)
+		video = item.video.videoSources.find(x=>x.name.startsWith("UMP") && x.container == "video/mp4" && x.height == 720);
 	
-	const generated = video.generate();
-	console.log("Generated:", generated);
-	const executor = video.getRequestExecutor();
 
-	if(endSegment && endSegment > 0) {
-		for(let i = startSegment; i < endSegment; i++) {
-			executor.executeRequest("https://grayjay.app/internal/video?segIndex=" + i, {});
-			await delay(2000);
+	setTimeout(async ()=>{
+		const generated = video.generate();
+		console.log("Generated:", generated);
+		const executor = video.getRequestExecutor();
+
+		if(endSegment && endSegment > 0) {
+			for(let i = startSegment; i < endSegment; i++) {
+				const resp = executor.executeRequest("https://grayjay.app/internal/video?segIndex=" + i, {});
+				resp.buffer.transfer();
+				await delay(2000);
+			}
 		}
-	}
+		executor.cleanup();
+	}, 1000);
 	return;
 };
 const delay = (delayInms) => {
