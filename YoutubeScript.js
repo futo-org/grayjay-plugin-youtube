@@ -434,10 +434,11 @@ else {
 		let usedLogin = useLogin && bridge.isLoggedIn();
 		
 
+		/*
 		if(USE_IOS_VIDEOS_FALLBACK && !defaultUMP && !simplify) {
 			resps.push(requestIOSStreamingData(videoId, undefined, getBGDataFromClientConfig(clientConfig, usedLogin)));
 			batchIOS = batchCounter++;
-		}
+		}*/
 
 		let ageRestricted = initialPlayerData.playabilityStatus?.reason?.indexOf("your age") > 0 ?? false;
 		if (initialPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED" && (bridge.isLoggedIn() || !ageRestricted)) {
@@ -589,7 +590,7 @@ else {
 		else if(USE_IOS_VIDEOS_FALLBACK && !USE_ABR_VIDEOS && !simplify) {
 			const iosDataResp = (batchIOS > 0) ?
 				resps[batchIOS] : 
-				requestIOSStreamingData(videoDetails.id.value);
+				requestIOSStreamingData(videoDetails.id.value, undefined, getBGDataFromClientConfig(clientConfig, usedLogin), usedLogin);
 			if(iosDataResp.isOk) {
 				const iosData = JSON.parse(iosDataResp.body);
 				if(IS_TESTING)
@@ -2016,15 +2017,19 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag) {
 	const lastAction = (new Date()).getTime() - (Math.random() * 5000);
 	if(parentSource.pot)
 		log("Using POT for initial stream request");
+
 	const initialReq = getVideoPlaybackRequest(sourceObj, ustreamerConfig, 0, 0, 0, lastAction, now, undefined, parentSource.pot);
 	const postData = initialReq.serializeBinary();
 	let initialResp = http.POST(abrUrl, postData, {
 		"Origin": "https://www.youtube.com",
 		"Accept": "*/*",
-		"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+		"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"//"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
 	}, false, true);
-	if(!initialResp.isOk)
+	if(!initialResp.isOk) {
+		if(_settings.useUMP)
+			bridge.toast("Please try disabling Force Experimental UMP setting, it is broken at the moment");
 		throw new ScriptException("Failed initial stream request [ " + initialResp.code + "]");
+	}
 
 	const data = initialResp.body;
 	let byteArray = undefined;
@@ -2641,7 +2646,7 @@ function getVideoPlaybackRequest(source, ustreamerConfig, playerPosMs, segmentIn
 	
 	const clientInfo = new pb.VideoPlaybackRequest_pb.ClientInfo();
 	clientInfo.setClientname(1);
-	clientInfo.setClientversion("2.20250107.01.00");
+	clientInfo.setClientversion("2.20250130.01.00");
 	clientInfo.setOsname("Windows");
 	clientInfo.setOsversion("10.0");
 
@@ -2654,12 +2659,12 @@ function getVideoPlaybackRequest(source, ustreamerConfig, playerPosMs, segmentIn
 		info.setVideoheight2maybe(source.height);
 		info.setSelectedqualityheight(source.height);
 	}
-	info.setG7(8613683);
-	info.setCurrentvideopositionms(playerPosMs);
+	info.setG7(104857); //x
+	info.setCurrentvideopositionms(playerPosMs); //x
 	if(lastRequest > 0)
-		info.setTimesincelastrequestms((new Date().getTime() - lastRequest));
-	info.setTimesincelastactionms(Math.floor((new Date()).getTime() - lastAction));
-	info.setDynamicrangecompression(true);
+		info.setTimesincelastrequestms((new Date().getTime() - lastRequest)); //x
+	info.setTimesincelastactionms(Math.floor((new Date()).getTime() - lastAction)); //x
+	info.setDynamicrangecompression(true); //x
 	info.setLatencymsmaybe(Math.floor(Math.random() * 90 + 7));
 	info.setLastmanualdirection(0);
 	info.setTimesincelastmanualformatselectionms(requestStarted);
@@ -2670,8 +2675,6 @@ function getVideoPlaybackRequest(source, ustreamerConfig, playerPosMs, segmentIn
 	//SessionInfo
 	const sessionInfo = new pb.VideoPlaybackRequest_pb.SessionInfo();
 	sessionInfo.setClientinfo(clientInfo);
-	if(pot)
-		sessionInfo.setPot(pot);
 	if(playbackCookie)
 		sessionInfo.setPlaybackcookie(playbackCookie);
 	vidReq.setSessioninfo(sessionInfo);
@@ -2683,6 +2686,7 @@ function getVideoPlaybackRequest(source, ustreamerConfig, playerPosMs, segmentIn
 	if(source.xtags)
 		format.setXtags(source.xtags);
 
+
 	if(segmentIndex > 0) {
 		const bufferedStream = new pb.VideoPlaybackRequest_pb.BufferedStreamInfo()
 		bufferedStream.setFormatid(format);
@@ -2690,12 +2694,14 @@ function getVideoPlaybackRequest(source, ustreamerConfig, playerPosMs, segmentIn
 		bufferedStream.setBufferedsegmentstartindex(1);
 		bufferedStream.setBufferedsegmentendindex(segmentIndex - 1);
 		bufferedStream.setBufferedstarttimems(0);
-		//bufferedStream.setBuffereddurationms(playerPosMs);
+		bufferedStream.setBuffereddurationms(playerPosMs);
 		vidReq.setBufferedstreamsList[bufferedStream];
 		vidReq.setDesiredstreamsList([format]);
 	}
 	if(source.mimeType.startsWith("video/")) {
 		vidReq.setSupportedvideostreamsList([format]);
+		//vidReq.setSupportedvideostreamsList(vformats);
+		//vidReq.setSupportedaudiostreamsList(aformats);
 		info.setMediatypeflags(pb.VideoPlaybackRequest_pb.MediaType.VIDEO);
 	}
 	else if(source.mimeType.startsWith("audio/")) {
@@ -3423,7 +3429,7 @@ function requestClientConfig(useMobile = false, useAuth = false) {
 	return getClientConfig(resp.body);
 }
 
-function requestIOSStreamingData(videoId, batch, visitorData) {
+function requestIOSStreamingData(videoId, batch, visitorData, useLogin) {
 	const body = {
 		videoId: videoId,
 		cpn: "" + randomString(16),
@@ -3448,8 +3454,14 @@ function requestIOSStreamingData(videoId, batch, visitorData) {
 		}
 	};
 	const visitorToken = visitorData?.visitorData ?? visitorData?.dataSyncId;
-	if(visitorData?.visitorData) {
+	if(visitorToken && !useLogin) {
 		body.context.client.visitorData = visitorToken;
+	}
+	else if(visitorData?.visitorDataLogin && useLogin){
+		body.context.client.visitorData = visitorData?.visitorDataLogin;
+	}
+	else if(visitorData?.dataSyncId && useLogin) {
+		body.context.client.datasyncId = visitorData?.dataSyncId;
 	}
 	const headers = {
 		"Content-Type": "application/json",
@@ -3466,11 +3478,11 @@ function requestIOSStreamingData(videoId, batch, visitorData) {
 		"&id=" + videoId
 
 	if(batch) {
-		batch.POST(url, JSON.stringify(body), headers, false);
+		batch.POST(url, JSON.stringify(body), headers, !!useLogin);
 		return null;
 	}
 	else {
-		const resp = http.POST(url, JSON.stringify(body), headers, false);
+		const resp = http.POST(url, JSON.stringify(body), headers, !!useLogin);
 		return resp;
 	}
 }
@@ -4121,11 +4133,13 @@ function getBGDataFromClientConfig(clientConfig, usedLogin) {
 		visitorDataType = "Unknown";
 
 	const visitorData = usedLogin ? null : (clientConfig?.EOM_VISITOR_DATA ?? clientConfig?.VISITOR_DATA);
+	const visitorDataLogin = usedLogin ? (clientConfig?.EOM_VISITOR_DATA ?? clientConfig?.VISITOR_DATA) : null;
 	console.log("VisitorData: ", visitorData);
 	log("VisitorDataType: " + visitorDataType);
 
 	return { 
-		visitorData: visitorData?.replaceAll("%3D", "="), 
+		visitorData: visitorData?.replaceAll("%3D", "="),
+		visitorDataLogin: visitorDataLogin?.replaceAll("%3D", "="),
 		dataSyncId: clientConfig?.DATASYNC_ID, 
 		visitorDataType: visitorDataType
 	}
@@ -6095,6 +6109,11 @@ class UMPResponse {
 						if(stream22)
 							stream22.completed = true;
 					break;
+					case 29: //Unknown
+						const opCode29 = pb.Opcode29_pb.Opcode29.deserializeBinary(segment);
+						
+						console.log("");
+						break;
 					case 35://Opcode35: Playbackcookie
 						const opCode35 = pb.Opcode35_pb.Opcode35.deserializeBinary(segment);
 						this.playbackCookie = opCode35.getPlaybackcookie();
@@ -6103,6 +6122,12 @@ class UMPResponse {
 						const opCode43 = pb.Opcode43_pb.Opcode43.deserializeBinary(segment);
 						this.redirectUrl = opCode43?.getRedirecturl();
 						log("Redirect url found: " + this.redirectUrl);
+					case 44: //Unknown
+						const opCode44 = pb.Opcode44_pb.Opcode44.deserializeBinary(segment);
+						console.error("UMP Error", opCode44.getBda());
+						log("Error:" + opCode44.getBda());
+						console.log("");
+					break;
 				}
 			}
 			else {
