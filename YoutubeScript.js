@@ -550,6 +550,9 @@ else {
 				throw new UnavailableException("No sources found");
 		}
 
+		let bgData = getBGDataFromClientConfig(clientConfig, usedLogin);
+
+
 		//Substitute Dash manifest from Android
 		if(USE_ANDROID_FALLBACK && videoDetails.dash && videoDetails.dash.url) {
 			const androidData = requestAndroidStreamingData(videoDetails.id.value);
@@ -633,6 +636,7 @@ else {
 		}
 
 		const finalResult = videoDetails;
+		finalResult.bgData = bgData;
 
 		if(_setMetadata) {
 			finalResult.metaData = {
@@ -2018,6 +2022,22 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag) {
 	if(parentSource.pot)
 		log("Using POT for initial stream request");
 
+	if(abrUrl) {
+		if(abrUrl.indexOf("&cpn=") <= 0) {
+			abrUrl += "&cpn=" + randomString(16);
+		}
+		if(abrUrl.indexOf("&cver=") <= 0) {
+			abrUrl += "&cver=2.20250131.01.00";
+		}
+		if(abrUrl.indexOf("&rn=") <= 0) {
+			abrUrl += "&rn=1";
+		}
+		if(abrUrl.indexOf("&alr=") <= 0) {
+			abrUrl += "&alr=yes";
+		}
+	}
+
+
 	const initialReq = getVideoPlaybackRequest(sourceObj, ustreamerConfig, 0, 0, 0, lastAction, now, undefined, parentSource.pot);
 	const postData = initialReq.serializeBinary();
 	let initialResp = http.POST(abrUrl, postData, {
@@ -2646,7 +2666,7 @@ function getVideoPlaybackRequest(source, ustreamerConfig, playerPosMs, segmentIn
 	
 	const clientInfo = new pb.VideoPlaybackRequest_pb.ClientInfo();
 	clientInfo.setClientname(1);
-	clientInfo.setClientversion("2.20250130.01.00");
+	clientInfo.setClientversion("2.20250131.01.00");
 	clientInfo.setOsname("Windows");
 	clientInfo.setOsversion("10.0");
 
@@ -2675,6 +2695,8 @@ function getVideoPlaybackRequest(source, ustreamerConfig, playerPosMs, segmentIn
 	//SessionInfo
 	const sessionInfo = new pb.VideoPlaybackRequest_pb.SessionInfo();
 	sessionInfo.setClientinfo(clientInfo);
+	if(pot)
+		sessionInfo.setPot(pot);
 	if(playbackCookie)
 		sessionInfo.setPlaybackcookie(playbackCookie);
 	vidReq.setSessioninfo(sessionInfo);
@@ -2700,8 +2722,6 @@ function getVideoPlaybackRequest(source, ustreamerConfig, playerPosMs, segmentIn
 	}
 	if(source.mimeType.startsWith("video/")) {
 		vidReq.setSupportedvideostreamsList([format]);
-		//vidReq.setSupportedvideostreamsList(vformats);
-		//vidReq.setSupportedaudiostreamsList(aformats);
 		info.setMediatypeflags(pb.VideoPlaybackRequest_pb.MediaType.VIDEO);
 	}
 	else if(source.mimeType.startsWith("audio/")) {
@@ -5768,6 +5788,10 @@ source.decryptUrlTestN = function(n) {
 
 	return decryptUrlN(url, true);
 }
+source.decryptUrlN = function(url, jsUrl) {
+	prepareCipher(jsUrl);
+	return decryptUrlN(url, jsUrl, true);
+}
 
 function decryptUrl(encrypted, jsUrl, doLogging) {
 	if(!encrypted) return null;
@@ -5949,7 +5973,7 @@ function getNDecryptorFunctionCode(code, jsUrl) {
 		throw new ScriptException("Failed to find n decryptor (code)\n" + jsUrl);
 	}
 
-	const regex = new RegExp(/typeof ([a-zA-Z0-9]+)/gs);
+	const regex = new RegExp(/typeof ([a-zA-Z0-9$_]+)/gs);
 	const typeChecks = [];
 	let prefix = "";
 	let typeCheck = undefined;
@@ -6355,6 +6379,49 @@ source.testUMP = async function(url, startSegment, endSegment, itag, isAudio){
 		}
 		executor.cleanup();
 	}, 1000);
+	return;
+};
+source.testIOS = async function(url, itag, isAudio){
+	const item = this.getContentDetails(url);
+	console.log(item);
+
+	let video = (!isAudio) ? 
+		item.video.videoSources.find(x=>x.name.startsWith("IOS") && x.itag == itag) :
+		item.video.audioSources.find(x=>x.name.startsWith("IOS") && x.itag == itag);
+		
+	if(!video)
+		video = item.video.videoSources.find(x=>x.name.startsWith("IOS") && x.container == "video/mp4" && x.height == 720);
+	
+
+	setTimeout(async ()=>{
+		const modifier = video.getRequestModifier();
+		console.log(modifier);
+
+		const modified = modifier.modifyRequest(video.url, {
+			"range": "bytes=0-10240"
+		});
+
+		const resp1 = http.GET(modified.url, modified.headers, false);
+		console.log(resp1);
+		
+
+		setTimeout(()=>{
+			const modified2 = modifier.modifyRequest(video.url, {
+				"accept-ranges": "bytes",
+				"range": "bytes=55103125-55603125"
+			});
+			const resp2 = http.GET(modified2.url, modified2.headers, false);
+			console.log(resp2);
+			if(resp1.isOk)
+				console.log("REQUEST START: PASS")
+			else 
+				console.warn("REQUEST START: FAIL [" + resp1.code + "]");
+			if(resp2.isOk)
+				console.log("REQUEST MIDDLE: PASS");
+			else 
+				console.warn("REQUEST MIDDLE: FAIL [" + resp2.code + "]");
+		});
+	}, 500);
 	return;
 };
 const delay = (delayInms) => {
