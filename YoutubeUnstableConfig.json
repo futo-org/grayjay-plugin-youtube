@@ -1,16 +1,16 @@
 {
-	"name": "Youtube",
+	"name": "Youtube (Unstable)",
 	"description": "One of the biggest video platforms owned by Google",
 	"author": "FUTO",
 	"authorUrl": "https://futo.org",
 	"platformUrl": "https://youtube.com",
-	"sourceUrl": "https://plugins.grayjay.app/Youtube/YoutubeConfig.json",
+	"sourceUrl": "https://plugins.grayjay.app/YoutubeUnstable/YoutubeConfig.json",
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
 
 	"version": 231,
 	"iconUrl": "./youtube.png",
-	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
+	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
 	"scriptSignature": "",
 	"scriptPublicKey": "",
@@ -271,14 +271,5 @@
 	},
 
 	"supportedClaimTypes": [2],
-	"primaryClaimFieldType": 1,
-
-
-	"changelog": {
-		"227": [
-			"UMP MP4 support (fixes no audio or only 360p for older videos)",
-			"UMP Disconnect toasts now optional",
-			"Opt-in AV1 support"
-		]
-	}
+	"primaryClaimFieldType": 1
 }
