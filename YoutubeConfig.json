@@ -98,7 +98,7 @@
 			"name": "Force Experimental UMP Streams",
 			"description": "Force usage of experimental implementation of UMP. May be unstable and cost more performance.",
 			"type": "Boolean",
-			"default": "true"
+			"default": "false"
 		},
 		{
 			"variable": "useAggressiveUMPRecovery",
@@ -290,9 +290,9 @@
 			"Fix: UMP failing on initial load"
 		],
 		"227": [
-			"Feature: Opt-in AV1 support"
+			"Feature: Opt-in AV1 support",
 			"Feature: UMP MP4 support (fixes no audio or only 360p for older videos)",
-			"Improve: UMP Disconnect toasts now optional",
+			"Improve: UMP Disconnect toasts now optional"
 		]
 	}
 }
