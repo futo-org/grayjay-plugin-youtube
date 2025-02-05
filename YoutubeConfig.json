@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 231,
+	"version": 232,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -98,12 +98,19 @@
 			"name": "Force Experimental UMP Streams",
 			"description": "Force usage of experimental implementation of UMP. May be unstable and cost more performance.",
 			"type": "Boolean",
-			"default": "false"
+			"default": "true"
 		},
 		{
 			"variable": "useAggressiveUMPRecovery",
 			"name": "Use Aggressive UMP Recovery",
 			"description": "This feature allows UMP to refetch the entire page to recover from ip changes and such.",
+			"type": "Boolean",
+			"default": "true"
+		},
+		{
+			"variable": "verifyIOSPlayback",
+			"name": "Verify IOS Playback",
+			"description": "This feature will check if iOS sources are playable beyond 60 seconds, or else fallback to other sources.\nMay add a minor delay on video load (< 0.2s)",
 			"type": "Boolean",
 			"default": "true"
 		},
@@ -275,10 +282,17 @@
 
 
 	"changelog": {
+		"332": [
+			"Feature: Verify IOS Playback setting (true by default), checks if iOS sources can be played beyond 60 seconds, or fallback to others.",
+			"Feature: Channel shorts fetching support (may require app update to view new channel tab)"
+		],
+		"331": [
+			"Fix: UMP failing on initial load"
+		],
 		"227": [
-			"UMP MP4 support (fixes no audio or only 360p for older videos)",
-			"UMP Disconnect toasts now optional",
-			"Opt-in AV1 support"
+			"Feature: Opt-in AV1 support"
+			"Feature: UMP MP4 support (fixes no audio or only 360p for older videos)",
+			"Improve: UMP Disconnect toasts now optional",
 		]
 	}
 }
