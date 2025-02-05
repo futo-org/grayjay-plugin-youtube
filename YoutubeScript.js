@@ -609,6 +609,10 @@ else {
 					if(!!_settings["showVerboseToasts"])
 						bridge.toast("Using iOS sources fallback (" + (batchIOS > 0 ? "cached" : "lazily") + ")");
 					let newDescriptor = extractAdaptiveFormats_VideoDescriptor(iosData.streamingData.adaptiveFormats, jsUrl, creationData, "IOS ");
+
+					if(!!_settings.verifyIOSPlayback && !canDoRequestWithBody) {
+						log("Not doing verifyIOSPlayback because canDoRequestWithBody false");
+					}
 					if(!canDoRequestWithBody || !_settings.verifyIOSPlayback || verifyIOSPlayback(newDescriptor))
 						videoDetails.video = newDescriptor;
 					else {
@@ -3561,7 +3565,7 @@ function verifyIOSPlayback(descriptor) {
 
 	let contentLength = (resp1.headers["content-length"]) ? resp1.headers["content-length"][0] : -1;
 	if(contentLength && contentLength <= 0) {
-		log("verifyIOSPlayback failed due couldn't determine content lenght with HEAD (missing header)");
+		log("verifyIOSPlayback failed due couldn't determine content lenght with HEAD (missing header)\n" + JSON.stringify(resp1));
 		return false;
 	}
 
@@ -4041,8 +4045,8 @@ function extractVideoPage_VideoDetails(parentUrl, initialData, initialPlayerData
 		dash: (videoDetails?.isLive ?? false) ? dashSource : null,
 		live: (videoDetails?.isLive ?? false) ? (hlsSource ?? dashSource) : null,
 		video: 
-			((!useAbr) ?
-				extractAdaptiveFormats_VideoDescriptor(initialPlayerData?.streamingData?.adaptiveFormats, jsUrl, contextData, "") :
+			(//(!useAbr) ?
+				//extractAdaptiveFormats_VideoDescriptor(initialPlayerData?.streamingData?.adaptiveFormats, jsUrl, contextData, "") :
 				extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig, parentUrl, usedLogin)
 			)
 			?? new VideoSourceDescriptor([]),

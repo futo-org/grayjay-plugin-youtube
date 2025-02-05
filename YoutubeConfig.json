@@ -282,11 +282,11 @@
 
 
 	"changelog": {
-		"332": [
+		"232": [
 			"Feature: Verify IOS Playback setting (true by default), checks if iOS sources can be played beyond 60 seconds, or fallback to others.",
 			"Feature: Channel shorts fetching support (may require app update to view new channel tab)"
 		],
-		"331": [
+		"231": [
 			"Fix: UMP failing on initial load"
 		],
 		"227": [
