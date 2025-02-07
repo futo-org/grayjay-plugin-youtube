@@ -8,6 +8,7 @@ const URL_CONTEXT_M = "https://m.youtube.com";
 const URL_CHANNEL_VIDEOS = "/videos";
 const URL_CHANNEL_STREAMS = "/streams";
 const URL_CHANNEL_PLAYLISTS = "/playlists";
+const URL_CHANNEL_SHORTS = "/shorts";
 const URL_SEARCH_SUGGESTIONS = "https://suggestqueries-clients6.youtube.com/complete/search?client=youtube&gs_ri=youtube&ds=yt&q=";
 const URL_SEARCH = "https://www.youtube.com/youtubei/v1/search";
 const URL_BROWSE = "https://www.youtube.com/youtubei/v1/browse";
@@ -126,6 +127,8 @@ var _prefetchHomeUsed = false;
 
 const rootWindow = this;
 
+const canDoRequestWithBody = !!http.requestWithBody;
+
 
 function getClientContext(isAuth = false) {
 	return (isAuth) ? _clientContextAuth : _clientContext;
@@ -147,6 +150,9 @@ source.enable = (conf, settings, saveStateStr) => {
 	config = conf ?? {};
 	_settings = settings ?? {};
 	
+	const codecs = (bridge.getHardwareCodecs) ? bridge.getHardwareCodecs() : [];
+	log(JSON.stringify(codecs));
+
 	USE_ABR_VIDEOS = !!_settings.useUMP && (bridge.buildSpecVersion ?? 1) > 1;
 	log("ABR Enabled: " + USE_ABR_VIDEOS);
 
@@ -603,7 +609,15 @@ else {
 					if(!!_settings["showVerboseToasts"])
 						bridge.toast("Using iOS sources fallback (" + (batchIOS > 0 ? "cached" : "lazily") + ")");
 					let newDescriptor = extractAdaptiveFormats_VideoDescriptor(iosData.streamingData.adaptiveFormats, jsUrl, creationData, "IOS ");
-					videoDetails.video = newDescriptor;
+
+					if(!!_settings.verifyIOSPlayback && !canDoRequestWithBody) {
+						log("Not doing verifyIOSPlayback because canDoRequestWithBody false");
+					}
+					if(!canDoRequestWithBody || !_settings.verifyIOSPlayback || verifyIOSPlayback(newDescriptor))
+						videoDetails.video = newDescriptor;
+					else {
+						log("IOS PLAYBACK VERIFICATION FAILED, FALLBACK");
+					}
 				}
 				else {
 					log("Failed to get iOS stream data, fallback to UMP")
@@ -1311,7 +1325,7 @@ source.getChannel = (url) => {
 
 source.getChannelCapabilities = () => {
 	return {
-		types: (!!_settings?.channelRssOnly) ? [Type.Feed.Mixed] : [Type.Feed.Videos, Type.Feed.Streams],
+		types: (!!_settings?.channelRssOnly) ? [Type.Feed.Mixed] : [Type.Feed.Videos, Type.Feed.Streams, Type.Feed.Shorts],
 		sorts: (!!_settings?.channelRssOnly) ? [Type.Order.Chronological] : [Type.Order.Chronological, "Popular"]//
 	};
 }
@@ -1362,6 +1376,10 @@ source.getChannelContents = (url, type, order, filters) => {
 			targetTab = "Home";
 			url = url;
 			break;
+		case Type.Feed.Shorts:
+			targetTab = "Shorts";
+			url = url + URL_CHANNEL_SHORTS;
+			break;
 		default:
 			throw new ScriptException("Unsupported type: " + type);
 	}
@@ -1381,7 +1399,8 @@ source.getChannelContents = (url, type, order, filters) => {
 
 	const channel = extractChannel_PlatformChannel(initialData, url);
 	const contextData = {
-		authorLink: new PlatformAuthorLink(new PlatformID(PLATFORM, channel.id.value, config.id, PLATFORM_CLAIMTYPE), channel.name, channel.url, channel.thumbnail)
+		authorLink: new PlatformAuthorLink(new PlatformID(PLATFORM, channel.id.value, config.id, PLATFORM_CLAIMTYPE), channel.name, channel.url, channel.thumbnail),
+		allowShorts: type == Type.Feed.Shorts
 	};
 	const tabs = extractPage_Tabs(initialData, contextData);
 	const tab = tabs.find(x=>x.title == targetTab);
@@ -2409,12 +2428,13 @@ class YTABRExecutor {
 			key = parseInt(key);
 
 			if(key < index || key > index + 7) {
-				log("UMP [" + this.type + "]: disposing segment " + key + " (<" + index + " || >" + (index + 6) + ")");
+				log("UMP [" + this.type + "]: disposing segment " + key + " (<" + index + " || >" + (index + 6) + ", total: " + Object.keys(this.segments).length + ")");
 				reusable?.free(this.segments[key].data);
 				const segment = this.segments[key];
 				if(segment) {
 					delete segment.data;
 				}
+				this.segments[key] = undefined;
 				delete this.segments[key];
 			}
 		}
@@ -2423,9 +2443,11 @@ class YTABRExecutor {
 		const reusable = this.reusableBuffer;
 		for(let key of Object.keys(this.segments)) {
 			reusable?.free(this.segments[key].data);
-			const buffer = this.segments[key]?.data?.buffer;
-			if(buffer && !buffer.detached)
-				buffer?.transfer();
+			const segment = this.segments[key];
+			const buffer = segment?.data?.buffer;
+			if(segment)
+				delete segment.data;
+			this.segments[key] = undefined;
 			delete this.segments[key];
 		}
 	}
@@ -2530,10 +2552,17 @@ class YTABRExecutor {
 
 		const data = initialResp.body;
 		let byteArray = undefined;
-		if(data instanceof ArrayBuffer)
+		let bufferToDispose = undefined;
+		if(data instanceof ArrayBuffer) {
+			log("Using ArrayBuffer!");
 			byteArray = new Uint8Array(data);
-		else if(data instanceof Int8Array)
+			bufferToDispose = data;
+		}
+		else if(data instanceof Int8Array) {
+			log("Using Uint8Array!");
 			byteArray = new Uint8Array(data.buffer);
+			bufferToDispose = data.buffer;
+		}
 		else if(typeof data == "string")
 			byteArray = Uint8Array.from(atob(data), c => c.charCodeAt(0))
 		else {
@@ -2551,8 +2580,9 @@ class YTABRExecutor {
 			const stream = umpResp.streams[key]
 			if(stream.itag == this.itag && stream.segmentIndex >= segment)
 				streamsArr.push(stream);
-			else
-				log(`IGNORING itag:${stream.itag}, segmentIndex: ${stream.segmentIndex}, segmentLength: ${stream.segmentSize}, completed: ${stream.completed}`)
+			else {
+				log(`IGNORING itag:${stream.itag}, segmentIndex: ${stream.segmentIndex}, segmentLength: ${stream.segmentSize}, completed: ${stream.completed}`);
+			}
 		}
 		log("UMP [" + this.type + "] stream resps: \n" + streamsArr
 			.map(x=>`itag:${x.itag}, segmentIndex: ${x.segmentIndex}, segmentLength: ${x.segmentSize}, completed: ${x.completed}`)
@@ -3504,6 +3534,58 @@ function requestIOSStreamingData(videoId, batch, visitorData, useLogin) {
 		return resp;
 	}
 }
+function verifyIOSPlayback(descriptor) {
+	const startTime = new Date();
+	if (!descriptor) {
+		log("verifyIOSPlayback failed due to no descriptor");
+		return false;
+	}
+	if (!descriptor.audioSources) {
+		log("verifyIOSPlayback failed due to no descriptor");
+		return false;
+	}
+	if (descriptor.audioSources.length == 0) {
+		log("verifyIOSPlayback failed due to no audio streams");
+		return false;
+	}
+	const sourceToTest = descriptor.audioSources[0];
+
+
+	const modifier = sourceToTest.getRequestModifier();
+	console.log(modifier);
+
+	const modified = modifier.modifyRequest(sourceToTest.url, {
+
+	});
+	const resp1 = http.request("HEAD", modified.url, modified.headers, false);
+	if (!resp1.isOk) {
+		log("verifyIOSPlayback failed due couldn't determine content lenght with HEAD");
+		return false;
+	}
+
+	let contentLength = (resp1.headers["content-length"]) ? resp1.headers["content-length"][0] : -1;
+	if(contentLength && contentLength <= 0) {
+		log("verifyIOSPlayback failed due couldn't determine content lenght with HEAD (missing header)\n" + JSON.stringify(resp1));
+		return false;
+	}
+
+	const toTestRange = "bytes=" + (contentLength - 150) + "-" + (contentLength - 50);
+
+	const modified2 = modifier.modifyRequest(sourceToTest.url, {
+		"accept-ranges": "bytes",
+		"range": toTestRange
+	});
+	const resp2 = http.GET(modified2.url, modified2.headers, false);
+	console.log(resp2);
+	if (!resp2.isOk) {
+		log("verifyIOSPlayback failed due couldn't get segment beyond 60 seconds");
+		return false;
+	}
+	const timeToCheck = (new Date()).getTime() - startTime.getTime();
+	log("verifyIOSPlayback succeeded in " + timeToCheck + "ms");
+	return true;
+}
+
 function requestAndroidStreamingData(videoId) {
 	const body = {
 		videoId: videoId,
@@ -3963,8 +4045,8 @@ function extractVideoPage_VideoDetails(parentUrl, initialData, initialPlayerData
 		dash: (videoDetails?.isLive ?? false) ? dashSource : null,
 		live: (videoDetails?.isLive ?? false) ? (hlsSource ?? dashSource) : null,
 		video: 
-			((!useAbr) ?
-				extractAdaptiveFormats_VideoDescriptor(initialPlayerData?.streamingData?.adaptiveFormats, jsUrl, contextData, "") :
+			(//(!useAbr) ?
+				//extractAdaptiveFormats_VideoDescriptor(initialPlayerData?.streamingData?.adaptiveFormats, jsUrl, contextData, "") :
 				extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig, parentUrl, usedLogin)
 			)
 			?? new VideoSourceDescriptor([]),
@@ -4812,6 +4894,12 @@ function switchKeyVideo(content, contextData) {
 		adSlotRenderer(adSlot) {
 			return null;
 		},
+		shortsLockupViewModel(renderer) {
+			if(contextData?.allowShorts)
+				return extractShortLockupViewModel_Video(renderer, contextData);
+			else
+				return null;
+		},
 		default(name) {
 			return null;
 		}
@@ -5004,6 +5092,35 @@ function extractVideoRenderer_Video(videoRenderer, contextData) {
 			extractType: "Video"
 		});
 }
+
+function extractShortLockupViewModel_Video(videoRenderer, contextData) {
+	if(!contextData || !contextData.authorLink)
+		return null;
+
+	const author = (contextData && contextData.authorLink) ?
+		contextData.authorLink : extractVideoRenderer_AuthorLink(videoRenderer);
+
+	if(IS_TESTING)
+		console.log(videoRenderer);
+
+	const id = videoRenderer?.onTap?.innertubeCommand?.reelWatchEndpoint?.videoId;
+	if(!id)
+		return null;
+
+		return new PlatformVideo({
+			id: new PlatformID(PLATFORM, id, config.id),
+			name: escapeUnicode(extractText_String(videoRenderer.overlayMetadata.primaryText.content)),
+			thumbnails: extractThumbnail_Thumbnails(videoRenderer.thumbnail),
+			author: author,
+			uploadDate: undefined,//parseInt(extractAgoText_Timestamp(videoRenderer.publishedTimeText.simpleText)),
+			duration: 0, //extractHumanTime_Seconds(videoRenderer.lengthText.simpleText),
+			viewCount: extractFirstNumber_Integer(extractText_String(videoRenderer.overlayMetadata.secondaryText)),
+			url: URL_BASE + "/watch?v=" + id,
+			isLive: false,
+			extractType: "Video",
+			isShort: true
+		});
+}
 function extractReelItemRenderer_Video(reelItemRenderer) {
 	//We don't do shorts for now..
 	return null;
@@ -5127,7 +5244,12 @@ function extractRuns_AuthorLink(runs) {
 }
 
 function extractThumbnail_Thumbnails(thumbnail) {
-	return new Thumbnails(thumbnail.thumbnails.map(x=>new Thumbnail(escapeUnicode(x.url), x.height)));
+	if(thumbnail.thumbnails)
+		return new Thumbnails(thumbnail.thumbnails.map(x=>new Thumbnail(escapeUnicode(x.url), x.height)));
+	else if(thumbnail.sources)
+		return new Thumbnails(thumbnail.sources.map(x=>new Thumbnail(escapeUnicode(x.url), x.height)));
+	else 
+		return new Thumbnails([]);
 }
 function extractThumbnail_BestUrl(thumbnail) {
     if(!thumbnail?.thumbnails || thumbnail.thumbnails.length <= 0)

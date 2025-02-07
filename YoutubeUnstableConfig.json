@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 231,
+	"version": 232,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -104,6 +104,13 @@
 			"variable": "useAggressiveUMPRecovery",
 			"name": "Use Aggressive UMP Recovery",
 			"description": "This feature allows UMP to refetch the entire page to recover from ip changes and such.",
+			"type": "Boolean",
+			"default": "true"
+		},
+		{
+			"variable": "verifyIOSPlayback",
+			"name": "Verify IOS Playback",
+			"description": "This feature will check if iOS sources are playable beyond 60 seconds, or else fallback to other sources.\nMay add a minor delay on video load (< 0.2s)",
 			"type": "Boolean",
 			"default": "true"
 		},
