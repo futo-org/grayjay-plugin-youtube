@@ -1325,7 +1325,7 @@ source.getChannel = (url) => {
 
 source.getChannelCapabilities = () => {
 	return {
-		types: (!!_settings?.channelRssOnly) ? [Type.Feed.Mixed] : [Type.Feed.Videos, Type.Feed.Streams, Type.Feed.Shorts],
+		types: (!!_settings?.channelRssOnly) ? [Type.Feed.Mixed] : (Type.Feed.Shorts ? [Type.Feed.Videos, Type.Feed.Streams, Type.Feed.Shorts] : [Type.Feed.Videos, Type.Feed.Streams]),
 		sorts: (!!_settings?.channelRssOnly) ? [Type.Order.Chronological] : [Type.Order.Chronological, "Popular"]//
 	};
 }
