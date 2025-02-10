@@ -2094,9 +2094,9 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag) {
 		if(!umpResp.streams[0]?.data) {
 			if(umpResp.redirectUrl && i < maxRedirect - 1) {
 				bridge.toast("UMP Redirect..");
-				console.log("UMP Redirect..", { redirectUrl: umpResp.redirectUrl });
+				log("UMP Redirect URL:" + umpResp.redirectUrl);
 				abrUrl = decryptUrlN(umpResp.redirectUrl, parentSource.jsUrl);
-				console.log("UMP Redirect..n param decrypted", { redirectUrl: abrUrl });
+				log("UMP Redirect URL (n param decrypted): " + abrUrl);
 				
 				log("UMP Redirecting to:\n" + umpResp.redirectUrl);
 				initialResp = http.POST(abrUrl, postData, {
