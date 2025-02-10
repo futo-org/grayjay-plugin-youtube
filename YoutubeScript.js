@@ -4033,7 +4033,7 @@ function extractVideoPage_VideoDetails(parentUrl, initialData, initialPlayerData
 			url: initialPlayerData?.streamingData?.dashManifestUrl
 		}) : null;
 
-	const abrStreamingUrl = (initialPlayerData.streamingData.serverAbrStreamingUrl) ? 
+	const abrStreamingUrl = (initialPlayerData?.streamingData?.serverAbrStreamingUrl) ? 
 		decryptUrlN(initialPlayerData.streamingData.serverAbrStreamingUrl, jsUrl, false) : undefined;
 	useAbr = abrStreamingUrl && (!!useAbr || USE_ABR_VIDEOS);
 	const video = {
@@ -4979,11 +4979,16 @@ function extractRichItemRenderer_Video(itemRenderer, contextData) {
 	return switchKeyVideo(content, contextData); 
 }
 function extractVideoWithContextRenderer_Video(videoRenderer, contextData) {
-
 	const liveBadges = videoRenderer.thumbnailOverlays?.filter(x=>
 		x.thumbnailOverlayTimeStatusRenderer?.style == "LIVE" ||
 		x.thumbnailOverlayTimeStatusRenderer?.accessibility?.accessibilityData?.label == "LIVE");
 	let isLive = liveBadges != null && liveBadges.length > 0;
+
+	const isMemberOnly = !!videoRenderer.badges?.find(x=>x?.metadataBadgeRenderer?.label == "Members only");
+	if(isMemberOnly) {
+		log("MEMBER ONLY VIDEO IGNORED");
+		return null;
+	}
 
 	isLive = isLive || ((videoRenderer.badges?.filter(x=>x.metadataBadgeRenderer?.style == "BADGE_STYLE_TYPE_LIVE_NOW")?.length ?? 0) > 0)
 
@@ -5040,13 +5045,18 @@ function extractVideoWithContextRenderer_Video(videoRenderer, contextData) {
 	}
 }
 function extractVideoRenderer_Video(videoRenderer, contextData) {
-
 	const liveBadges = videoRenderer.badges?.filter(x=>x.metadataBadgeRenderer?.label == "LIVE");
 	const liveOverlays = videoRenderer.thumbnailOverlays?.filter(x=>
 		x.thumbnailOverlayTimeStatusRenderer?.style == "LIVE" ||
 		x.thumbnailOverlayTimeStatusRenderer?.accessibility?.accessibilityData?.label == "LIVE");
 	let isLive = (liveBadges != null && liveBadges.length > 0) ||
 		(liveOverlays != null && liveOverlays.length > 0);
+
+	const isMemberOnly = !!videoRenderer.badges?.find(x=>x.metadataBadgeRenderer?.label == "Members only");
+	if(isMemberOnly) {
+		log("MEMBER ONLY VIDEO IGNORED");
+		return null;
+	}
 
 	let plannedDate = null;
 	if(videoRenderer.upcomingEventData?.startTime)
