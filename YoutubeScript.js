@@ -1952,7 +1952,7 @@ class YTVideoSource extends VideoUrlRangeSource {
 }
 
 class YTABRVideoSource extends DashManifestRawSource {
-    constructor(itag, obj, url, sourceObj, ustreamerConfig, bgData, parentUrl, usedLogin) {
+    constructor(itag, obj, url, sourceObj, ustreamerConfig, bgData, parentUrl, usedLogin, jsUrl) {
 		super(obj);
 		this.itag = itag;
 		this.url = url;
@@ -1969,6 +1969,7 @@ class YTABRVideoSource extends DashManifestRawSource {
 		this.visitorDataType = bgData.visitorDataType;
 		this.parentUrl = parentUrl;
 		this.usedLogin = !!usedLogin;
+		this.jsUrl = jsUrl;
     }
 
 	generate() {
@@ -1995,7 +1996,7 @@ class YTABRVideoSource extends DashManifestRawSource {
 	}
 }
 class YTABRAudioSource extends DashManifestRawAudioSource {
-    constructor(itag, obj, url, sourceObj, ustreamerConfig, bgData, parentUrl, usedLogin) {
+    constructor(itag, obj, url, sourceObj, ustreamerConfig, bgData, parentUrl, usedLogin, jsUrl) {
 		super(obj);
 		this.itag = itag;
 		this.url = url;
@@ -2010,6 +2011,7 @@ class YTABRAudioSource extends DashManifestRawAudioSource {
 		this.visitorDataType = bgData.visitorDataType;
 		this.parentUrl = parentUrl;
 		this.usedLogin = !!usedLogin;
+		this.jsUrl = jsUrl;
     }
 
 	generate() {
@@ -2092,7 +2094,10 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag) {
 		if(!umpResp.streams[0]?.data) {
 			if(umpResp.redirectUrl && i < maxRedirect - 1) {
 				bridge.toast("UMP Redirect..");
-				abrUrl = umpResp.redirectUrl;
+				console.log("UMP Redirect..", { redirectUrl: umpResp.redirectUrl });
+				abrUrl = decryptUrlN(umpResp.redirectUrl, parentSource.jsUrl);
+				console.log("UMP Redirect..n param decrypted", { redirectUrl: abrUrl });
+				
 				log("UMP Redirecting to:\n" + umpResp.redirectUrl);
 				initialResp = http.POST(abrUrl, postData, {
 					"Origin": "https://www.youtube.com",
@@ -4278,7 +4283,7 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 					codec: codecs,
 					bitrate: y.bitrate
 				}, abrStreamingUrl, y, initialPlayerData.playerConfig.mediaCommonConfig.mediaUstreamerRequestConfig.videoPlaybackUstreamerConfig,
-					getBGDataFromClientConfig(clientConfig, usedLogin), parentUrl, usedLogin);
+					getBGDataFromClientConfig(clientConfig, usedLogin), parentUrl, usedLogin, jsUrl);
 				result.priority = isAV1;
 				return result;
 			})).filter(x => x != null),
@@ -4308,7 +4313,7 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 					audioChannels: y.audioChannels,
 					language: ytLangIdToLanguage(y.audioTrack?.id)
 				}, abrStreamingUrl, y, initialPlayerData.playerConfig.mediaCommonConfig.mediaUstreamerRequestConfig.videoPlaybackUstreamerConfig,
-					getBGDataFromClientConfig(clientConfig, usedLogin), parentUrl, usedLogin);
+					getBGDataFromClientConfig(clientConfig, usedLogin), parentUrl, usedLogin, jsUrl);
 			})).filter(x => x != null)
 	);
 }
