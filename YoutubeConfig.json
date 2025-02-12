@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 234,
+	"version": 235,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -282,6 +282,9 @@
 
 
 	"changelog": {
+		"235": [
+			"Fix Cipher"
+		],
 		"234": [
 			"Improvement: Filter member-only videos from channel contents",
 			"Improvement: Possible UMP redirect fix"
