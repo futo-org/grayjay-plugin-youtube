@@ -282,6 +282,13 @@
 
 
 	"changelog": {
+		"234": [
+			"Improvement: Filter member-only videos from channel contents",
+			"Improvement: Possible UMP redirect fix"
+		],
+		"233": [
+			"Minor hotfix"
+		],
 		"232": [
 			"Feature: Verify IOS Playback setting (true by default), checks if iOS sources can be played beyond 60 seconds, or fallback to others.",
 			"Feature: Channel shorts fetching support (may require app update to view new channel tab)"
