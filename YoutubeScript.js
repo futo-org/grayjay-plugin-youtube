@@ -150,8 +150,10 @@ source.enable = (conf, settings, saveStateStr) => {
 	config = conf ?? {};
 	_settings = settings ?? {};
 	
+	/*Broken on Android 9, dont re-add till then
 	const codecs = (bridge.getHardwareCodecs) ? bridge.getHardwareCodecs() : [];
 	log(JSON.stringify(codecs));
+	*/
 
 	USE_ABR_VIDEOS = !!_settings.useUMP && (bridge.buildSpecVersion ?? 1) > 1;
 	log("ABR Enabled: " + USE_ABR_VIDEOS);

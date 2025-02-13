@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 235,
+	"version": 236,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -282,6 +282,9 @@
 
 
 	"changelog": {
+		"236": [
+			"Fix Android 9 error (remove query hardware codecs)"
+		],
 		"235": [
 			"Fix Cipher"
 		],
