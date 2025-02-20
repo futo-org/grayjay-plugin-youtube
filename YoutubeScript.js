@@ -5907,7 +5907,8 @@ const REGEX_CIPHERS = [
 	new RegExp("\\bc&&\\(c=([a-zA-Z0-9$]{2,})\\(decodeURIComponent\\(c\\)\\)"),
 	new RegExp("([\\w$]+)\\s*=\\s*function\\((\\w+)\\)\\{\\s*\\2=\\s*\\2\\.split\\(\"\"\\)\\s*;"),
 	new RegExp("\\b([\\w$]{2,})\\s*=\\s*function\\((\\w+)\\)\\{\\s*\\2=\\s*\\2\\.split\\(\"\"\\)\\s*;"),
-	new RegExp("\\bc\\s*&&\\s*d\\.set\\([^,]+\\s*,\\s*(:encodeURIComponent\\s*\\()([a-zA-Z0-9$]+)\\(")
+	new RegExp("\\bc\\s*&&\\s*d\\.set\\([^,]+\\s*,\\s*(:encodeURIComponent\\s*\\()([a-zA-Z0-9$]+)\\("),
+	new RegExp("([\\w$]+)\\s*=\\s*function\\((\\w+)\\)\\{\\s*\\2=\\s*\\2\\.split\\([a-z-A-Z0-9\\$_]+\\[[0-9]\\]\\)\\s*;")
 ];
 const REGEX_DECRYPT_N_VARIANTS = [
 	/\.get\(\"n\"\)\)&&\([a-zA-Z0-9$_]=([a-zA-Z0-9$_]+)(?:\[(\d+)])?\([a-zA-Z0-9$_]\)/,
@@ -6159,7 +6160,21 @@ function getCipherFunctionCode(playerCode, jsUrl) {
         if(bridge.devSubmit) bridge.devSubmit("getCipherFunctionCode - Failed to find cipher (function)", jsUrl);
 		throw new ScriptException("Failed to find cipher (function)\n" + jsUrl);
 	}
-	const cipherFunctionCode = cipherFunctionCodeMatch[1];
+	let cipherFunctionCode = cipherFunctionCodeMatch[1];
+	
+
+	//Special case..TBD if better
+	const cipherSplitJoinConstants = cipherFunctionCode.match("split\\((.*?)\\).*?join\\((.*?)\\)");
+	if(cipherSplitJoinConstants && cipherSplitJoinConstants.length > 2) {
+		const splitConstant = cipherSplitJoinConstants[1];
+		const joinConstant = cipherSplitJoinConstants[2];
+		if(splitConstant == joinConstant && splitConstant.length > 0 && splitConstant[0].match(/[a-zA-Z]/)) {
+			log("Detected split/join constant in cipher, replacing (" + splitConstant + ")");
+			cipherFunctionCode = cipherFunctionCode.replaceAll(splitConstant, "\"\"");
+		}
+	}
+
+
 	const cipherFunctionCodeVar = "var " + cipherFunctionCode;
 	const helperObjNameMatch = cipherFunctionCode.match(";([A-Za-z0-9_\\$]{2,3})\\...\\(");
 	if(!helperObjNameMatch) {
@@ -6185,6 +6200,7 @@ function getCipherFunctionCode(playerCode, jsUrl) {
 		cipherFunctionCodeVar + "\n" +
 		functionCode + "})()";
 }
+source.getCipherFunctionCode = getCipherFunctionCode;
 function escapeRegex(str) {
 	return str?.replace("$", "\\$");
 }

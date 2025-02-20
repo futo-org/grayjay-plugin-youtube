@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 237,
+	"version": 238,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -282,6 +282,9 @@
 
 
 	"changelog": {
+		"238": [
+			"Fix: Cipher edgecase"
+		],
 		"237": [
 			"Fix: Import Subscriptions on some accounts",
 			"Improvement: Playback tracker optimalization in certain scenarios",
