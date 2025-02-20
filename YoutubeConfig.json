@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 236,
+	"version": 237,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -231,7 +231,7 @@
 			"description": "Adds AV1 option when available, MAY NOT BE SUPPORTED YET!",
 			"type": "Boolean",
 			"default": "false",
-			"warningDialog": "AV1 support might not work yet, this allows you to return the stream even if its not supported (for testing)"
+			"warningDialog": "AV1 support might not work yet, this allows you to return the stream even if its not supported (for testing).\n\nAV1 exclusively works on UMP for now."
 		},
 		{
 			"variable": "notify_cipher",
@@ -282,6 +282,11 @@
 
 
 	"changelog": {
+		"237": [
+			"Fix: Import Subscriptions on some accounts",
+			"Improvement: Playback tracker optimalization in certain scenarios",
+			"Improvement: Warning when toggling AV1 setting that it requires UMP for now"
+		],
 		"236": [
 			"Fix Android 9 error (remove query hardware codecs)"
 		],

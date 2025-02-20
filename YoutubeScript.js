@@ -38,7 +38,7 @@ const URL_YOUTUBE_SPONSORBLOCK = "https://sponsor.ajay.app/api/skipSegments?vide
 const URL_YOUTUBE_RSS = "https://www.youtube.com/feeds/videos.xml?channel_id=";
 
 //Newest to oldest
-const CIPHER_TEST_HASHES = ["e7567ecf", "3bb1f723", "3400486c", "b22ef6e7", "a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
+const CIPHER_TEST_HASHES = ["d50f54ef", "e7567ecf", "3bb1f723", "3400486c", "b22ef6e7", "a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
 const CIPHER_TEST_PREFIX = "/s/player/";
 const CIPHER_TEST_SUFFIX = "/player_ias.vflset/en_US/base.js";
 
@@ -389,9 +389,13 @@ if(false && (bridge.buildSpecVersion ?? 1) > 1) {
 	//TODO: Implement more compact version using new api batch spec
 }
 else {
-	source.getContentDetails = (url, useAuth, simplify, forceUmp) => {
+	source.getContentDetails = (url, useAuth, simplify, forceUmp, options) => {
 		useAuth = !!_settings?.authDetails || !!useAuth;
 		console.clear(); //Temp fix for memory leaking
+
+		if(options?.noSources) {
+			console.log("getContentDetails without sources requested");
+		}
 
 		log("ABR Enabled: " + USE_ABR_VIDEOS);
 		const defaultUMP = USE_ABR_VIDEOS || forceUmp;
@@ -476,7 +480,7 @@ else {
 		
 		const jsUrlMatch = html.match("PLAYER_JS_URL\"\\s?:\\s?\"(.*?)\"");
 		const jsUrl = (jsUrlMatch) ? jsUrlMatch[1] : clientContext.PLAYER_JS_URL;
-		const isNewCipher = prepareCipher(jsUrl);
+		const isNewCipher = (!options?.noSources) ? prepareCipher(jsUrl) : false;
 
 		if(jsUrl && _settings?.notify_cipher) {
 			const hashMatch = /player\/([a-zA-Z0-9]+)\/player/.exec(jsUrl);
@@ -542,7 +546,8 @@ else {
 		};
 
 		const videoDetails = extractVideoPage_VideoDetails(url, initialData, initialPlayerData, {
-			url: url
+			url: url,
+			noSources: !!(options?.noSources)
 		}, jsUrl, useLogin, defaultUMP, clientConfig, usedLogin);
 		if(videoDetails == null)
 			throw new UnavailableException("No video found");
@@ -1100,7 +1105,7 @@ source.getPlaybackTracker = function(url, initialPlayerData) {
 	if(!_settings["youtubeActivity"] || !bridge.isLoggedIn())
 		return null;
 	if(!initialPlayerData) {
-		const video = source.getContentDetails(url, true, true);
+		const video = source.getContentDetails(url, true, true, false, {noSources: true});
 		initialPlayerData = video.__playerData;
 		if(!initialPlayerData)
 			throw new ScriptException("No playerData for playback tracker");
@@ -1837,8 +1842,12 @@ source.getUserSubscriptions = function() {
 			let subMenu = sectionListRenderer?.subMenu;
 			if(sectionListRenderer?.targetId == "browse-feedFEchannels") {
 				const sectionContents = sectionListRenderer?.contents;
-				const itemContents = sectionContents ? sectionContents[0].itemSectionRenderer?.contents : null;
-				if(!itemContents || itemContents[0].channelListItemRenderer) {
+				const itemContents = sectionContents ? 
+					(
+						sectionContents[0].itemSectionRenderer?.contents ??
+						sectionContents[0]?.shelfRenderer?.content?.verticalListRenderer?.items
+					) : null;
+				if(itemContents && itemContents[0].channelListItemRenderer) {
 					let subs = [];
 					for(let item of itemContents) {
 						switchKey(item, {
@@ -4035,7 +4044,7 @@ function extractVideoPage_VideoDetails(parentUrl, initialData, initialPlayerData
 			url: initialPlayerData?.streamingData?.dashManifestUrl
 		}) : null;
 
-	const abrStreamingUrl = (initialPlayerData?.streamingData?.serverAbrStreamingUrl) ? 
+	const abrStreamingUrl = (!contextData?.noSources && initialPlayerData?.streamingData?.serverAbrStreamingUrl) ? 
 		decryptUrlN(initialPlayerData.streamingData.serverAbrStreamingUrl, jsUrl, false) : undefined;
 	useAbr = abrStreamingUrl && (!!useAbr || USE_ABR_VIDEOS);
 	const video = {
@@ -4052,9 +4061,9 @@ function extractVideoPage_VideoDetails(parentUrl, initialData, initialPlayerData
 		dash: (videoDetails?.isLive ?? false) ? dashSource : null,
 		live: (videoDetails?.isLive ?? false) ? (hlsSource ?? dashSource) : null,
 		video: 
-			(//(!useAbr) ?
+			((!contextData?.noSources) ? //(!useAbr) ?
 				//extractAdaptiveFormats_VideoDescriptor(initialPlayerData?.streamingData?.adaptiveFormats, jsUrl, contextData, "") :
-				extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig, parentUrl, usedLogin)
+				extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig, parentUrl, usedLogin) : undefined
 			)
 			?? new VideoSourceDescriptor([]),
 		subtitles: initialPlayerData

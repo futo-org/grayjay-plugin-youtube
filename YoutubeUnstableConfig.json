@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 236,
+	"version": 237,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -278,5 +278,38 @@
 	},
 
 	"supportedClaimTypes": [2],
-	"primaryClaimFieldType": 1
+	"primaryClaimFieldType": 1,
+	
+	"changelog": {
+		"237": [
+			"Fix: Import Subscriptions on some accounts",
+			"Improvement: Playback tracker optimalization in certain scenarios",
+			"Improvement: Warning when toggling AV1 setting that it requires UMP for now"
+		],
+		"236": [
+			"Fix Android 9 error (remove query hardware codecs)"
+		],
+		"235": [
+			"Fix Cipher"
+		],
+		"234": [
+			"Improvement: Filter member-only videos from channel contents",
+			"Improvement: Possible UMP redirect fix"
+		],
+		"233": [
+			"Minor hotfix"
+		],
+		"232": [
+			"Feature: Verify IOS Playback setting (true by default), checks if iOS sources can be played beyond 60 seconds, or fallback to others.",
+			"Feature: Channel shorts fetching support (may require app update to view new channel tab)"
+		],
+		"231": [
+			"Fix: UMP failing on initial load"
+		],
+		"227": [
+			"Feature: Opt-in AV1 support",
+			"Feature: UMP MP4 support (fixes no audio or only 360p for older videos)",
+			"Improve: UMP Disconnect toasts now optional"
+		]
+	}
 }
