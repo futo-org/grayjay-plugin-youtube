@@ -6149,7 +6149,7 @@ function getCipherFunctionCode(playerCode, jsUrl) {
 		}
 	}
 	if(!cipherFunctionName)	{
-        if(bridge.devSubmit) bridge.devSubmit("getCipherFunctionCode - Failed to find cipher (name)", jsUrl);
+        if(bridge.devSubmit) bridge.devSubmit("getCipherFunctionCode - Failed to find cipher (name)", jsUrl + "\n\n" + playerCode);
 		throw new ScriptException("Failed to find cipher (name)\n" + jsUrl);
 	}
 	const cipherFunctionCodeMatch = playerCode.match("(" + escapeRegex(cipherFunctionName) + "=function\\([a-zA-Z0-9_]+\\)\\{.+?\\})");
