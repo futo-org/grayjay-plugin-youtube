@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://futo.org",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 238,
+	"version": 239,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -281,6 +281,9 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"239": [
+			"Fix: More advanced cipher fixes"
+		],
 		"238": [
 			"Fix: Cipher edgecase"
 		],
