@@ -6041,11 +6041,22 @@ function prepareCipher(jsUrl) {
 		console.log("Javascript Url: " + URL_BASE + jsUrl);
 		const playerCode = playerCodeResp.body;
 
-		const cipherFunctionCode = getCipherFunctionCode(playerCode, jsUrl);
+		const constantsMatch = playerCode.match(/var [a-zA-Z_\$0-9]+=(\".+index.m3u8.+"\.split\(.+\))/);
+	
+		let constantArrayName = (constantsMatch && constantsMatch.length > 2) ? constantsMatch[1] : undefined;
+		let constantArrayValues = (constantsMatch && constantsMatch.length > 2) ? eval(constantsMatch[2]) : undefined;
+	
+		if(constantArrayName) {
+			console.log("Detected Array variable: ", constantArrayName, constantArrayValues);
+			if(constantArrayName && constantArrayValues)
+				playerCode = replaceConstantArrayValues(constantArrayName, constantArrayValues, playerCode);
+		}
+
+		const cipherFunctionCode = getCipherFunctionCode(playerCode, jsUrl, constantArrayName, constantArrayValues);
 		console.log("DecodeCipher Function: " + cipherFunctionCode);
 		_cipherDecode[jsUrl] = eval(cipherFunctionCode);
 
-		const decryptFunctionCode = getNDecryptorFunctionCode(playerCode, jsUrl);
+		const decryptFunctionCode = getNDecryptorFunctionCode(playerCode, jsUrl, constantArrayName, constantArrayValues);
 
 		console.log("DecryptN Function: " + decryptFunctionCode);
 		_nDecrypt[jsUrl] = eval(decryptFunctionCode);
@@ -6073,9 +6084,17 @@ function clearCipher(jsUrl) {
     if(_nDecrypt[jsUrl])
         _nDecrypt[jsUrl] = undefined;
 }
-function getNDecryptorFunctionCode(code, jsUrl) {
+function getNDecryptorFunctionCode(code, jsUrl, constantArrayName, constantArrayValues) {
 	if(_nDecrypt[jsUrl])
 		return _nDecrypt[jsUrl];
+
+	if(constantArrayName == "check") {
+		const constantsMatch = playerCode.match(/var ([a-zA-Z_\$0-9]+)=(\".+index.m3u8.+"\.split\(.+\))/);
+		constantArrayName = (constantsMatch && constantsMatch.length > 2) ? constantsMatch[1] : undefined;
+		constantArrayValues = (constantsMatch && constantsMatch.length > 2) ? eval(constantsMatch[2]) : undefined;
+		code = replaceConstantArrayValues(constantArrayName, constantArrayValues, code);
+	}
+
 	let nDecryptFunctionArrNameMatch = undefined;
 	for(let i = 0; i < REGEX_DECRYPT_N_VARIANTS.length; i++) {
 		nDecryptFunctionArrNameMatch = REGEX_DECRYPT_N_VARIANTS[i].exec(code);
@@ -6137,10 +6156,37 @@ function getNDecryptorFunctionCode(code, jsUrl) {
 		"return function decryptN(nEncrypted){ return " + nDecryptFunctionName + "(nEncrypted); } \n" +
 	"})()";
 }
-function getCipherFunctionCode(playerCode, jsUrl) {
+source.getNDecryptorFunctionCode = getNDecryptorFunctionCode;
+function extractConstantArrayValue(constantName, constantArray, input, jsUrl) {
+	const arrayAccessorMatch = input.match(/([a-zA-Z\$_0-9]+)\[([0-9]+)\]/);
+	if(!arrayAccessorMatch || arrayAccessorMatch.length < 1)
+		throw new ScriptException("Failed to extract cipher constant [" + input + "], pattern\n" + jsUrl);
+	const variable = arrayAccessorMatch[1];
+	if(variable != constantName)
+		throw new ScriptException("Failed to extract cipher constant [" + input + "], diff constant (" + constantName + ")\n" + jsUrl);
+	const index = parseInt(arrayAccessorMatch[2]);
+	return constantArray[index];
+}
+function replaceConstantArrayValues(constantName, constantArray, code) {
+	for(let i = 0; i < constantArray.length; i++) {
+		const accessor = constantName + "[" + i + "]";
+		code = code.replaceAll(accessor, JSON.stringify(constantArray[i]));
+	}
+	return code;
+}
+function getCipherFunctionCode(playerCode, jsUrl, constantArrayName, constantArrayValues) {
 	if(_cipherDecode[jsUrl])
 		return _cipherDecode[jsUrl];
 	let cipherFunctionName = null;
+
+	if(constantArrayName == "check") {
+		const constantsMatch = playerCode.match(/var ([a-zA-Z_\$0-9]+)=(\".+index.m3u8.+"\.split\(.+\))/);
+		constantArrayName = (constantsMatch && constantsMatch.length > 2) ? constantsMatch[1] : undefined;
+		constantArrayValues = (constantsMatch && constantsMatch.length > 2) ? eval(constantsMatch[2]) : undefined;
+		if(constantArrayName && constantArrayValues)
+			playerCode = replaceConstantArrayValues(constantArrayName, constantArrayValues, playerCode);
+	}
+
 
 	for(let i = 0; i < REGEX_CIPHERS.length; i++) {
 		const match = playerCode.match(REGEX_CIPHERS[i]);
@@ -6161,19 +6207,6 @@ function getCipherFunctionCode(playerCode, jsUrl) {
 		throw new ScriptException("Failed to find cipher (function)\n" + jsUrl);
 	}
 	let cipherFunctionCode = cipherFunctionCodeMatch[1];
-	
-
-	//Special case..TBD if better
-	const cipherSplitJoinConstants = cipherFunctionCode.match("split\\((.*?)\\).*?join\\((.*?)\\)");
-	if(cipherSplitJoinConstants && cipherSplitJoinConstants.length > 2) {
-		const splitConstant = cipherSplitJoinConstants[1];
-		const joinConstant = cipherSplitJoinConstants[2];
-		if(splitConstant == joinConstant && splitConstant.length > 0 && splitConstant[0].match(/[a-zA-Z]/)) {
-			log("Detected split/join constant in cipher, replacing (" + splitConstant + ")");
-			cipherFunctionCode = cipherFunctionCode.replaceAll(splitConstant, "\"\"");
-		}
-	}
-
 
 	const cipherFunctionCodeVar = "var " + cipherFunctionCode;
 	const helperObjNameMatch = cipherFunctionCode.match(";([A-Za-z0-9_\\$]{2,3})\\...\\(");
