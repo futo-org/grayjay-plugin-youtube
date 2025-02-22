@@ -282,6 +282,12 @@
 
 
 	"changelog": {
+		"240": [
+			"Fix: Cipher fix (hopefully final one for a while)",
+			"Fix: Replacing & Unicode in author titles",
+			"Fix: 'simpleText' parsing failures fallback to empty values for now",
+			"Fix: Correct repo url"
+		],
 		"239": [
 			"Fix: More advanced cipher fixes"
 		],

@@ -1406,7 +1406,7 @@ source.getChannelContents = (url, type, order, filters) => {
 
 	const channel = extractChannel_PlatformChannel(initialData, url);
 	const contextData = {
-		authorLink: new PlatformAuthorLink(new PlatformID(PLATFORM, channel.id.value, config.id, PLATFORM_CLAIMTYPE), channel.name, channel.url, channel.thumbnail),
+		authorLink: new PlatformAuthorLink(new PlatformID(PLATFORM, channel.id.value, config.id, PLATFORM_CLAIMTYPE), escapeUnicode(channel.name), channel.url, channel.thumbnail),
 		allowShorts: type == Type.Feed.Shorts
 	};
 	const tabs = extractPage_Tabs(initialData, contextData);
@@ -1444,7 +1444,7 @@ source.getChannelPlaylists = (url) => {
 	    throw new ScriptException("No channel data found for: " + url);
 	const channel = extractChannel_PlatformChannel(initialData, url);
 	const contextData = {
-		authorLink: new PlatformAuthorLink(new PlatformID(PLATFORM, channel.id.value, config.id, PLATFORM_CLAIMTYPE), channel.name, channel.url, channel.thumbnail)
+		authorLink: new PlatformAuthorLink(new PlatformID(PLATFORM, channel.id.value, config.id, PLATFORM_CLAIMTYPE), escapeUnicode(channel.name), channel.url, channel.thumbnail)
 	};
 	const tabs = extractPage_Tabs(initialData, contextData);
 	
@@ -1491,7 +1491,7 @@ source.peekChannelContents = function(url, type, allowChannelFetch) {
 
     const author = new PlatformAuthorLink(
         new PlatformID(PLATFORM, null, id, PLATFORM_CLAIMTYPE),
-        authorNode.children.find(x=>x.name == "name").value,
+        escapeUnicode(authorNode.children.find(x=>x.name == "name").value),
         authorNode.children.find(x=>x.name == "uri").value,
         ""
     )
@@ -5110,8 +5110,8 @@ function extractVideoRenderer_Video(videoRenderer, contextData) {
 			name: escapeUnicode(extractRuns_String(videoRenderer.title.runs)),
 			thumbnails: extractThumbnail_Thumbnails(videoRenderer.thumbnail),
 			author: author,
-			uploadDate: parseInt(extractAgoText_Timestamp(videoRenderer.publishedTimeText.simpleText)),
-			duration: extractHumanTime_Seconds(videoRenderer.lengthText.simpleText),
+			uploadDate: videoRenderer.publishedTimeText ? parseInt(extractAgoText_Timestamp(videoRenderer.publishedTimeText.simpleText)) : 0,
+			duration: videoRenderer.lengthText ? extractHumanTime_Seconds(videoRenderer.lengthText.simpleText) : 0,
 			viewCount: extractFirstNumber_Integer(extractText_String(videoRenderer.viewCountText)),
 			url: URL_BASE + "/watch?v=" + videoRenderer.videoId,
 			isLive: false,
@@ -5297,7 +5297,7 @@ function extractVideoWithContextRenderer_AuthorLink(videoRenderer) {
 	let channelUrl = videoRenderer.channelThumbnail?.channelThumbnailWithLinkRenderer?.navigationEndpoint?.browseEndpoint?.canonicalBaseUrl;
 	if(channelUrl) channelUrl = URL_BASE + channelUrl;
 	if (id) channelUrl = URL_BASE + "/channel/" + id;
-	return new PlatformAuthorLink(new PlatformID(PLATFORM, id, config.id, PLATFORM_CLAIMTYPE), name, channelUrl, thumbUrl);
+	return new PlatformAuthorLink(new PlatformID(PLATFORM, id, config.id, PLATFORM_CLAIMTYPE), escapeUnicode(name), channelUrl, thumbUrl);
 }
 function extractVideoRenderer_AuthorLink(videoRenderer) {
 	const id = videoRenderer.channelThumbnailSupportedRenderers.channelThumbnailWithLinkRenderer?.navigationEndpoint?.browseEndpoint?.browseId;
@@ -5306,7 +5306,7 @@ function extractVideoRenderer_AuthorLink(videoRenderer) {
 	const thumbUrl = channelIcon.thumbnail.thumbnails[0].url;
 	const channelUrl = (!id) ? extractRuns_Url(videoRenderer.ownerText.runs) : URL_BASE + "/channel/" + id;
 
-	return new PlatformAuthorLink(new PlatformID(PLATFORM, id, config.id, PLATFORM_CLAIMTYPE), name, channelUrl, thumbUrl);
+	return new PlatformAuthorLink(new PlatformID(PLATFORM, id, config.id, PLATFORM_CLAIMTYPE), escapeUnicode(name), channelUrl, thumbUrl);
 }
 function extractCommentRenderer_Comment(contextUrl, commentRenderer, replyCount, replyContinuation, useLogin, useMobile) {
 	const authorName = extractText_String(commentRenderer.authorText) ?? "";
@@ -5317,7 +5317,7 @@ function extractCommentRenderer_Comment(contextUrl, commentRenderer, replyCount,
 	);
 	return new YTComment({
 		contextUrl: contextUrl,
-		author: new PlatformAuthorLink(new PlatformID(PLATFORM, null, config.id, PLATFORM_CLAIMTYPE), authorName, URL_BASE + authorEndpoint, authorThumbnail),
+		author: new PlatformAuthorLink(new PlatformID(PLATFORM, null, config.id, PLATFORM_CLAIMTYPE), escapeUnicode(authorName), URL_BASE + authorEndpoint, authorThumbnail),
 		message: extractRuns_String(commentRenderer.contentText?.runs) ?? "",
 		rating: new RatingLikes(commentRenderer?.voteCount?.simpleText ? extractHumanNumber_Integer(commentRenderer.voteCount.simpleText) : 0),
 		date: (commentRenderer.publishedTimeText?.runs ? extractAgoTextRuns_Timestamp(commentRenderer.publishedTimeText.runs) : 0),
