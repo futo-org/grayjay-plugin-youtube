@@ -5,10 +5,10 @@
 	"authorUrl": "https://futo.org",
 	"platformUrl": "https://youtube.com",
 	"sourceUrl": "https://plugins.grayjay.app/YoutubeUnstable/YoutubeConfig.json",
-	"repositoryUrl": "https://futo.org",
+	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 239,
+	"version": 240,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	

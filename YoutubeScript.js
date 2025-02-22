@@ -38,7 +38,7 @@ const URL_YOUTUBE_SPONSORBLOCK = "https://sponsor.ajay.app/api/skipSegments?vide
 const URL_YOUTUBE_RSS = "https://www.youtube.com/feeds/videos.xml?channel_id=";
 
 //Newest to oldest
-const CIPHER_TEST_HASHES = ["d50f54ef", "e7567ecf", "3bb1f723", "3400486c", "b22ef6e7", "a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
+const CIPHER_TEST_HASHES = ["c8dbda2a", "7795af42", "d50f54ef", "e7567ecf", "3bb1f723", "3400486c", "b22ef6e7", "a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
 const CIPHER_TEST_PREFIX = "/s/player/";
 const CIPHER_TEST_SUFFIX = "/player_ias.vflset/en_US/base.js";
 
@@ -6027,7 +6027,7 @@ function testCiphers() {
 	}
 }
 source.testCiphers = testCiphers;
-function prepareCipher(jsUrl) {
+function prepareCipher(jsUrl, codeOverride) {
 	if(_cipherDecode[jsUrl])
 		return false;//_cipherDecode[jsUrl];
 	log("New JS Url found: [" + jsUrl + "], fetching new js (total: " + (Object.keys(_cipherDecode).length + 1) + ")");
@@ -6039,12 +6039,12 @@ function prepareCipher(jsUrl) {
 			throw new ScriptException("Failed to get player js");
 	    }
 		console.log("Javascript Url: " + URL_BASE + jsUrl);
-		const playerCode = playerCodeResp.body;
+		let playerCode = (codeOverride) ? codeOverride : playerCodeResp.body;
 
-		const constantsMatch = playerCode.match(/var [a-zA-Z_\$0-9]+=(\".+index.m3u8.+"\.split\(.+\))/);
+		const constantsMatch = playerCode.match(/var ([a-zA-Z_\$0-9]+)=(\".+index.m3u8.+"\.split\(.+\))/);
 	
-		let constantArrayName = (constantsMatch && constantsMatch.length > 2) ? constantsMatch[1] : undefined;
-		let constantArrayValues = (constantsMatch && constantsMatch.length > 2) ? eval(constantsMatch[2]) : undefined;
+		let constantArrayName = (constantsMatch && constantsMatch.length >= 2) ? constantsMatch[1] : undefined;
+		let constantArrayValues = (constantsMatch && constantsMatch.length >= 2) ? eval(constantsMatch[2]) : undefined;
 	
 		if(constantArrayName) {
 			console.log("Detected Array variable: ", constantArrayName, constantArrayValues);
@@ -6089,7 +6089,7 @@ function getNDecryptorFunctionCode(code, jsUrl, constantArrayName, constantArray
 		return _nDecrypt[jsUrl];
 
 	if(constantArrayName == "check") {
-		const constantsMatch = playerCode.match(/var ([a-zA-Z_\$0-9]+)=(\".+index.m3u8.+"\.split\(.+\))/);
+		const constantsMatch = code.match(/var ([a-zA-Z_\$0-9]+)=(\".+index.m3u8.+"\.split\(.+\))/);
 		constantArrayName = (constantsMatch && constantsMatch.length > 2) ? constantsMatch[1] : undefined;
 		constantArrayValues = (constantsMatch && constantsMatch.length > 2) ? eval(constantsMatch[2]) : undefined;
 		code = replaceConstantArrayValues(constantArrayName, constantArrayValues, code);
@@ -6106,7 +6106,7 @@ function getNDecryptorFunctionCode(code, jsUrl, constantArrayName, constantArray
 	}
 	if(!nDecryptFunctionArrNameMatch) {
         if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (name)", jsUrl);
-		throw new ScriptException("Failed to find n decryptor (name)\n" + jsUrl);
+		throw new ScriptException("Failed to find n decryptor (name)\n" + jsUrl + "\n\n" + code);
     }
 	const nDecryptFunctionArrName = nDecryptFunctionArrNameMatch[1];
 	const nDecryptFunctionArrIndex = parseInt(nDecryptFunctionArrNameMatch[2]);
