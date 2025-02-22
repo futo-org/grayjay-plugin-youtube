@@ -6105,8 +6105,8 @@ function getNDecryptorFunctionCode(code, jsUrl, constantArrayName, constantArray
 			break;
 	}
 	if(!nDecryptFunctionArrNameMatch) {
-        if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (name)", jsUrl);
-		throw new ScriptException("Failed to find n decryptor (name)\n" + jsUrl + "\n\n" + code);
+        if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (name)", jsUrl + "\n\n" + code);
+		throw new ScriptException("Failed to find n decryptor (name)\n" + jsUrl);
     }
 	const nDecryptFunctionArrName = nDecryptFunctionArrNameMatch[1];
 	const nDecryptFunctionArrIndex = parseInt(nDecryptFunctionArrNameMatch[2]);
