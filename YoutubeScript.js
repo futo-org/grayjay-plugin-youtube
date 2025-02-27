@@ -6041,7 +6041,7 @@ function prepareCipher(jsUrl, codeOverride) {
 		console.log("Javascript Url: " + URL_BASE + jsUrl);
 		let playerCode = (codeOverride) ? codeOverride : playerCodeResp.body;
 
-		const constantsMatch = playerCode.match(/var ([a-zA-Z_\$0-9]+)=(\".+index.m3u8.+"\.split\(.+\))/);
+		const constantsMatch = playerCode.match(/var ([a-zA-Z_\$0-9]+)=(["'].+index.m3u8.+["']\.split\(.+\))/);
 	
 		let constantArrayName = (constantsMatch && constantsMatch.length >= 2) ? constantsMatch[1] : undefined;
 		let constantArrayValues = (constantsMatch && constantsMatch.length >= 2) ? eval(constantsMatch[2]) : undefined;
@@ -6089,7 +6089,7 @@ function getNDecryptorFunctionCode(code, jsUrl, constantArrayName, constantArray
 		return _nDecrypt[jsUrl];
 
 	if(constantArrayName == "check") {
-		const constantsMatch = code.match(/var ([a-zA-Z_\$0-9]+)=(\".+index.m3u8.+"\.split\(.+\))/);
+		const constantsMatch = code.match(/var ([a-zA-Z_\$0-9]+)=(["'].+index.m3u8.+["']\.split\(.+\))/);
 		constantArrayName = (constantsMatch && constantsMatch.length > 2) ? constantsMatch[1] : undefined;
 		constantArrayValues = (constantsMatch && constantsMatch.length > 2) ? eval(constantsMatch[2]) : undefined;
 		code = replaceConstantArrayValues(constantArrayName, constantArrayValues, code);
@@ -6180,7 +6180,7 @@ function getCipherFunctionCode(playerCode, jsUrl, constantArrayName, constantArr
 	let cipherFunctionName = null;
 
 	if(constantArrayName == "check") {
-		const constantsMatch = playerCode.match(/var ([a-zA-Z_\$0-9]+)=(\".+index.m3u8.+"\.split\(.+\))/);
+		const constantsMatch = playerCode.match(/var ([a-zA-Z_\$0-9]+)=(["'].+index.m3u8.+["']\.split\(.+\))/);
 		constantArrayName = (constantsMatch && constantsMatch.length > 2) ? constantsMatch[1] : undefined;
 		constantArrayValues = (constantsMatch && constantsMatch.length > 2) ? eval(constantsMatch[2]) : undefined;
 		if(constantArrayName && constantArrayValues)
