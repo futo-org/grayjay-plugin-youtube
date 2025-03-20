@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 241,
+	"version": 242,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -90,6 +90,13 @@
 			"variable": "allowControversialRestricted",
 			"name": "Allow Controversial Restricted",
 			"description": "Allow watching of controversial restricted videos",
+			"type": "Boolean",
+			"default": "false"
+		},
+		{
+			"variable": "allowMemberContent",
+			"name": "Allow Member Content",
+			"description": "Allow listing of member content (will prefix \"[MEMBER]\")",
 			"type": "Boolean",
 			"default": "false"
 		},
@@ -282,6 +289,12 @@
 
 
 	"changelog": {
+		"242": [
+			"Fix: Not all members only videos being filtered out",
+			"Fix: Certain playlist urls not being detected properly",
+			"Feature: Setting 'Allow Member Content' which will show channel member content (prefixed with [MEMBER])",
+			"Feature: Mark which audio track is the 'original' audio (will be used in upcoming Grayjay version)"
+		],
 		"241": [
 			"Fix: Cipher fix"
 		],

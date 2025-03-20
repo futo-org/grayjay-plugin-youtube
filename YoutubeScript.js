@@ -64,7 +64,7 @@ const REGEX_VIDEO_CHANNEL_URL2 = new RegExp("https://(.*\\.)?youtube\\.com/user/
 const REGEX_VIDEO_CHANNEL_URL3 =  new RegExp("https://(.*\\.)?youtube\\.com/@.*");
 const REGEX_VIDEO_CHANNEL_URL4 =  new RegExp("https://(.*\\.)?youtube\\.com/c/*");
 
-const REGEX_VIDEO_PLAYLIST_URL = new RegExp("https://(.*\\.)?youtube\\.com/playlist\\?list=.*");
+const REGEX_VIDEO_PLAYLIST_URL = new RegExp("https://(.*\\.)?youtube\\.com/playlist\\?.*");
 
 const REGEX_INITIAL_DATA = new RegExp("<script.*?var ytInitialData = (.*?);<\/script>");
 const REGEX_INITIAL_PLAYER_DATA = new RegExp("<script.*?var ytInitialPlayerResponse = (.*?});");
@@ -1529,7 +1529,7 @@ source.searchPlaylists = function(query, type, order, filters) {
     return new PlaylistPager([]);
 };
 source.isPlaylistUrl = function(url) {
-    return REGEX_VIDEO_PLAYLIST_URL.test(url);
+    return REGEX_VIDEO_PLAYLIST_URL.test(url) && (url.indexOf("?list=") > 0 || url.indexOf("&list=") > 0);
 };
 source.getPlaylist = function (url) {
 	log(`Getting playlist: ${url}`);
@@ -2023,6 +2023,10 @@ class YTABRAudioSource extends DashManifestRawAudioSource {
 		this.parentUrl = parentUrl;
 		this.usedLogin = !!usedLogin;
 		this.jsUrl = jsUrl;
+		if(obj.priority)
+			this.priority = obj.priority;
+		if(obj.original)
+			this.original = obj.original;
     }
 
 	generate() {
@@ -2781,6 +2785,10 @@ class YTAudioSource extends AudioUrlRangeSource {
     constructor(obj, originalUrl) {
 		super(obj);
 		this.originalUrl = originalUrl;
+		if(obj.priority)
+			this.priority = obj.priority;
+		if(obj.original)
+			this.original = obj.original;
     }
 
     getRequestModifier() {
@@ -4261,12 +4269,34 @@ function getBGDataFromClientConfig(clientConfig, usedLogin) {
 	}
 }
 
+/*
+function extractWeb_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig, parentUrl, usedLogin) {
+	const descriptor = extractAdaptiveFormats_VideoDescriptor(initialPlayerData?.streamingData?.adaptiveFormats, jsUrl, contextData, "");
+
+	if(descriptor.audioSources) {
+		for(let source of descriptor.audioSources){
+			
+		}
+	}
+	if(descriptor.videoSources) {
+		for(let source of descriptor.videoSources){
+
+		}
+	}
+}
+*/
+
+
 function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig, parentUrl, usedLogin) {
 	
 	const abrStreamingUrl = (initialPlayerData.streamingData.serverAbrStreamingUrl) ? 
 		decryptUrlN(initialPlayerData.streamingData.serverAbrStreamingUrl, jsUrl, false) : undefined;
 	if(!abrStreamingUrl)
 		return undefined;
+
+	const hasOriginal = !!(initialPlayerData.streamingData.adaptiveFormats
+		?.filter(x=>x.mimeType.startsWith("audio/"))
+		?.find(x=>(x.audioTrack?.displayName?.toLowerCase()?.indexOf("original") ?? -1) >= 0));
 
 	return new UnMuxVideoSourceDescriptor(
 		(initialPlayerData.streamingData.adaptiveFormats
@@ -4312,7 +4342,7 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 				const duration = parseInt(parseInt(y.approxDurationMs) / 1000) ?? 0;
 				if (isNaN(duration))
 					return null;
-				return new YTABRAudioSource(y.itag, {
+				const source = new YTABRAudioSource(y.itag, {
 					name: "UMP " + (y.audioTrack?.displayName ? y.audioTrack.displayName : codecs) + ((isAV1) ? " [AV1]" : ""),
 					url: abrStreamingUrl,
 					width: y.width,
@@ -4322,15 +4352,24 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 					codec: codecs,
 					bitrate: y.bitrate,
 					audioChannels: y.audioChannels,
+					original: (hasOriginal ? 
+						((y.audioTrack?.displayName?.toLowerCase()?.indexOf("original") ?? -1) >= 0) :
+						((y.audioTrack?.audioIsDefault ?? false))),
 					language: ytLangIdToLanguage(y.audioTrack?.id)
 				}, abrStreamingUrl, y, initialPlayerData.playerConfig.mediaCommonConfig.mediaUstreamerRequestConfig.videoPlaybackUstreamerConfig,
 					getBGDataFromClientConfig(clientConfig, usedLogin), parentUrl, usedLogin, jsUrl);
+
+				return source;
 			})).filter(x => x != null)
 	);
 }
 
 function extractAdaptiveFormats_VideoDescriptor(adaptiveSources, jsUrl, contextData, prefix) {   
-	const nonce = randomString(16);   
+	const nonce = randomString(16);
+
+	const hasOriginal = !!(adaptiveSources
+		?.filter(x=>x.mimeType.startsWith("audio/"))
+		?.find(x=>(x.audioTrack?.displayName?.toLowerCase()?.indexOf("original") ?? -1) >= 0));
 	return adaptiveSources ? new UnMuxVideoSourceDescriptor(   
 			adaptiveSources.filter(x=>x.mimeType.startsWith("video/") && (x.url || x.cipher || x.signatureCipher)).map(y=>{   
 					const codecs = y.mimeType.substring(y.mimeType.indexOf('codecs=\"') + 8).slice(0, -1);   
@@ -4391,7 +4430,7 @@ function extractAdaptiveFormats_VideoDescriptor(adaptiveSources, jsUrl, contextD
 					if(!y.initRange?.end || !y.indexRange?.end)   
 							return null;   
 
-					return new YTAudioSource({   
+					const source = new YTAudioSource({   
 							name: prefix + (y.audioTrack?.displayName ? y.audioTrack.displayName : codecs),   
 							container: container,   
 							bitrate: y.bitrate,   
@@ -4399,16 +4438,20 @@ function extractAdaptiveFormats_VideoDescriptor(adaptiveSources, jsUrl, contextD
 							duration: (!isNaN(duration)) ? duration : 0,   
 							container: y.mimeType.substring(0, y.mimeType.indexOf(';')),   
 							codec: codecs,   
-							language: ytLangIdToLanguage(y.audioTrack?.id),   
-
+							language: ytLangIdToLanguage(y.audioTrack?.id),
+							original: (hasOriginal ? 
+								((y.audioTrack?.displayName?.toLowerCase()?.indexOf("original") ?? -1) >= 0) :
+								((y.audioTrack?.audioIsDefault ?? false))),
 							itagId: y.itag,   
 							initStart: parseInt(y.initRange?.start),   
 							initEnd: parseInt(y.initRange?.end),   
 							indexStart: parseInt(y.indexRange?.start),   
 							indexEnd: parseInt(y.indexRange?.end),   
 							audioChannels: y.audioChannels   
-					}, contextData.url);   
-			}).filter(x=>x!=null),   
+					}, contextData.url);
+					
+					return source;
+			}).filter(x=>x!=null),
 	) : new VideoSourceDescriptor([])   
 }
 
@@ -4995,8 +5038,10 @@ function extractVideoWithContextRenderer_Video(videoRenderer, contextData) {
 		x.thumbnailOverlayTimeStatusRenderer?.accessibility?.accessibilityData?.label == "LIVE");
 	let isLive = liveBadges != null && liveBadges.length > 0;
 
-	const isMemberOnly = !!videoRenderer.badges?.find(x=>x?.metadataBadgeRenderer?.label == "Members only");
-	if(isMemberOnly) {
+	const isMemberOnly = !!videoRenderer.badges?.find(x=>
+		x?.metadataBadgeRenderer?.label == "Members only" || 
+		x?.metadataBadgeRenderer?.label == "Members first");
+	if(isMemberOnly && !_settings.allowMemberContent) {
 		log("MEMBER ONLY VIDEO IGNORED");
 		return null;
 	}
@@ -5030,7 +5075,7 @@ function extractVideoWithContextRenderer_Video(videoRenderer, contextData) {
 	if (isLive) {
 		return new PlatformVideo({
 			id: new PlatformID(PLATFORM, videoRenderer.videoId, config.id),
-			name: escapeUnicode(title),
+			name: ((isMemberOnly) ? "[MEMBER] " : "") + escapeUnicode(title),
 			thumbnails: extractThumbnail_Thumbnails(videoRenderer.thumbnail),
 			author: author,
 			uploadDate: plannedDate ?? parseInt(new Date().getTime() / 1000),
@@ -5043,7 +5088,7 @@ function extractVideoWithContextRenderer_Video(videoRenderer, contextData) {
 	} else {
 		return new PlatformVideo({
 			id: new PlatformID(PLATFORM, videoRenderer.videoId, config.id),
-			name: escapeUnicode(title),
+			name: ((isMemberOnly) ? "[MEMBER] " : "") + escapeUnicode(title),
 			thumbnails: extractThumbnail_Thumbnails(videoRenderer.thumbnail),
 			author: author,
 			uploadDate: parseInt(extractAgoText_Timestamp(extractText_String(videoRenderer.publishedTimeText))),
@@ -5063,8 +5108,10 @@ function extractVideoRenderer_Video(videoRenderer, contextData) {
 	let isLive = (liveBadges != null && liveBadges.length > 0) ||
 		(liveOverlays != null && liveOverlays.length > 0);
 
-	const isMemberOnly = !!videoRenderer.badges?.find(x=>x.metadataBadgeRenderer?.label == "Members only");
-	if(isMemberOnly) {
+	const isMemberOnly = !!videoRenderer.badges?.find(x=>
+		x?.metadataBadgeRenderer?.label == "Members only" || 
+		x?.metadataBadgeRenderer?.label == "Members first");
+	if(isMemberOnly && !_settings.allowMemberContent) {
 		log("MEMBER ONLY VIDEO IGNORED");
 		return null;
 	}
@@ -5094,7 +5141,7 @@ function extractVideoRenderer_Video(videoRenderer, contextData) {
 	if(isLive)
 		return new PlatformVideo({
 			id: new PlatformID(PLATFORM, videoRenderer.videoId, config.id),
-			name: escapeUnicode(extractRuns_String(videoRenderer.title.runs)),
+			name: ((isMemberOnly) ? "[MEMBER] " : "") + escapeUnicode(extractRuns_String(videoRenderer.title.runs)),
 			thumbnails: extractThumbnail_Thumbnails(videoRenderer.thumbnail),
 			author: author,
 			uploadDate: plannedDate ?? parseInt(new Date().getTime()/1000),
@@ -5107,7 +5154,7 @@ function extractVideoRenderer_Video(videoRenderer, contextData) {
 	else
 		return new PlatformVideo({
 			id: new PlatformID(PLATFORM, videoRenderer.videoId, config.id),
-			name: escapeUnicode(extractRuns_String(videoRenderer.title.runs)),
+			name: ((isMemberOnly) ? "[MEMBER] " : "") + escapeUnicode(extractRuns_String(videoRenderer.title.runs)),
 			thumbnails: extractThumbnail_Thumbnails(videoRenderer.thumbnail),
 			author: author,
 			uploadDate: videoRenderer.publishedTimeText ? parseInt(extractAgoText_Timestamp(videoRenderer.publishedTimeText.simpleText)) : 0,
