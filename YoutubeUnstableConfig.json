@@ -94,6 +94,13 @@
 			"default": "false"
 		},
 		{
+			"variable": "allowMemberContent",
+			"name": "Allow Member Content",
+			"description": "Allow listing of member content (will prefix \"[MEMBER]\")",
+			"type": "Boolean",
+			"default": "false"
+		},
+		{
 			"variable": "useUMP",
 			"name": "Force Experimental UMP Streams",
 			"description": "Force usage of experimental implementation of UMP. May be unstable and cost more performance.",
