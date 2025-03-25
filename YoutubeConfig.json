@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 242,
+	"version": 243,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -260,6 +260,13 @@
 			"description": "Shows a toast whenever UMP goes into a reconnection mode",
 			"type": "Boolean",
 			"default": "false"
+		},
+		{
+			"variable": "fallback_home_trending",
+			"name": "Fallback to Trending for Home",
+			"description": "Fetches the trending page if the normal home page failed to load",
+			"type": "Boolean",
+			"default": "true"
 		}
 	],
 
@@ -289,6 +296,11 @@
 
 
 	"changelog": {
+		"243": [
+			"Fix: Cipher fix",
+			"Fix: Various possible 'runs' errors",
+			"Debug: Add additional logging for solving home issue"
+		],
 		"242": [
 			"Fix: Not all members only videos being filtered out",
 			"Fix: Certain playlist urls not being detected properly",

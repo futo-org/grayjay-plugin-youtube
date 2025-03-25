@@ -38,7 +38,7 @@ const URL_YOUTUBE_SPONSORBLOCK = "https://sponsor.ajay.app/api/skipSegments?vide
 const URL_YOUTUBE_RSS = "https://www.youtube.com/feeds/videos.xml?channel_id=";
 
 //Newest to oldest
-const CIPHER_TEST_HASHES = ["c8dbda2a", "7795af42", "d50f54ef", "e7567ecf", "3bb1f723", "3400486c", "b22ef6e7", "a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
+const CIPHER_TEST_HASHES = ["4fcd6e4a", "c8dbda2a", "7795af42", "d50f54ef", "e7567ecf", "3bb1f723", "3400486c", "b22ef6e7", "a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
 const CIPHER_TEST_PREFIX = "/s/player/";
 const CIPHER_TEST_SUFFIX = "/player_ias.vflset/en_US/base.js";
 
@@ -263,8 +263,12 @@ source.getHome = () => {
 	}
     if(tabs[0].videos.length > 0)
 	    return new RichGridPager(tabs[0], {}, USE_MOBILE_PAGES, true);
-    else
+    else if(_settings?.fallback_home_trending)
         return source.getTrending();
+	else {
+        if(bridge.devSubmit) bridge.devSubmit("getHome - No videos found..", JSON.stringify(initialData));
+		return new VideoPager([], false);
+	}
 };
 
 source.getTrending = () => {
@@ -1310,10 +1314,25 @@ source.getContentRecommendations = (url, initialData) => {
 		watchNextFeed = watchNextFeed.itemSectionRenderer;
 	}
 	
-	const itemSectionRenderer = extractItemSectionRenderer_Shelves(watchNextFeed);
+	try {
+		const itemSectionRenderer = extractItemSectionRenderer_Shelves(watchNextFeed);
 
-	//TODO: pages
-	return new VideoPager(itemSectionRenderer?.videos ?? [], false);
+		//TODO: pages
+		return new VideoPager(itemSectionRenderer?.videos ?? [], false);
+	}
+	catch(ex) {
+
+		log("Failed to parse ContentRecommendations");
+		if(bridge.devSubmit) {
+			try {
+				bridge.devSubmit("getContentRecommendations - Failed to parse recommendations", JSON.stringify(watchNextFeed));
+			}
+			catch(ex) {
+				//
+			}
+		}
+		throw ex;
+	}
 };
 
 //Channel
@@ -4151,7 +4170,7 @@ function extractVideoPage_VideoDetails(parentUrl, initialData, initialPlayerData
 				if(renderer.viewCount?.videoViewCountRenderer?.viewCount?.simpleText)
 					video.viewCount = extractFirstNumber_Integer(renderer.viewCount?.videoViewCountRenderer?.viewCount.simpleText)
 				else if(renderer.viewCount?.videoViewCountRenderer?.viewCount?.runs) {
-					video.viewCount = parseInt(extractFirstNumber_Integer(extractRuns_String(renderer.viewCount?.videoViewCountRenderer?.viewCount?.runs)));
+					video.viewCount = parseInt(extractFirstNumber_Integer(extractText_String(renderer.viewCount?.videoViewCountRenderer?.viewCount)));
 				}
 				if(renderer.viewCount?.videoViewCountRenderer?.isLive || renderer.viewCount?.videoViewCountRenderer?.viewCount?.isLive)
 					video.isLive = true;
@@ -4489,7 +4508,7 @@ function extractVideoOwnerRenderer_AuthorLink(renderer) {
 		subscribers = extractHumanNumber_Integer(extractText_String(renderer.subscriberCountText));
 
 	return new PlatformAuthorLink(new PlatformID(PLATFORM, id, config.id, PLATFORM_CLAIMTYPE), 
-		extractRuns_String(renderer.title.runs),
+		extractText_String(renderer.title),
 		url,
 		bestThumbnail,
 		subscribers, membershipUrl);
@@ -5004,7 +5023,7 @@ function extractRichSectionRenderer_Shelf(sectionRenderer, contextData) {
 }
 function extractRichShelfRenderer_Shelf(shelfRenderer, contextData) {
 	const shelf = {
-		name: extractRuns_String(shelfRenderer.title?.runs),
+		name: extractText_String(shelfRenderer.title),
 		type: "Shelf",
 		videos: []
 	};
@@ -5033,6 +5052,7 @@ function extractRichItemRenderer_Video(itemRenderer, contextData) {
 	return switchKeyVideo(content, contextData); 
 }
 function extractVideoWithContextRenderer_Video(videoRenderer, contextData) {
+	try {
 	const liveBadges = videoRenderer.thumbnailOverlays?.filter(x=>
 		x.thumbnailOverlayTimeStatusRenderer?.style == "LIVE" ||
 		x.thumbnailOverlayTimeStatusRenderer?.accessibility?.accessibilityData?.label == "LIVE");
@@ -5099,8 +5119,13 @@ function extractVideoWithContextRenderer_Video(videoRenderer, contextData) {
 			extractType: "VideoWithContext"
 		});
 	}
+	}
+	catch(ex) {
+		throw "Failed to extract VideoWithContextRenderer_Video due to:\n" + ex;
+	}
 }
 function extractVideoRenderer_Video(videoRenderer, contextData) {
+	try {
 	const liveBadges = videoRenderer.badges?.filter(x=>x.metadataBadgeRenderer?.label == "LIVE");
 	const liveOverlays = videoRenderer.thumbnailOverlays?.filter(x=>
 		x.thumbnailOverlayTimeStatusRenderer?.style == "LIVE" ||
@@ -5141,12 +5166,12 @@ function extractVideoRenderer_Video(videoRenderer, contextData) {
 	if(isLive)
 		return new PlatformVideo({
 			id: new PlatformID(PLATFORM, videoRenderer.videoId, config.id),
-			name: ((isMemberOnly) ? "[MEMBER] " : "") + escapeUnicode(extractRuns_String(videoRenderer.title.runs)),
+			name: ((isMemberOnly) ? "[MEMBER] " : "") + escapeUnicode(extractText_String(videoRenderer.title)),
 			thumbnails: extractThumbnail_Thumbnails(videoRenderer.thumbnail),
 			author: author,
 			uploadDate: plannedDate ?? parseInt(new Date().getTime()/1000),
 			duration: 0,
-			viewCount: !videoRenderer.viewCountText ? 0 : extractRuns_ViewerCount(videoRenderer.viewCountText.runs),
+			viewCount: !videoRenderer.viewCountText?.runs ? 0 : extractRuns_ViewerCount(videoRenderer.viewCountText.runs),
 			url: URL_BASE + "/watch?v=" + videoRenderer.videoId,
 			isLive: true,
 			extractType: "Video"
@@ -5154,7 +5179,7 @@ function extractVideoRenderer_Video(videoRenderer, contextData) {
 	else
 		return new PlatformVideo({
 			id: new PlatformID(PLATFORM, videoRenderer.videoId, config.id),
-			name: ((isMemberOnly) ? "[MEMBER] " : "") + escapeUnicode(extractRuns_String(videoRenderer.title.runs)),
+			name: ((isMemberOnly) ? "[MEMBER] " : "") + escapeUnicode(extractText_String(videoRenderer.title)),
 			thumbnails: extractThumbnail_Thumbnails(videoRenderer.thumbnail),
 			author: author,
 			uploadDate: videoRenderer.publishedTimeText ? parseInt(extractAgoText_Timestamp(videoRenderer.publishedTimeText.simpleText)) : 0,
@@ -5164,6 +5189,10 @@ function extractVideoRenderer_Video(videoRenderer, contextData) {
 			isLive: false,
 			extractType: "Video"
 		});
+	}
+	catch(ex) {
+		throw "Failed to extract VideoRenderer_Video due to:\n" + ex;
+	}
 }
 
 function extractShortLockupViewModel_Video(videoRenderer, contextData) {
@@ -5215,7 +5244,7 @@ function extractPlaylistVideoRenderer_Video(videoRenderer, contextData) {
 
 	return new PlatformVideo({
 		id: new PlatformID(PLATFORM, videoRenderer.videoId, config.id),
-		name: escapeUnicode(extractRuns_String(videoRenderer.title.runs)),
+		name: escapeUnicode(extractText_String(videoRenderer.title)),
 		thumbnails: extractThumbnail_Thumbnails(videoRenderer.thumbnail),
 		author: author,
 		uploadDate: date,
@@ -5337,23 +5366,33 @@ function extractThumbnail_BestUrl(thumbnail) {
     return bestUrl;
 }
 function extractVideoWithContextRenderer_AuthorLink(videoRenderer) {
-	let id = videoRenderer.channelThumbnail?.channelThumbnailWithLinkRenderer?.navigationEndpoint?.browseEndpoint?.browseId;
-	const name = extractRuns_String(videoRenderer.shortBylineText.runs);
-	const channelThumbs = videoRenderer.channelThumbnail.channelThumbnailWithLinkRenderer?.thumbnail?.thumbnails;
-	const thumbUrl = channelThumbs && channelThumbs.length > 0 ? channelThumbs[0].url : null;
-	let channelUrl = videoRenderer.channelThumbnail?.channelThumbnailWithLinkRenderer?.navigationEndpoint?.browseEndpoint?.canonicalBaseUrl;
-	if(channelUrl) channelUrl = URL_BASE + channelUrl;
-	if (id) channelUrl = URL_BASE + "/channel/" + id;
-	return new PlatformAuthorLink(new PlatformID(PLATFORM, id, config.id, PLATFORM_CLAIMTYPE), escapeUnicode(name), channelUrl, thumbUrl);
+	try {
+		let id = videoRenderer.channelThumbnail?.channelThumbnailWithLinkRenderer?.navigationEndpoint?.browseEndpoint?.browseId;
+		const name = extractText_String(videoRenderer.shortBylineText);
+		const channelThumbs = videoRenderer.channelThumbnail.channelThumbnailWithLinkRenderer?.thumbnail?.thumbnails;
+		const thumbUrl = channelThumbs && channelThumbs.length > 0 ? channelThumbs[0].url : null;
+		let channelUrl = videoRenderer.channelThumbnail?.channelThumbnailWithLinkRenderer?.navigationEndpoint?.browseEndpoint?.canonicalBaseUrl;
+		if(channelUrl) channelUrl = URL_BASE + channelUrl;
+		if (id) channelUrl = URL_BASE + "/channel/" + id;
+		return new PlatformAuthorLink(new PlatformID(PLATFORM, id, config.id, PLATFORM_CLAIMTYPE), escapeUnicode(name), channelUrl, thumbUrl);
+	}
+	catch(ex) {
+		throw "Failed to extract VideoWithContextRenderer_AuthorLink due to:\n" + ex;
+	}
 }
 function extractVideoRenderer_AuthorLink(videoRenderer) {
-	const id = videoRenderer.channelThumbnailSupportedRenderers.channelThumbnailWithLinkRenderer?.navigationEndpoint?.browseEndpoint?.browseId;
-	const name = extractText_String(videoRenderer.ownerText)//extractRuns_String(videoRenderer.ownerText.runs);
-	const channelIcon = videoRenderer.channelThumbnailSupportedRenderers.channelThumbnailWithLinkRenderer;
-	const thumbUrl = channelIcon.thumbnail.thumbnails[0].url;
-	const channelUrl = (!id) ? extractRuns_Url(videoRenderer.ownerText.runs) : URL_BASE + "/channel/" + id;
+	try {
+		const id = videoRenderer.channelThumbnailSupportedRenderers.channelThumbnailWithLinkRenderer?.navigationEndpoint?.browseEndpoint?.browseId;
+		const name = extractText_String(videoRenderer.ownerText)//extractRuns_String(videoRenderer.ownerText.runs);
+		const channelIcon = videoRenderer.channelThumbnailSupportedRenderers.channelThumbnailWithLinkRenderer;
+		const thumbUrl = channelIcon.thumbnail.thumbnails[0].url;
+		const channelUrl = (!id && videoRenderer.ownerText.runs) ? extractRuns_Url(videoRenderer.ownerText.runs) : URL_BASE + "/channel/" + id;
 
-	return new PlatformAuthorLink(new PlatformID(PLATFORM, id, config.id, PLATFORM_CLAIMTYPE), escapeUnicode(name), channelUrl, thumbUrl);
+		return new PlatformAuthorLink(new PlatformID(PLATFORM, id, config.id, PLATFORM_CLAIMTYPE), escapeUnicode(name), channelUrl, thumbUrl);
+	}
+	catch(ex) {
+		throw "Failed to extract VideoRenderer_AuthorLink due to:\n" + ex;
+	}
 }
 function extractCommentRenderer_Comment(contextUrl, commentRenderer, replyCount, replyContinuation, useLogin, useMobile) {
 	const authorName = extractText_String(commentRenderer.authorText) ?? "";
@@ -5365,7 +5404,7 @@ function extractCommentRenderer_Comment(contextUrl, commentRenderer, replyCount,
 	return new YTComment({
 		contextUrl: contextUrl,
 		author: new PlatformAuthorLink(new PlatformID(PLATFORM, null, config.id, PLATFORM_CLAIMTYPE), escapeUnicode(authorName), URL_BASE + authorEndpoint, authorThumbnail),
-		message: extractRuns_String(commentRenderer.contentText?.runs) ?? "",
+		message: extractText_String(commentRenderer.contentText) ?? "",
 		rating: new RatingLikes(commentRenderer?.voteCount?.simpleText ? extractHumanNumber_Integer(commentRenderer.voteCount.simpleText) : 0),
 		date: (commentRenderer.publishedTimeText?.runs ? extractAgoTextRuns_Timestamp(commentRenderer.publishedTimeText.runs) : 0),
 		replyCount: replyCount ?? 0,
@@ -6088,7 +6127,12 @@ function prepareCipher(jsUrl, codeOverride) {
 		console.log("Javascript Url: " + URL_BASE + jsUrl);
 		let playerCode = (codeOverride) ? codeOverride : playerCodeResp.body;
 
-		const constantsMatch = playerCode.match(/var ([a-zA-Z_\$0-9]+)=(["'].+index.m3u8.+["']\.split\(.+\))/);
+		let constantsMatch = playerCode.match(/var ([a-zA-Z_\$0-9]+)=(["'].+index.m3u8.+["']\.split\(.+\))/);
+		if(!constantsMatch) {
+			constantsMatch = playerCode.match(/var ([a-zA-Z_\$0-9]+)=(\[.*?["']index\.m3u8["'].*?]),/s);
+			if(constantsMatch.index > 10000)
+				constantsMatch = null;
+		}
 	
 		let constantArrayName = (constantsMatch && constantsMatch.length >= 2) ? constantsMatch[1] : undefined;
 		let constantArrayValues = (constantsMatch && constantsMatch.length >= 2) ? eval(constantsMatch[2]) : undefined;
