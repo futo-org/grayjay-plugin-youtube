@@ -256,6 +256,7 @@ source.getHome = () => {
         initialData = requestInitialData(URL_CONTEXT_M, USE_MOBILE_PAGES, true);
 	else
 		initialData = requestInitialData(URL_HOME, USE_MOBILE_PAGES, true);
+	
 	const tabs = extractPage_Tabs(initialData);
 	if(tabs.length == 0) {
         if(bridge.devSubmit) bridge.devSubmit("getHome - No tabs found..", JSON.stringify(initialData));
@@ -288,7 +289,6 @@ source.getTrending = () => {
 	}
 	return new RichGridPager(tab, {}, USE_MOBILE_PAGES, false);
 };
-
 
 //Search
 source.searchSuggestions = (query) => {
@@ -4966,6 +4966,9 @@ function switchKeyVideo(content, contextData) {
 		videoWithContextRenderer(renderer) {
 			return extractVideoWithContextRenderer_Video(renderer, contextData);
 		},
+		lockupViewModel(renderer) {
+			return extractVideoLockupModel_Video(renderer, contextData);
+		},
 		reelItemRenderer(renderer) {
 			return extractReelItemRenderer_Video(renderer, contextData);
 		},
@@ -5194,6 +5197,133 @@ function extractVideoRenderer_Video(videoRenderer, contextData) {
 		throw "Failed to extract VideoRenderer_Video due to:\n" + ex;
 	}
 }
+function extractVideoLockupModel_Video(videoRenderer, contextData) {
+	try {
+		let author = undefined;
+		if(!contextData || !contextData.authorLink) {
+		}
+		else
+			author = contextData.authorLink;
+
+		const metadataRows = videoRenderer.metadata?.lockupMetadataViewModel?.metadata?.contentMetadataViewModel?.metadataRows;
+		if(!metadataRows || metadataRows.length < 1)
+			return null;
+		const metadataParts = metadataRows[0].metadataParts;
+		if(!metadataParts)
+			return null;
+		let i = 0;
+		let viewCount = 0;
+		let date = 0;
+		for(let metadataPart of metadataParts) {
+
+			//Author
+			if(i == 0) {
+				const authorName = extractText_String(metadataPart?.text);
+				if(!authorName)
+					return null;
+	
+				const innertubeCommand = videoRenderer.metadata?.lockupMetadataViewModel?.image?.decoratedAvatarViewModel?.rendererContext?.commandContext?.onTap?.innertubeCommand;
+				if(!innertubeCommand)
+					return null;
+	
+				const browseId = innertubeCommand?.browseEndpoint?.browseId;
+				if(!browseId)
+					return null;
+				const authorUrl = URL_CHANNEL_BASE + browseId;
+	
+				const authorThumbnails = extractThumbnail_Thumbnails(videoRenderer?.metadata?.lockupMetadataViewModel?.image?.decoratedAvatarViewModel?.avatar?.avatarViewModel?.image);
+				const authorThumbnail = extractThumbnails_BestUrl(authorThumbnails);
+	
+				author = new PlatformAuthorLink(
+					new PlatformID(PLATFORM, browseId, config.id, PLATFORM_CLAIMTYPE),
+					escapeUnicode(authorName),
+					authorUrl,
+					authorThumbnail
+				)
+			}
+			else if(metadataPart.text) {
+				const partText = metadataPart.text.content;
+				
+				if(partText) {
+					const matchViews = partText.match(/([0-9]+[A-Z]) views?/);
+					if(matchViews) {
+						viewCount = extractHumanNumber_Integer(matchViews[1]);
+						continue;
+					}
+					const matchAgo = partText.match(REGEX_HUMAN_AGO);
+					if(matchAgo) {
+						date = extractAgoText_Timestamp(partText);
+						continue;
+					}
+				}
+			}
+			//Viewcount
+
+
+			i++;
+		}
+
+		const thumbnailViewModel = videoRenderer?.contentImage?.thumbnailViewModel;
+		const thumbnailViewModelData = extractThumbnailViewModel_Data(thumbnailViewModel);
+
+		if(!author)
+			return null;
+	
+		if(IS_TESTING)
+			console.log(videoRenderer);
+	
+		const id = videoRenderer?.rendererContext?.commandContext?.onTap?.innertubeCommand?.watchEndpoint?.videoId;
+		if(!id)
+			return null;
+
+		const title = extractText_String(videoRenderer.metadata?.lockupMetadataViewModel?.title);
+		if(!title)
+			return null;
+
+			return new PlatformVideo({
+				id: new PlatformID(PLATFORM, id, config.id),
+				name: escapeUnicode(title),
+				thumbnails: thumbnailViewModelData?.thumbnails ?? new Thumbnails([]),
+				author: author,
+				uploadDate: date,//parseInt(extractAgoText_Timestamp(videoRenderer.publishedTimeText.simpleText)),
+				duration: thumbnailViewModelData?.duration ?? 0, //extractHumanTime_Seconds(videoRenderer.lengthText.simpleText),
+				viewCount: thumbnailViewModelData?.viewCount ?? 0,
+				url: URL_BASE + "/watch?v=" + id,
+				isLive: false,
+				extractType: "Video"
+			});
+	}
+	catch(ex) {
+		throw "Failed to extract VideoLockupmodel_Video due to:\n" + ex;
+	}
+}
+
+function extractThumbnailViewModel_Data(thumbnailViewModel) {
+	if(!thumbnailViewModel || !thumbnailViewModel?.overlays?.length)
+		return {};
+	const result = {};
+	if(thumbnailViewModel?.image?.sources)
+		result.thumbnails = extractThumbnail_Thumbnails(thumbnailViewModel?.image);
+	if(thumbnailViewModel?.overlays?.length > 0) {
+		for(let overlay of thumbnailViewModel?.overlays) {
+			if(overlay.thumbnailOverlayBadgeViewModel?.thumbnailBadges) {
+				for(let subOverlay of overlay.thumbnailOverlayBadgeViewModel.thumbnailBadges) {
+					if(subOverlay.thumbnailBadgeViewModel?.text) {
+						const accessibilityText = subOverlay?.thumbnailBadgeViewModel?.rendererContext?.accessibilityContext?.label;
+						if(REGEX_VIDEO_COUNT.test(subOverlay.thumbnailBadgeViewModel.text)) {
+							result.videoCount = extractFirstNumber_Integer(subOverlay.thumbnailBadgeViewModel.text);
+							break;
+						}
+						else if(accessibilityText.indexOf("minutes") > 0 || accessibilityText.indexOf("seconds") > 0) {
+							result.duration = extractHumanTime_Seconds(subOverlay.thumbnailBadgeViewModel.text);
+						}
+					}
+				}
+			}
+		}
+	}
+	return result;
+}
 
 function extractShortLockupViewModel_Video(videoRenderer, contextData) {
 	if(!contextData || !contextData.authorLink)
@@ -5364,6 +5494,20 @@ function extractThumbnail_BestUrl(thumbnail) {
             bestHeight = thumb.height;
         }
     return bestUrl;
+}
+function extractThumbnails_BestUrl(thumbnails){
+	if(!thumbnails || !thumbnails.sources || thumbnails.sources.length == 0)
+		return null;
+	let bestUrl = thumbnails.sources[0].url;
+	let bestQual = thumbnails.sources[0].quality;
+	for(let i = 1; i < thumbnails.sources.length; i++) {
+		const source = thumbnails.sources[i];
+		if(source.quality > bestQual) {
+			bestUrl = source.url;
+			bestQual = source.quality;
+		}
+	}
+	return bestUrl;
 }
 function extractVideoWithContextRenderer_AuthorLink(videoRenderer) {
 	try {
