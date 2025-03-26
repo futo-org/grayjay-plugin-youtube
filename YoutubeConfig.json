@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 243,
+	"version": 244,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -296,6 +296,9 @@
 
 
 	"changelog": {
+		"244": [
+			"Fix: Support additional video models (may fix home page for some)"
+		],
 		"243": [
 			"Fix: Cipher fix",
 			"Fix: Various possible 'runs' errors",
