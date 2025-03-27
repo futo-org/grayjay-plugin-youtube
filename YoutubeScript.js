@@ -243,9 +243,10 @@ source.saveState = () => {
     });
 };
 
+source.homeInitialData = undefined;
 
 //Home
-source.getHome = () => {
+source.getHome = (initialDataOverride) => {
     let initialData = null;
     if(!_prefetchHomeUsed && _prefetchHomeAuth != null) {
         log("Using pre-fetched Home Page")
@@ -257,13 +258,24 @@ source.getHome = () => {
 	else
 		initialData = requestInitialData(URL_HOME, USE_MOBILE_PAGES, true);
 	
+	if(!initialDataOverride && source.homeInitialData)
+		initialDataOverride = source.homeInitialData;
+	if(initialDataOverride && initialDataOverride.responseContext)
+		initialData = initialDataOverride;
+
 	const tabs = extractPage_Tabs(initialData);
 	if(tabs.length == 0) {
         if(bridge.devSubmit) bridge.devSubmit("getHome - No tabs found..", JSON.stringify(initialData));
 		throw new ScriptException("No tabs found..");
 	}
-    if(tabs[0].videos.length > 0)
-	    return new RichGridPager(tabs[0], {}, USE_MOBILE_PAGES, true);
+    if(tabs[0].videos.length > 0) {
+	    let pager = new RichGridPager(tabs[0], {}, USE_MOBILE_PAGES, true);
+		
+		if(initialDataOverride && initialDataOverride.responseContext)
+			pager.hasMore = false;
+
+		return pager;
+	}
     else if(_settings?.fallback_home_trending)
         return source.getTrending();
 	else {
@@ -5287,7 +5299,7 @@ function extractVideoLockupModel_Video(videoRenderer, contextData) {
 				author: author,
 				uploadDate: date,//parseInt(extractAgoText_Timestamp(videoRenderer.publishedTimeText.simpleText)),
 				duration: thumbnailViewModelData?.duration ?? 0, //extractHumanTime_Seconds(videoRenderer.lengthText.simpleText),
-				viewCount: thumbnailViewModelData?.viewCount ?? 0,
+				viewCount: viewCount ?? 0,
 				url: URL_BASE + "/watch?v=" + id,
 				isLive: false,
 				extractType: "Video"
