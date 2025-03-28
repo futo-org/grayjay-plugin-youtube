@@ -38,7 +38,7 @@ const URL_YOUTUBE_SPONSORBLOCK = "https://sponsor.ajay.app/api/skipSegments?vide
 const URL_YOUTUBE_RSS = "https://www.youtube.com/feeds/videos.xml?channel_id=";
 
 //Newest to oldest
-const CIPHER_TEST_HASHES = ["4fcd6e4a", "c8dbda2a", "7795af42", "d50f54ef", "e7567ecf", "3bb1f723", "3400486c", "b22ef6e7", "a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
+const CIPHER_TEST_HASHES = ["20830619", "4fcd6e4a", "c8dbda2a", "7795af42", "d50f54ef", "e7567ecf", "3bb1f723", "3400486c", "b22ef6e7", "a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
 const CIPHER_TEST_PREFIX = "/s/player/";
 const CIPHER_TEST_SUFFIX = "/player_ias.vflset/en_US/base.js";
 
@@ -6149,6 +6149,7 @@ const REGEX_CIPHERS = [
 	new RegExp("\\bc&&\\(c=([a-zA-Z0-9$]{2,})\\(decodeURIComponent\\(c\\)\\)"),
 	new RegExp("([\\w$]+)\\s*=\\s*function\\((\\w+)\\)\\{\\s*\\2=\\s*\\2\\.split\\(\"\"\\)\\s*;"),
 	new RegExp("\\b([\\w$]{2,})\\s*=\\s*function\\((\\w+)\\)\\{\\s*\\2=\\s*\\2\\.split\\(\"\"\\)\\s*;"),
+	new RegExp("\\b([\\w$]{2,})\\s*=\\s*function\\((\\w+)\\)\\{\\s*\\2=\\s*\\2\\.?\\[?[\"']?split[\"']?\\]?\\(\"\"\\)\\s*;"),
 	new RegExp("\\bc\\s*&&\\s*d\\.set\\([^,]+\\s*,\\s*(:encodeURIComponent\\s*\\()([a-zA-Z0-9$]+)\\("),
 	new RegExp("([\\w$]+)\\s*=\\s*function\\((\\w+)\\)\\{\\s*\\2=\\s*\\2\\.split\\([a-z-A-Z0-9\\$_]+\\[[0-9]\\]\\)\\s*;")
 ];
@@ -6228,10 +6229,10 @@ function decryptN(encryptedN, jsUrl) {
 		throw new ScriptException("N Decryptor was not available [" + jsUrl + "]");
 	return _nDecrypt[jsUrl](encryptedN);
 }
-function testCipher(hash) {
+function testCipher(hash, codeOverride) {
 	const jsUrl = CIPHER_TEST_PREFIX + hash + CIPHER_TEST_SUFFIX;
 	try{
-		const result = prepareCipher(jsUrl);
+		const result = prepareCipher(jsUrl, codeOverride);
 		clearCipher(jsUrl);
 		return {
 			success: result,
@@ -6392,8 +6393,24 @@ function getNDecryptorFunctionCode(code, jsUrl, constantArrayName, constantArray
 	let typeCheck = undefined;
 	while((typeCheck = regex.exec(nDecryptFunctionCodeMatch)) != null) {
 		if(typeCheck && typeCheck.length > 1) {
+			if(typeChecks.indexOf(typeCheck[1]) >= 0)
+				continue;
 			console.log("TypeCheck found in cipher: " + typeCheck[1]);
 			prefix += "var " + typeCheck[1] + " = {}; ";
+			typeChecks.push(typeCheck[1]);
+		}
+	}
+
+	const variableCheckRegex = new RegExp(/;\s*([\w$_]+)\.[\w$_]+=function/gs);
+	let variableChecks = [];
+	let variableCheck = undefined;
+	while((variableCheck = variableCheckRegex.exec(nDecryptFunctionCodeMatch)) != null) {
+		if(variableCheck && variableCheck.length > 1 && variableCheck[1].length < 4) {
+			if(variableChecks.indexOf(variableCheck[1]) >= 0)
+				continue;
+			console.log("VariableCheck found in cipher: " + variableCheck[1]);
+			prefix += "var " + variableCheck[1] + " = {}; ";
+			variableChecks.push(variableCheck[1]);
 		}
 	}
 	
@@ -6456,7 +6473,9 @@ function getCipherFunctionCode(playerCode, jsUrl, constantArrayName, constantArr
 	let cipherFunctionCode = cipherFunctionCodeMatch[1];
 
 	const cipherFunctionCodeVar = "var " + cipherFunctionCode;
-	const helperObjNameMatch = cipherFunctionCode.match(";([A-Za-z0-9_\\$]{2,3})\\...\\(");
+	let helperObjNameMatch = cipherFunctionCode.match(";([A-Za-z0-9_\\$]{2,3})\\...\\(");
+	if(!helperObjNameMatch)
+		helperObjNameMatch = cipherFunctionCode.match(";([A-Za-z0-9_\\$]{2,3})\\[[\"'][\\w_$]+[\"']\\]");
 	if(!helperObjNameMatch) {
 		if(IS_TESTING)
 			console.log("Failed to find helper name in: ", playerCode);

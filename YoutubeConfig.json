@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 245,
+	"version": 246,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -296,6 +296,9 @@
 
 
 	"changelog": {
+		"246": [
+			"Fix: Cipher fix"
+		],
 		"245": [
 			"Fix: Fix view counts for videos on home page for some users"
 		],
