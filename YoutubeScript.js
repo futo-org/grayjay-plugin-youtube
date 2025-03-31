@@ -263,7 +263,8 @@ source.getHome = (initialDataOverride) => {
 	if(initialDataOverride && initialDataOverride.responseContext)
 		initialData = initialDataOverride;
 
-	const tabs = extractPage_Tabs(initialData);
+	let tabs = [];
+	tabs = extractPage_Tabs(initialData);
 	if(tabs.length == 0) {
         if(bridge.devSubmit) bridge.devSubmit("getHome - No tabs found..", JSON.stringify(initialData));
 		throw new ScriptException("No tabs found..");
@@ -890,7 +891,7 @@ source.getContentChapters = function(url, initialData) {
 		if(resps[0].isOk && throwIfCaptcha(resps[0]))
 		    initialData = getInitialData(resps[0].body);
 		else
-		    throw ScriptException("Failed to get chapters (" + resps[0].code + ")");
+		    throw new ScriptException("Failed to get chapters (" + resps[0].code + ")");
 
         if(_settings["sponsorBlock"] && videoId)
             sbResp = resps[1];
@@ -3515,6 +3516,7 @@ function requestInitialData(url, useMobile = false, useAuth = false) {
 		    else throw new CriticalException("Failed to refuse Google consent [" + resp.code + "]");
 		}
 
+
 		const initialData = getInitialData(html);
 		return initialData;
 	}
@@ -3739,56 +3741,35 @@ function requestTvHtml5EmbedStreamingData(videoId, sts, withLogin = false) {
 function getInitialData(html, useAuth = false) {
 	const clientContext = getClientContext(useAuth);
 
-	//TODO: Fix regex instead of this temporary workaround.
-	/*
-	const startIndex = html.indexOf("var ytInitialData = ");
-	const endIndex = html.indexOf(";</script>", startIndex);
-	if(startIndex > 0 && endIndex > 0) {
-	    const raw = html.substring(startIndex + 20, endIndex);
-	    const initialDataRaw = raw.startsWith("'") && raw.endsWith("'") ?
-            decodeHexEncodedString(raw.substring(1, raw.length - 1))
-                //TODO: Find proper decoding strat
-                .replaceAll("\\\\\"", "\\\"") :
-            raw;
-		let initialData = null;
-		try{
-			initialData = JSON.parse(initialDataRaw);
-		}
-		catch(ex) {
-			console.log("Failed to parse initial data: ", initialDataRaw);
-			throw ex;
-		}
-		if(clientContext?.INNERTUBE_CONTEXT && !clientContext.INNERTUBE_CONTEXT.client.visitorData &&
-			initialData.responseContext?.webResponseContextExtensionData?.ytConfigData?.visitorData) {
-				clientContext.INNERTUBE_CONTEXT.client.visitorData = initialData.responseContext?.webResponseContextExtensionData?.ytConfigData?.visitorData
-			log("Found new visitor (auth) data: " + clientContext.INNERTUBE_CONTEXT.client.visitorData);
-		}
-		return initialData;
-	}*/
-
+	try {
 	const match = html.match(REGEX_INITIAL_DATA);
-	if(match) {
-		const initialDataRaw = match[1].startsWith("'") && match[1].endsWith("'") ?
-			decodeHexEncodedString(match[1].substring(1, match[1].length - 1))
-				//TODO: Find proper decoding strat
-				.replaceAll("\\\\\"", "\\\"") : 
-			match[1];
-		let initialData = null;
-		try{
-			initialData = JSON.parse(initialDataRaw);
+		if(match) {
+			const initialDataRaw = match[1].startsWith("'") && match[1].endsWith("'") ?
+				decodeHexEncodedString(match[1].substring(1, match[1].length - 1))
+					//TODO: Find proper decoding strat
+					.replaceAll("\\\\\"", "\\\"") : 
+				match[1];
+			let initialData = null;
+			try{
+				initialData = JSON.parse(initialDataRaw);
+			}
+			catch(ex) {
+				console.log("Failed to parse initial data: ", initialDataRaw);
+				throw ex;
+			}
+			
+			
+			if(clientContext?.INNERTUBE_CONTEXT && !clientContext.INNERTUBE_CONTEXT.client.visitorData &&
+				initialData.responseContext?.webResponseContextExtensionData?.ytConfigData?.visitorData) {
+					clientContext.INNERTUBE_CONTEXT.client.visitorData = initialData.responseContext?.webResponseContextExtensionData?.ytConfigData?.visitorData
+				log("Found new visitor (auth) data: " + clientContext.INNERTUBE_CONTEXT.client.visitorData);
+			}
+			return initialData;
 		}
-		catch(ex) {
-			console.log("Failed to parse initial data: ", initialDataRaw);
-			throw ex;
-		}
-		
-		
-		if(clientContext?.INNERTUBE_CONTEXT && !clientContext.INNERTUBE_CONTEXT.client.visitorData &&
-			initialData.responseContext?.webResponseContextExtensionData?.ytConfigData?.visitorData) {
-				clientContext.INNERTUBE_CONTEXT.client.visitorData = initialData.responseContext?.webResponseContextExtensionData?.ytConfigData?.visitorData
-			log("Found new visitor (auth) data: " + clientContext.INNERTUBE_CONTEXT.client.visitorData);
-		}
-		return initialData;
+	}
+	catch(ex) {
+		if(bridge.devSubmit) bridge.devSubmit("getInitialData - Failed to extract initialData", html);
+		throw ex;
 	}
 	//if(initialData == null)
 	//    log(html);
@@ -6275,6 +6256,7 @@ function prepareCipher(jsUrl, codeOverride) {
 		return false;//_cipherDecode[jsUrl];
 	log("New JS Url found: [" + jsUrl + "], fetching new js (total: " + (Object.keys(_cipherDecode).length + 1) + ")");
 
+	const codeUsed = undefined;
 	try{
 		const playerCodeResp = http.GET(URL_BASE + jsUrl, {});
 		if(!playerCodeResp.isOk) {
@@ -6283,6 +6265,7 @@ function prepareCipher(jsUrl, codeOverride) {
 	    }
 		console.log("Javascript Url: " + URL_BASE + jsUrl);
 		let playerCode = (codeOverride) ? codeOverride : playerCodeResp.body;
+		codeUsed = playerCode;
 
 		let constantsMatch = playerCode.match(/var ([a-zA-Z_\$0-9]+)=(["'].+index.m3u8.+["']\.split\(.+\))/);
 		if(!constantsMatch) {
@@ -6321,8 +6304,8 @@ function prepareCipher(jsUrl, codeOverride) {
 	}
 	catch(ex) {
 		clearCipher(jsUrl);
-        if(bridge.devSubmit) bridge.devSubmit("prepareCipher - Failed to get Cipher due to: " + ex, jsUrl);
-		throw new ScriptException("Failed to get Cipher due to: " + ex);
+        if(bridge.devSubmit) bridge.devSubmit("prepareCipher - Failed to get Cipher due to: " + ex + "\n" + jsUrl, codeUsed ?? "No code fetched");
+		throw new ScriptException("Failed to get Cipher due to: " + ex + "\n" + jsUrl);
 	}
 }
 source.prepareCipher = prepareCipher;
