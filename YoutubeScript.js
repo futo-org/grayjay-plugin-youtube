@@ -277,9 +277,12 @@ source.getHome = (initialDataOverride) => {
 
 		return pager;
 	}
-    else if(_settings?.fallback_home_trending)
+    else if(_settings?.fallback_home_trending) {
+		log("No results, fallback to trending.");
         return source.getTrending();
+	}
 	else {
+		log("No results, not attempting trending.");
         if(bridge.devSubmit) bridge.devSubmit("getHome - No videos found..", JSON.stringify(initialData));
 		return new VideoPager([], false);
 	}
@@ -6256,7 +6259,7 @@ function prepareCipher(jsUrl, codeOverride) {
 		return false;//_cipherDecode[jsUrl];
 	log("New JS Url found: [" + jsUrl + "], fetching new js (total: " + (Object.keys(_cipherDecode).length + 1) + ")");
 
-	const codeUsed = undefined;
+	let codeUsed = undefined;
 	try{
 		const playerCodeResp = http.GET(URL_BASE + jsUrl, {});
 		if(!playerCodeResp.isOk) {
@@ -6270,7 +6273,7 @@ function prepareCipher(jsUrl, codeOverride) {
 		let constantsMatch = playerCode.match(/var ([a-zA-Z_\$0-9]+)=(["'].+index.m3u8.+["']\.split\(.+\))/);
 		if(!constantsMatch) {
 			constantsMatch = playerCode.match(/var ([a-zA-Z_\$0-9]+)=(\[.*?["']index\.m3u8["'].*?]),/s);
-			if(constantsMatch.index > 10000)
+			if(!constantsMatch || constantsMatch.index > 10000)
 				constantsMatch = null;
 		}
 	
@@ -6303,8 +6306,9 @@ function prepareCipher(jsUrl, codeOverride) {
 		return true;//_cipherDecode[jsUrl];
 	}
 	catch(ex) {
+		console.error(ex);
 		clearCipher(jsUrl);
-        if(bridge.devSubmit) bridge.devSubmit("prepareCipher - Failed to get Cipher due to: " + ex + "\n" + jsUrl, codeUsed ?? "No code fetched");
+        if(bridge.devSubmit) bridge.devSubmit("prepareCipher - Failed to get Cipher due to: Error:" + ex + "\n" + jsUrl, codeUsed ?? "No code fetched");
 		throw new ScriptException("Failed to get Cipher due to: " + ex + "\n" + jsUrl);
 	}
 }
