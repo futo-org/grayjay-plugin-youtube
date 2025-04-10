@@ -6396,10 +6396,22 @@ function getNDecryptorFunctionCode(code, jsUrl, constantArrayName, constantArray
 			if(variableChecks.indexOf(variableCheck[1]) >= 0)
 				continue;
 			console.log("VariableCheck found in cipher: " + variableCheck[1]);
-			prefix += "var " + variableCheck[1] + " = {}; ";
+			//prefix += "var " + variableCheck[1] + " = {}; ";
 			variableChecks.push(variableCheck[1]);
 		}
 	}
+	const variableFunctionCheckRegex2 = new RegExp(/;\s*([\w$_]+)=function/gs);
+	while((variableCheck = variableFunctionCheckRegex2.exec(nDecryptFunctionCodeMatch)) != null) {
+		if(variableCheck && variableCheck.length > 1 && variableCheck[1].length < 4) {
+			if(variableChecks.indexOf(variableCheck[1]) >= 0)
+				continue;
+			console.log("VariableFuncCheck found in cipher: " + variableCheck[1]);
+			//prefix += "var " + variableCheck[1] + " = {}; ";
+			variableChecks.push(variableCheck[1]);
+		}
+	}
+	if(variableChecks.length > 0)
+		prefix += "var " + variableChecks.map(x=>x + "={}").join(",") + ";\n";
 	
 	return "(function(){" + 
 		prefix + " " +

@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 246,
+	"version": 248,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -288,6 +288,9 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"248": [
+			"Fix: Potential cipher edgecase fix"
+		],
 		"244": [
 			"Fix: Support additional video models (may fix home page for some)"
 		],
