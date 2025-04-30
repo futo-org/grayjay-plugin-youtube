@@ -58,6 +58,7 @@ const REGEX_VIDEO_URL_SHARE_LIVE = new RegExp("https://(.*\\.)?youtube\\.com/liv
 const REGEX_VIDEO_URL_SHORT = new RegExp("https://(.*\\.)?youtube\\.com/shorts/(.*)");
 const REGEX_VIDEO_URL_CLIP = new RegExp("https://(.*\\.)?youtube\\.com/clip/(.*)[?]?");
 const REGEX_VIDEO_URL_EMBED = new RegExp("https://(.*\\.)?youtube\\.com/embed/([^?]+)");
+const REGEX_VIDEO_URL_APIv3 = new RegExp("https://(.*\\.)?youtube\\.com/v/(.*)\?version=3");
 
 const REGEX_VIDEO_CHANNEL_URL = new RegExp("https://(.*\\.)?youtube\\.com/channel/(.*)");
 const REGEX_VIDEO_CHANNEL_URL2 = new RegExp("https://(.*\\.)?youtube\\.com/user/.*");
@@ -381,7 +382,7 @@ source.getChannelTemplateByClaimMap = () => {
 
 //Video
 source.isContentDetailsUrl = (url) => {
-	return REGEX_VIDEO_URL_DESKTOP.test(url) || REGEX_VIDEO_URL_SHARE.test(url) || REGEX_VIDEO_URL_SHARE_LIVE.test(url) || REGEX_VIDEO_URL_SHORT.test(url) || REGEX_VIDEO_URL_CLIP.test(url) || REGEX_VIDEO_URL_EMBED.test(url);
+	return REGEX_VIDEO_URL_DESKTOP.test(url) || REGEX_VIDEO_URL_SHARE.test(url) || REGEX_VIDEO_URL_SHARE_LIVE.test(url) || REGEX_VIDEO_URL_SHORT.test(url) || REGEX_VIDEO_URL_CLIP.test(url) || REGEX_VIDEO_URL_EMBED.test(url) || REGEX_VIDEO_URL_APIv3.test(url);
 };
 
 
@@ -1934,6 +1935,10 @@ function extractVideoIDFromUrl(url) {
 		return removeQuery(match[2]);
 
 	match = url.match(REGEX_VIDEO_URL_SHORT);
+	if(match)
+		return removeQuery(match[2]);
+
+	match = url.match(REGEX_VIDEO_URL_APIv3);
 	if(match)
 		return removeQuery(match[2]);
 
