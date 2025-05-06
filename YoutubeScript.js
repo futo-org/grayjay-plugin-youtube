@@ -3998,7 +3998,7 @@ function extractChannel_PlatformChannel(initialData, sourceUrl = null) {
  * @returns 
  */
 function extractPage_Tabs(initialData, contextData) {
-	const content = initialData.contents;
+	const content = initialData?.contents;
 	if(!content) {
 	    if(bridge.devSubmit) bridge.devSubmit("extractPage_Tabs - Missing contents", JSON.stringify(initialData));
 	    throw new ScriptException("Missing contents");
