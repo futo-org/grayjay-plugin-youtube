@@ -974,7 +974,7 @@ function mergeSBChapters(videoChapters, sbChapters) {
                     type: videoChapter.type
                 };
 
-                if(sponsor.timeStart <= startTime && sponsor.timeEnd <= videoChapter.timeEnd) {
+                if(sponsor.timeStart <= startTime && sponsor.timeEnd >= videoChapter.timeEnd) {
                     newChapters.push(sponsor);
                     skip = true;
                 }
