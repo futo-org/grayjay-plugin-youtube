@@ -360,7 +360,7 @@ source.searchChannels = function(query) {
 
 source.getSearchChannelContentsCapabilities = function(){ return { types: [Type.Feed.Mixed], sorts: [] }; }
 source.searchChannelContents = function(channelUrl, query, type, order, filters) {
-	const initialData = requestInitialData(channelUrl + "/search?query=" + query, USE_MOBILE_PAGES, true);
+	const initialData = requestInitialData(channelUrl + "/search?query=" + query.replaceAll(' ', '+'), USE_MOBILE_PAGES, true);
 	const tabs = extractPage_Tabs(initialData, {});
 
 	if(IS_TESTING) {
@@ -3516,7 +3516,7 @@ function requestInitialData(url, useMobile = false, useAuth = false) {
                 else
                     html = respConsent.body;
 		    }
-		    else throw new CriticalException("Failed to refuse Google consent [" + resp.code + "]");
+		    else throw new CriticalException("Failed to refuse Google consent [" + respConsent.code + "]");
 		}
 
 
