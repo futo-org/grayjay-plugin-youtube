@@ -5507,9 +5507,11 @@ function extractThumbnails_BestUrl(thumbnails){
 }
 function extractVideoWithContextRenderer_AuthorLink(videoRenderer) {
 	try {
-		let id = videoRenderer.channelThumbnail?.channelThumbnailWithLinkRenderer?.navigationEndpoint?.browseEndpoint?.browseId;
+		let id = videoRenderer.channelThumbnail?.channelThumbnailWithLinkRenderer?.navigationEndpoint?.browseEndpoint?.browseId ??
+			((videoRenderer.longBylineText && videoRenderer.longBylineText.runs && videoRenderer.longBylineText.runs.length > 0) ?
+				videoRenderer.longBylineText.runs[0].navigationEndpoint?.browseEndpoint?.browseId : undefined);
 		const name = extractText_String(videoRenderer.shortBylineText);
-		const channelThumbs = videoRenderer.channelThumbnail.channelThumbnailWithLinkRenderer?.thumbnail?.thumbnails;
+		const channelThumbs = videoRenderer.channelThumbnail.channelThumbnailWithLinkRenderer?.thumbnail?.thumbnails ?? videoRenderer.channelThumbnail?.thumbnails;
 		const thumbUrl = channelThumbs && channelThumbs.length > 0 ? channelThumbs[0].url : null;
 		let channelUrl = videoRenderer.channelThumbnail?.channelThumbnailWithLinkRenderer?.navigationEndpoint?.browseEndpoint?.canonicalBaseUrl;
 		if(channelUrl) channelUrl = URL_BASE + channelUrl;
@@ -6500,7 +6502,7 @@ function getCipherFunctionCode(playerCode, jsUrl, constantArrayName, constantArr
 }
 source.getCipherFunctionCode = getCipherFunctionCode;
 function escapeRegex(str) {
-	return str?.replace("$", "\\$");
+	return str?.replaceAll("$", "\\$");
 }
 
 function decodeHexEncodedString(str) {
