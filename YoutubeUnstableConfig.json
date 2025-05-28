@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 248,
+	"version": 249,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -288,6 +288,10 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"249": [
+			"Fix: Cipher fix",
+			"Improvement: Better recommendation author parsing"
+		],
 		"248": [
 			"Fix: Potential cipher edgecase fix"
 		],
