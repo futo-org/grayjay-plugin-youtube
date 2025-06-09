@@ -6922,6 +6922,7 @@ class MP4Header {
 		
 		let foundTypes = [];
 		while(pointer.index < bytes.length) {
+			const boxStart = pointer.index;
 			const [type, size] = readBoxHeader(pointer);
 			const startOffset = pointer.index;
 			foundTypes.push(type + ": " + size);
@@ -6959,8 +6960,8 @@ class MP4Header {
 						throw new ScriptException("Invalid amount of bytes read from moov section.");
 					}
 				break;
-				case "sidx": 
-					this.indexRangeStart = startOffset;
+				case "sidx":
+					this.indexRangeStart = boxStart;
 					this.indexRangeEnd = startOffset + size;
 					const version = binaryReadByte(bytes, pointer);
 					const flags = binaryReadBytes(bytes, pointer, 3);
