@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 250,
+	"version": 251,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -296,6 +296,9 @@
 
 
 	"changelog": {
+		"251": [
+			"Fix: Issue with wrong offsets for UMP (affects downloaded videos)"
+		],
 		"250": [
 			"Fix: Consent form for search (with spaces)"
 		],
