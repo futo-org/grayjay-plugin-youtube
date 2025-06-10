@@ -260,6 +260,13 @@
 			"description": "Shows a toast whenever UMP goes into a reconnection mode",
 			"type": "Boolean",
 			"default": "false"
+		},
+		{
+			"variable": "fallback_home_trending",
+			"name": "Fallback to Trending for Home",
+			"description": "Fetches the trending page if the normal home page failed to load",
+			"type": "Boolean",
+			"default": "true"
 		}
 	],
 
