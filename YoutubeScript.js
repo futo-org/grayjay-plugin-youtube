@@ -52,6 +52,8 @@ const BROWSE_SUBSCRIPTIONS = "FEsubscriptions";
 const SEARCH_CHANNELS_PARAM = "EgIQAg%3D%3D";
 const SEARCH_PLAYLISTS_PARAM = "EgIQAw%3D%3D";
 
+const REGEX_TIMESTAMP = new RegExp("[\\?&]t=[0-9]+s?");
+
 const REGEX_VIDEO_URL_DESKTOP = new RegExp("https://(.*\\.)?youtube\\.com/watch.*?v=(.*)");
 const REGEX_VIDEO_URL_SHARE = new RegExp("https://youtu\\.be/(.*)");
 const REGEX_VIDEO_URL_SHARE_LIVE = new RegExp("https://(.*\\.)?youtube\\.com/live/(.*)");
@@ -435,9 +437,21 @@ else {
 		headersUsed["Accept-Language"] = "en-US";
 		headersUsed["Cookie"] = "PREF=hl=en&gl=US"
 
+		let urlFiltered = url;
+		const timestampMatch = REGEX_TIMESTAMP.exec(url);
+		if(timestampMatch) {
+			log("Video with timestamp detected, filtering out");
+			urlFiltered = url.substring(0, timestampMatch.index);
+			const urlFilteredSuffix = url.substring(timestampMatch.index + timestampMatch[0].length);
+			if(urlFiltered.indexOf("?") <= 0 && urlFilteredSuffix.length > 0 && urlFilteredSuffix[0] == "&")
+				urlFiltered += "?" + urlFilteredSuffix.substring(1);
+			else
+				urlFiltered += urlFilteredSuffix;
+		}
+
 		let batchCounter = 1;
 		const batch = http.batch()
-			.GET(url, headersUsed, useLogin);
+			.GET(urlFiltered, headersUsed, useLogin);
 		
 		let batchYoutubeDislikesIndex = -1;
 		if(videoId && _settings["youtubeDislikes"] && !simplify) {
@@ -1268,11 +1282,20 @@ source.getComments = (url) => {
 	//const html = requestPage(url, {}, useLogin);
 	const initialData = requestInitialData(url, useLogin, useLogin);
 	const contents = initialData.contents;
+
 	const result = contents.twoColumnWatchNextResults?.results?.results?.contents ??
 		contents.singleColumnWatchNextResults?.results?.results?.contents ??
 		null;	//Add any alternative containers
 	if(!result)
 		return new CommentPager([], false);
+
+	const commentsTurnedOff = !!result.find(x=>
+		(extractText_String(x.itemSectionRenderer?.contents[0]?.videoMetadataCarouselViewModel?.carouselItems[0]?.carouselItemViewModel?.carouselItem?.commentsEntryPointMessageViewModel?.messageText)?.indexOf("turned off") ?? 0) > 0 ||
+		(extractText_String(x.itemSectionRenderer?.contents[0]?.messageRenderer?.text)?.indexOf("turned off") ?? 0) > 0
+	);
+	if(commentsTurnedOff)
+		throw new UnavailableException("Comments turned off");
+
 	const engagementPanels = initialData.engagementPanels ?? [];
 	return extractTwoColumnWatchNextResultContents_CommentsPager(url, result, useLogin, engagementPanels);
 };
@@ -4253,7 +4276,14 @@ function extractVideoPage_VideoDetails(parentUrl, initialData, initialPlayerData
     const result = new PlatformVideoDetails(video);
 	if(!useLogin){
 		result.getComments = function() {
-			return extractTwoColumnWatchNextResultContents_CommentsPager(contextData.url, contentsContainer?.contents, useLogin)
+			const result = contentsContainer?.contents;
+			const commentsTurnedOff = !!result?.find(x=>
+				(extractText_String(x.itemSectionRenderer?.contents[0]?.videoMetadataCarouselViewModel?.carouselItems[0]?.carouselItemViewModel?.carouselItem?.commentsEntryPointMessageViewModel?.messageText)?.indexOf("turned off") ?? 0) > 0 ||
+				(extractText_String(x.itemSectionRenderer?.contents[0]?.messageRenderer.text)?.indexOf("turned off") ?? 0) > 0
+			);
+			if(commentsTurnedOff)
+				throw new UnavailableException("Comments turned off");
+			return extractTwoColumnWatchNextResultContents_CommentsPager(contextData.url, result, useLogin)
 		};
 	}
     return result;
@@ -4304,7 +4334,7 @@ function extractWeb_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 
 function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig, parentUrl, usedLogin) {
 	
-	const abrStreamingUrl = (initialPlayerData.streamingData.serverAbrStreamingUrl) ? 
+	const abrStreamingUrl = (initialPlayerData?.streamingData?.serverAbrStreamingUrl) ? 
 		decryptUrlN(initialPlayerData.streamingData.serverAbrStreamingUrl, jsUrl, false) : undefined;
 	if(!abrStreamingUrl)
 		return undefined;
@@ -4563,7 +4593,7 @@ function requestCommentPager(contextUrl, continuationToken, useLogin, useMobile)
 	if(!endpoints) {
 	    log("Comment object:\n" + JSON.stringify(data, null, "   "));
 	    if(bridge.devSubmit) bridge.devSubmit("requestCommentPager - No comment endpoints", JSON.stringify(data));
-	    throw new ScriptException("No comment endpoints provided by Youtube");
+	    throw new ScriptException("No comment endpoints provided by Youtube\nVideo may not have comments");
 	}
 	let commentsContinuation = null;
 	for(let i = 0; i < endpoints.length; i++) {
@@ -4651,7 +4681,7 @@ function requestCommentPager(contextUrl, continuationToken, useLogin, useMobile)
 
 	log("Comment object:\n" + JSON.stringify(data, null, "   "));
     if(bridge.devSubmit) bridge.devSubmit("requestCommentPager - No comment endpoints", JSON.stringify(data));
-	throw new ScriptException("No valid comment endpoint provided by Youtube");
+	throw new ScriptException("No valid comment endpoint provided by Youtube\nMay not have comments");
 }
 
 function extractSingleColumnBrowseResultsRenderer_Tabs(renderer, contextData) {
@@ -4856,6 +4886,11 @@ function extractItemSectionRenderer_Shelves(itemSectionRenderer, contextData) {
 			        channels.push(channel);
 			},
 			playlistRenderer(renderer) {
+			    const playlist = extractPlaylistRenderer_Playlist(renderer);
+			    if(playlist)
+			        playlists.push(playlist);
+			},
+			compactPlaylistRenderer(renderer) {
 			    const playlist = extractPlaylistRenderer_Playlist(renderer);
 			    if(playlist)
 			        playlists.push(playlist);

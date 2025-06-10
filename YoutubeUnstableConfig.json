@@ -289,7 +289,11 @@
 	
 	"changelog": {
 		"251": [
-			"Fix: Issue with wrong offsets for UMP (affects downloaded videos)"
+			"Fix: Fixed wrong offsets for UMP (affects downloaded videos)",
+			"Fix: Fixed UMP not being able to load if opened with a timestamp",
+			"Fix: Fixed planned videos not loading properly",
+			"Fix: Fixed playlists not appearing if using authentication for channels in some cases",
+			"Improvement: Error when comments are disabled"
 		],
 		"250": [
 			"Fix: Consent form for search (with spaces)"
