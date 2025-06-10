@@ -4279,7 +4279,7 @@ function extractVideoPage_VideoDetails(parentUrl, initialData, initialPlayerData
 			const result = contentsContainer?.contents;
 			const commentsTurnedOff = !!result?.find(x=>
 				(extractText_String(x.itemSectionRenderer?.contents[0]?.videoMetadataCarouselViewModel?.carouselItems[0]?.carouselItemViewModel?.carouselItem?.commentsEntryPointMessageViewModel?.messageText)?.indexOf("turned off") ?? 0) > 0 ||
-				(extractText_String(x.itemSectionRenderer?.contents[0]?.messageRenderer.text)?.indexOf("turned off") ?? 0) > 0
+				(extractText_String(x.itemSectionRenderer?.contents[0]?.messageRenderer?.text)?.indexOf("turned off") ?? 0) > 0
 			);
 			if(commentsTurnedOff)
 				throw new UnavailableException("Comments turned off");
