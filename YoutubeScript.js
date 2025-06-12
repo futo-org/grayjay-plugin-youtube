@@ -6544,6 +6544,9 @@ function randomInt(start, end) {
 
 
 //#region UMP
+source.parseUMP = function(data) {
+	return new UMPResponse(data);
+}
 
 class UMPResponse {
 
@@ -6612,6 +6615,23 @@ class UMPResponse {
 						log("Error:" + opCode44.getBda());
 						console.log("");
 					break;
+					case 57:
+						const opCode57 = pb.Opcode57_pb.Opcode57.deserializeBinary(segment);
+						console.log(opCode57);
+						break;
+					case 67:
+						const opCode67 = pb.Opcode49_pb.Opcode49.deserializeBinary(segment);
+						console.log("Opcode67", opCode67);
+						const opCode67MsgId = opCode67.getEo();
+						let opCode67Msg = "";
+						if(opCode67MsgId == 1)
+							opCode67Msg = ("Playback blocked (OP67: 1)");
+						else
+							opCode67Msg = ("Youtube Toast (OP67: " + opCode67MsgId + ")");
+						log(opCode67Msg);
+						bridge.toast(opCode67Msg);
+						this.snackbarId = opCode67MsgId;
+						break;
 				}
 			}
 			else {
