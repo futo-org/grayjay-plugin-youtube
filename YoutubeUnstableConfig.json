@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 248,
+	"version": 251,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -260,6 +260,13 @@
 			"description": "Shows a toast whenever UMP goes into a reconnection mode",
 			"type": "Boolean",
 			"default": "false"
+		},
+		{
+			"variable": "fallback_home_trending",
+			"name": "Fallback to Trending for Home",
+			"description": "Fetches the trending page if the normal home page failed to load",
+			"type": "Boolean",
+			"default": "true"
 		}
 	],
 
@@ -288,6 +295,20 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"251": [
+			"Fix: Fixed wrong offsets for UMP (affects downloaded videos)",
+			"Fix: Fixed UMP not being able to load if opened with a timestamp",
+			"Fix: Fixed planned videos not loading properly",
+			"Fix: Fixed playlists not appearing if using authentication for channels in some cases",
+			"Improvement: Error when comments are disabled"
+		],
+		"250": [
+			"Fix: Consent form for search (with spaces)"
+		],
+		"249": [
+			"Fix: Cipher fix",
+			"Improvement: Better recommendation author parsing"
+		],
 		"248": [
 			"Fix: Potential cipher edgecase fix"
 		],

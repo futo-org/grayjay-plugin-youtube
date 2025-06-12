@@ -52,6 +52,8 @@ const BROWSE_SUBSCRIPTIONS = "FEsubscriptions";
 const SEARCH_CHANNELS_PARAM = "EgIQAg%3D%3D";
 const SEARCH_PLAYLISTS_PARAM = "EgIQAw%3D%3D";
 
+const REGEX_TIMESTAMP = new RegExp("[\\?&]t=[0-9]+s?");
+
 const REGEX_VIDEO_URL_DESKTOP = new RegExp("https://(.*\\.)?youtube\\.com/watch.*?v=(.*)");
 const REGEX_VIDEO_URL_SHARE = new RegExp("https://youtu\\.be/(.*)");
 const REGEX_VIDEO_URL_SHARE_LIVE = new RegExp("https://(.*\\.)?youtube\\.com/live/(.*)");
@@ -360,7 +362,7 @@ source.searchChannels = function(query) {
 
 source.getSearchChannelContentsCapabilities = function(){ return { types: [Type.Feed.Mixed], sorts: [] }; }
 source.searchChannelContents = function(channelUrl, query, type, order, filters) {
-	const initialData = requestInitialData(channelUrl + "/search?query=" + query, USE_MOBILE_PAGES, true);
+	const initialData = requestInitialData(channelUrl + "/search?query=" + query.replaceAll(' ', '+'), USE_MOBILE_PAGES, true);
 	const tabs = extractPage_Tabs(initialData, {});
 
 	if(IS_TESTING) {
@@ -435,9 +437,21 @@ else {
 		headersUsed["Accept-Language"] = "en-US";
 		headersUsed["Cookie"] = "PREF=hl=en&gl=US"
 
+		let urlFiltered = url;
+		const timestampMatch = REGEX_TIMESTAMP.exec(url);
+		if(timestampMatch) {
+			log("Video with timestamp detected, filtering out");
+			urlFiltered = url.substring(0, timestampMatch.index);
+			const urlFilteredSuffix = url.substring(timestampMatch.index + timestampMatch[0].length);
+			if(urlFiltered.indexOf("?") <= 0 && urlFilteredSuffix.length > 0 && urlFilteredSuffix[0] == "&")
+				urlFiltered += "?" + urlFilteredSuffix.substring(1);
+			else
+				urlFiltered += urlFilteredSuffix;
+		}
+
 		let batchCounter = 1;
 		const batch = http.batch()
-			.GET(url, headersUsed, useLogin);
+			.GET(urlFiltered, headersUsed, useLogin);
 		
 		let batchYoutubeDislikesIndex = -1;
 		if(videoId && _settings["youtubeDislikes"] && !simplify) {
@@ -1268,11 +1282,20 @@ source.getComments = (url) => {
 	//const html = requestPage(url, {}, useLogin);
 	const initialData = requestInitialData(url, useLogin, useLogin);
 	const contents = initialData.contents;
+
 	const result = contents.twoColumnWatchNextResults?.results?.results?.contents ??
 		contents.singleColumnWatchNextResults?.results?.results?.contents ??
 		null;	//Add any alternative containers
 	if(!result)
 		return new CommentPager([], false);
+
+	const commentsTurnedOff = !!result.find(x=>
+		(extractText_String(x.itemSectionRenderer?.contents[0]?.videoMetadataCarouselViewModel?.carouselItems[0]?.carouselItemViewModel?.carouselItem?.commentsEntryPointMessageViewModel?.messageText)?.indexOf("turned off") ?? 0) > 0 ||
+		(extractText_String(x.itemSectionRenderer?.contents[0]?.messageRenderer?.text)?.indexOf("turned off") ?? 0) > 0
+	);
+	if(commentsTurnedOff)
+		throw new UnavailableException("Comments turned off");
+
 	const engagementPanels = initialData.engagementPanels ?? [];
 	return extractTwoColumnWatchNextResultContents_CommentsPager(url, result, useLogin, engagementPanels);
 };
@@ -3516,7 +3539,7 @@ function requestInitialData(url, useMobile = false, useAuth = false) {
                 else
                     html = respConsent.body;
 		    }
-		    else throw new CriticalException("Failed to refuse Google consent [" + resp.code + "]");
+		    else throw new CriticalException("Failed to refuse Google consent [" + respConsent.code + "]");
 		}
 
 
@@ -4253,7 +4276,14 @@ function extractVideoPage_VideoDetails(parentUrl, initialData, initialPlayerData
     const result = new PlatformVideoDetails(video);
 	if(!useLogin){
 		result.getComments = function() {
-			return extractTwoColumnWatchNextResultContents_CommentsPager(contextData.url, contentsContainer?.contents, useLogin)
+			const result = contentsContainer?.contents;
+			const commentsTurnedOff = !!result?.find(x=>
+				(extractText_String(x.itemSectionRenderer?.contents[0]?.videoMetadataCarouselViewModel?.carouselItems[0]?.carouselItemViewModel?.carouselItem?.commentsEntryPointMessageViewModel?.messageText)?.indexOf("turned off") ?? 0) > 0 ||
+				(extractText_String(x.itemSectionRenderer?.contents[0]?.messageRenderer?.text)?.indexOf("turned off") ?? 0) > 0
+			);
+			if(commentsTurnedOff)
+				throw new UnavailableException("Comments turned off");
+			return extractTwoColumnWatchNextResultContents_CommentsPager(contextData.url, result, useLogin)
 		};
 	}
     return result;
@@ -4304,7 +4334,7 @@ function extractWeb_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 
 function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig, parentUrl, usedLogin) {
 	
-	const abrStreamingUrl = (initialPlayerData.streamingData.serverAbrStreamingUrl) ? 
+	const abrStreamingUrl = (initialPlayerData?.streamingData?.serverAbrStreamingUrl) ? 
 		decryptUrlN(initialPlayerData.streamingData.serverAbrStreamingUrl, jsUrl, false) : undefined;
 	if(!abrStreamingUrl)
 		return undefined;
@@ -4563,7 +4593,7 @@ function requestCommentPager(contextUrl, continuationToken, useLogin, useMobile)
 	if(!endpoints) {
 	    log("Comment object:\n" + JSON.stringify(data, null, "   "));
 	    if(bridge.devSubmit) bridge.devSubmit("requestCommentPager - No comment endpoints", JSON.stringify(data));
-	    throw new ScriptException("No comment endpoints provided by Youtube");
+	    throw new ScriptException("No comment endpoints provided by Youtube\nVideo may not have comments");
 	}
 	let commentsContinuation = null;
 	for(let i = 0; i < endpoints.length; i++) {
@@ -4651,7 +4681,7 @@ function requestCommentPager(contextUrl, continuationToken, useLogin, useMobile)
 
 	log("Comment object:\n" + JSON.stringify(data, null, "   "));
     if(bridge.devSubmit) bridge.devSubmit("requestCommentPager - No comment endpoints", JSON.stringify(data));
-	throw new ScriptException("No valid comment endpoint provided by Youtube");
+	throw new ScriptException("No valid comment endpoint provided by Youtube\nMay not have comments");
 }
 
 function extractSingleColumnBrowseResultsRenderer_Tabs(renderer, contextData) {
@@ -4856,6 +4886,11 @@ function extractItemSectionRenderer_Shelves(itemSectionRenderer, contextData) {
 			        channels.push(channel);
 			},
 			playlistRenderer(renderer) {
+			    const playlist = extractPlaylistRenderer_Playlist(renderer);
+			    if(playlist)
+			        playlists.push(playlist);
+			},
+			compactPlaylistRenderer(renderer) {
 			    const playlist = extractPlaylistRenderer_Playlist(renderer);
 			    if(playlist)
 			        playlists.push(playlist);
@@ -5507,9 +5542,11 @@ function extractThumbnails_BestUrl(thumbnails){
 }
 function extractVideoWithContextRenderer_AuthorLink(videoRenderer) {
 	try {
-		let id = videoRenderer.channelThumbnail?.channelThumbnailWithLinkRenderer?.navigationEndpoint?.browseEndpoint?.browseId;
+		let id = videoRenderer.channelThumbnail?.channelThumbnailWithLinkRenderer?.navigationEndpoint?.browseEndpoint?.browseId ??
+			((videoRenderer.longBylineText && videoRenderer.longBylineText.runs && videoRenderer.longBylineText.runs.length > 0) ?
+				videoRenderer.longBylineText.runs[0].navigationEndpoint?.browseEndpoint?.browseId : undefined);
 		const name = extractText_String(videoRenderer.shortBylineText);
-		const channelThumbs = videoRenderer.channelThumbnail.channelThumbnailWithLinkRenderer?.thumbnail?.thumbnails;
+		const channelThumbs = videoRenderer.channelThumbnail.channelThumbnailWithLinkRenderer?.thumbnail?.thumbnails ?? videoRenderer.channelThumbnail?.thumbnails;
 		const thumbUrl = channelThumbs && channelThumbs.length > 0 ? channelThumbs[0].url : null;
 		let channelUrl = videoRenderer.channelThumbnail?.channelThumbnailWithLinkRenderer?.navigationEndpoint?.browseEndpoint?.canonicalBaseUrl;
 		if(channelUrl) channelUrl = URL_BASE + channelUrl;
@@ -6500,7 +6537,7 @@ function getCipherFunctionCode(playerCode, jsUrl, constantArrayName, constantArr
 }
 source.getCipherFunctionCode = getCipherFunctionCode;
 function escapeRegex(str) {
-	return str?.replace("$", "\\$");
+	return str?.replaceAll("$", "\\$");
 }
 
 function decodeHexEncodedString(str) {
@@ -6940,6 +6977,7 @@ class MP4Header {
 		
 		let foundTypes = [];
 		while(pointer.index < bytes.length) {
+			const boxStart = pointer.index;
 			const [type, size] = readBoxHeader(pointer);
 			const startOffset = pointer.index;
 			foundTypes.push(type + ": " + size);
@@ -6977,8 +7015,8 @@ class MP4Header {
 						throw new ScriptException("Invalid amount of bytes read from moov section.");
 					}
 				break;
-				case "sidx": 
-					this.indexRangeStart = startOffset;
+				case "sidx":
+					this.indexRangeStart = boxStart;
 					this.indexRangeEnd = startOffset + size;
 					const version = binaryReadByte(bytes, pointer);
 					const flags = binaryReadBytes(bytes, pointer, 3);
