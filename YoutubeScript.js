@@ -127,6 +127,7 @@ var overrideHttpClient = undefined;
 var _prefetchHome = null;
 var _prefetchHomeAuth = null;
 var _prefetchHomeUsed = false;
+var dashReloads = 0;
 
 const rootWindow = this;
 
@@ -135,6 +136,12 @@ const canDoRequestWithBody = !!http.requestWithBody;
 
 function getClientContext(isAuth = false) {
 	return (isAuth) ? _clientContextAuth : _clientContext;
+}
+
+const features = bridge.supportedFeatures ?? [];
+log(JSON.stringify(features));
+function canUse(feature) {
+	return features.indexOf(feature) >= 0;
 }
 
 var _setMetadata = false;
@@ -149,12 +156,24 @@ source.setSettings = function(settings) {
 source.reEnable = (conf, settings) => {
 	return source.enable(conf ?? config, settings ?? _settings);
 };
+
 source.enable = (conf, settings, saveStateStr) => {
 
 	if(typeof setTimeout !== 'function')
 		throw new ScriptException("Please update Grayjay, missing setTimeout");
 	config = conf ?? {};
 	_settings = settings ?? {};
+
+	if(typeof __reloadData !== "undefined") {
+		try {
+			const reloadData = JSON.parse(__reloadData);
+			if(reloadData.dashReloads)
+				dashReloads = parseInt(reloadData.dashReloads);
+		}
+		catch(ex) {
+			log("Failed to parse reload data: " + __reloadData + " | due to: " + ex);
+		}
+	}
 	
 	/*Broken on Android 9, dont re-add till then
 	const codecs = (bridge.getHardwareCodecs) ? bridge.getHardwareCodecs() : [];
@@ -2090,9 +2109,11 @@ class YTABRVideoSource extends DashManifestRawSource {
 	getRequestExecutor() {
 		if(this.overrideSource)
 			return this.overrideSource.getRequestExecutor();
-		return new YTABRExecutor(this, this.abrUrl, this.sourceObj, this.ustreamerConfig, 
+		const req = new YTABRExecutor(this, this.abrUrl, this.sourceObj, this.ustreamerConfig, 
 			this.initialHeader,
 			this.initialUMP, this.bgData);
+		log("Request Executor ready for video");
+		return req;
 	}
 }
 class YTABRAudioSource extends DashManifestRawAudioSource {
@@ -2141,14 +2162,19 @@ class YTABRAudioSource extends DashManifestRawAudioSource {
 	getRequestExecutor() {
 		if(this.overrideSource)
 			return this.overrideSource.getRequestExecutor();
-		return new YTABRExecutor(this, this.abrUrl, this.sourceObj, this.ustreamerConfig,
+		const req = new YTABRExecutor(this, this.abrUrl, this.sourceObj, this.ustreamerConfig,
 			this.initialHeader,
 			this.initialUMP, this.bgData);
+		log("Request Executor ready for audio");
+		return req;
 	}
 }
 function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, retries, options) {
 	if(!retries)
 		retries = 0;
+	if(retries <= 0 && dashReloads > 0)
+		retries = dashReloads;
+
 	const now = (new Date()).getTime();
 	const lastAction = (new Date()).getTime() - (Math.random() * 5000);
 	if(parentSource.pot)
@@ -2215,9 +2241,11 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 		if(!umpResp)
 			throw new ScriptException("Invalid UMP response found");
 
-		if(umpResp.streamCount == 0 && umpResp.snackbarId == 1 && retries < 3) {
+		if(umpResp.streamCount == 0 && umpResp.snackbarId == 1 && retries < 3 && canUse("ReloadRequiredException")) {
 			log("Attempting playback workaround (#" + retries + " - G)");
 			bridge.toast("Attempting playback workaround (#" + retries + " - G)");
+			throw new ReloadRequiredException("Playback blocked (#" + retries + " - G)", JSON.stringify({dashReloads: retries + 1}));
+			/*
 			log("Re-enabling..");
 			overrideHttpClient = http.newClient(parentSource.usedLogin);
 			source.reEnable();
@@ -2238,6 +2266,7 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 				pot: parentSource.pot,
 				httpClient: overrideHttpClient
 			})
+			*/
 		}
 
 
@@ -2281,6 +2310,8 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 		if(!itag || stream.itag == itag)
 			streams.push(stream);
 	}
+
+	dashReloads = 0;
 
 	const headerData = streams[0].data;
 	let header = undefined;
