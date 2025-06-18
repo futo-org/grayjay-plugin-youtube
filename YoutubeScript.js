@@ -1726,52 +1726,63 @@ source.getPlaylist = function (url) {
         const tab = renderer.tabs[0];
         const tabRenderer = tab.tabRenderer;
         const playlistList = findRenderer(tab, "playlistVideoListRenderer");
-        if(!playlistList || !playlistList.contents) {
-            throw new ScriptException("playlistVideoListRenderer not found");
-            return null;
-		}
-		
 		const videos = [];
-		let continuationToken = null;
-        for(let playlistRenderer of playlistList.contents) {
-            switchKey(playlistRenderer, {
-                playlistVideoRenderer(renderer) {
-                    const video = extractPlaylistVideoRenderer_Video(renderer);
-                    if(video)
-                        videos.push(video);
-				},
-				continuationItemRenderer(continueRenderer) {
-					continuationToken = continueRenderer?.continuationEndpoint?.continuationCommand?.token;
-				}
-            });
-		}
+		let videoPager = undefined;
+        if(playlistList && playlistList.contents) {
+            //throw new ScriptException("playlistVideoListRenderer not found");
+            //return null;
+		
+			let continuationToken = null;
+			for(let playlistRenderer of playlistList.contents) {
+				switchKey(playlistRenderer, {
+					playlistVideoRenderer(renderer) {
+						const video = extractPlaylistVideoRenderer_Video(renderer);
+						if(video)
+							videos.push(video);
+					},
+					continuationItemRenderer(continueRenderer) {
+						continuationToken = continueRenderer?.continuationEndpoint?.continuationCommand?.token;
+					}
+				});
+			}
 
-		//Fallback for old apps
-		if(!bridge.buildVersion || bridge.buildVersion < 245) {
-			log("Using legacy remote playlist (all videos first page)");
-			while (continuationToken) {
-				const newData = validateContinuation(()=>requestBrowse({
-					continuation: continuationToken
-				}, USE_MOBILE_PAGES, true));
+			//Fallback for old apps
+			if(!bridge.buildVersion || bridge.buildVersion < 245) {
+				log("Using legacy remote playlist (all videos first page)");
+				while (continuationToken) {
+					const newData = validateContinuation(()=>requestBrowse({
+						continuation: continuationToken
+					}, USE_MOBILE_PAGES, true));
 
-				if (newData.length < 1) {
-					break;
-				}
+					if (newData.length < 1) {
+						break;
+					}
 
-				continuationToken = null;
-				for(let playlistRenderer of newData) {
-					switchKey(playlistRenderer, {
-						playlistVideoRenderer(renderer) {
-							const video = extractPlaylistVideoRenderer_Video(renderer);
-							if(video)
-								videos.push(video);
-						},
-						continuationItemRenderer(continueRenderer) {
-							continuationToken = continueRenderer?.continuationEndpoint?.continuationCommand?.token;
-						}
-					});
+					continuationToken = null;
+					for(let playlistRenderer of newData) {
+						switchKey(playlistRenderer, {
+							playlistVideoRenderer(renderer) {
+								const video = extractPlaylistVideoRenderer_Video(renderer);
+								if(video)
+									videos.push(video);
+							},
+							continuationItemRenderer(continueRenderer) {
+								continuationToken = continueRenderer?.continuationEndpoint?.continuationCommand?.token;
+							}
+						});
+					}
 				}
 			}
+			videoPager = new PlaylistVideoPager(videos, continuationToken);
+		}
+		else {
+			const richGridRenderer = findRenderer(tab, "richGridRenderer");
+			if(richGridRenderer) {
+				const richGridShelves = extractRichGridRenderer_Shelves(richGridRenderer, {allowShorts: true, allowNoAuthor: true});
+				videoPager = new RichGridPager(richGridShelves, {}, USE_MOBILE_PAGES, true);
+			}
+			else
+            	throw new ScriptException("No content found for playlist");
 		}
 
 		let thumbnail = null;
@@ -1792,7 +1803,7 @@ source.getPlaylist = function (url) {
             name: title,
             thumbnail: thumbnail,
             videoCount: videoCount,
-            contents: new PlaylistVideoPager(videos, continuationToken)
+            contents: videoPager
         });
     }
 	else
@@ -5481,7 +5492,7 @@ function extractThumbnailViewModel_Data(thumbnailViewModel) {
 }
 
 function extractShortLockupViewModel_Video(videoRenderer, contextData) {
-	if(!contextData || !contextData.authorLink)
+	if( (!contextData || !contextData.authorLink) && !contextData?.allowNoAuthor)
 		return null;
 
 	const author = (contextData && contextData.authorLink) ?
@@ -5683,6 +5694,8 @@ function extractVideoWithContextRenderer_AuthorLink(videoRenderer) {
 }
 function extractVideoRenderer_AuthorLink(videoRenderer) {
 	try {
+		if(!videoRenderer?.channelThumbnailSupportedRenderers)
+			return null;
 		const id = videoRenderer.channelThumbnailSupportedRenderers.channelThumbnailWithLinkRenderer?.navigationEndpoint?.browseEndpoint?.browseId;
 		const name = extractText_String(videoRenderer.ownerText)//extractRuns_String(videoRenderer.ownerText.runs);
 		const channelIcon = videoRenderer.channelThumbnailSupportedRenderers.channelThumbnailWithLinkRenderer;
