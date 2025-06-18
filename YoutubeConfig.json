@@ -298,7 +298,8 @@
 	"changelog": {
 		"253": [
 			"Improvement: Attempted bypassing of blocked playback",
-			"Fixed: Short-only playlists are now loadable"
+			"Fixed: Short-only playlists are now loadable",
+			"Fixed: No author names for playlist search"
 		],
 		"252": [
 			"Improvement: Detect Youtube messages"

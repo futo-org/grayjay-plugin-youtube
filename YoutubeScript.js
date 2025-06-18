@@ -5569,10 +5569,45 @@ function extractPlaylistRenderer_Playlist(playlistRenderer, contextData) {
     });
 }
 
+function extractMetaDataRows_AuthorLink(metadataRows) {
+	if(!metadataRows)
+		return null;
+	for(let i = 0; i < (metadataRows?.length ?? 0); i++) {
+		const row = metadataRows[i];
+		
+		for(let x = 0; x < (row?.metadataParts?.length ?? 0); x++) {
+			const col = row.metadataParts[x]?.text;
+			if(col?.commandRuns && col?.content) {
+				for(let y = 0; y < (col?.commandRuns?.length ?? 0); y++) {
+					const command = col.commandRuns[y];
+					if(command?.onTap?.innertubeCommand?.browseEndpoint) {
+						const browseEndpoint = command?.onTap?.innertubeCommand?.browseEndpoint;
+						if(browseEndpoint && browseEndpoint.browseId && browseEndpoint.canonicalBaseUrl && browseEndpoint.canonicalBaseUrl.indexOf("/@") >= 0) {
+							const id = browseEndpoint.browseId;
+							const url = URL_CHANNEL_BASE + id;
+							const name = extractText_String(col.content);
+							return new PlatformAuthorLink(
+								new PlatformID(PLATFORM, id, config.id, PLATFORM_CLAIMTYPE), 
+								name, 
+								url, 
+								"", 
+								-1);
+						}
+					}
+				}
+			}
+		}
+	}
+	return null;
+}
+
 const REGEX_VIDEO_COUNT = /[0-9]+ videos/;
 function extractPlaylistLockupViewModel_Playlist(playlistRenderer, contextData) {
-	const author = (contextData && contextData.authorLink) ?
+	let author = (contextData && contextData.authorLink) ?
 		contextData.authorLink : null;
+		if(!author && playlistRenderer?.metadata?.lockupMetadataViewModel?.metadata?.contentMetadataViewModel?.metadataRows) {
+			author = extractMetaDataRows_AuthorLink(playlistRenderer?.metadata?.lockupMetadataViewModel?.metadata?.contentMetadataViewModel?.metadataRows);
+		}
 	
 		const thumbnailViewModel = playlistRenderer?.contentImage?.collectionThumbnailViewModel?.primaryThumbnail?.thumbnailViewModel;
 		let thumbnail = (thumbnailViewModel?.image?.sources?.length > 0) ?
