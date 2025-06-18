@@ -296,7 +296,8 @@
 	
 	"changelog": {
 		"253": [
-			"Improvement: Attempted bypassing of blocked playback"
+			"Improvement: Attempted bypassing of blocked playback", 
+			"Fixed: Short-only playlists are now loadable"
 		],
 		"252": [
 			"Improvement: Detect Youtube messages"
