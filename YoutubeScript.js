@@ -128,6 +128,15 @@ var _prefetchHome = null;
 var _prefetchHomeAuth = null;
 var _prefetchHomeUsed = false;
 var dashReloads = 0;
+var dashReloadsSet = -1;
+function getDashReloads() {
+	if(dashReloadsSet <= 0)
+		return 0;
+	const timeSinceSet = (new Date()).getTime() - dashReloadsSet;
+	if(timeSinceSet > 20 * 1000)
+		return 0;
+	return dashReloads;
+}
 
 const rootWindow = this;
 
@@ -167,8 +176,10 @@ source.enable = (conf, settings, saveStateStr) => {
 	if(typeof __reloadData !== "undefined") {
 		try {
 			const reloadData = JSON.parse(__reloadData);
-			if(reloadData.dashReloads)
+			if(reloadData.dashReloads) {
 				dashReloads = parseInt(reloadData.dashReloads);
+				dashReloadsSet = (new Date()).getTime();
+			}
 		}
 		catch(ex) {
 			log("Failed to parse reload data: " + __reloadData + " | due to: " + ex);
@@ -548,9 +559,13 @@ else {
 				throw new ScriptLoginRequiredException("Login required\nReason: " + initialPlayerData?.playabilityStatus?.reason);
 		}
 		const invalidExperiments = [51217102, 51217476];
+		const reloadRequiredExperiments = [51397094];
 		var invalidExperimentIndexes = invalidExperiments.map(x=>clientConfig.FEXP_EXPERIMENTS.indexOf(x));
 		const isExperiment = clientConfig.FEXP_EXPERIMENTS && invalidExperimentIndexes.filter(x=>x >= 0).length > 0;
 
+		//log("Experiments: " + JSON.stringify(clientConfig.FEXP_EXPERIMENTS));
+		//log("Experiment Flags: " + JSON.stringify(clientConfig.EXPERIMENT_FLAGS));
+		//console.log("Experiments", clientConfig.FEXP_EXPERIMENTS);
 
 		if(initialPlayerData?.playabilityStatus?.status == "UNPLAYABLE")
 			throw new UnavailableException("Video unplayable");
@@ -2077,7 +2092,7 @@ class YTVideoSource extends VideoUrlRangeSource {
 }
 
 class YTABRVideoSource extends DashManifestRawSource {
-    constructor(itag, obj, url, sourceObj, ustreamerConfig, bgData, parentUrl, usedLogin, jsUrl) {
+    constructor(itag, obj, url, sourceObj, ustreamerConfig, bgData, parentUrl, usedLogin, jsUrl, options) {
 		super(obj);
 		this.itag = itag;
 		this.url = url;
@@ -2096,6 +2111,8 @@ class YTABRVideoSource extends DashManifestRawSource {
 		this.usedLogin = !!usedLogin;
 		this.jsUrl = jsUrl;
 		this.overrideSource = undefined;
+		this.options = options;
+		this.sharedContext = options?.sharedContext;
     }
 
 	generate() {
@@ -2105,7 +2122,9 @@ class YTABRVideoSource extends DashManifestRawSource {
 			return this.lastDash;
 		log("Generating ABR Video Dash for " + this.sourceObj.itag);
 		getMediaReusableVideoBuffers()?.freeAll();
-		let [dash, umpResp, fileHeader] = generateDash(this, this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag);
+		let [dash, umpResp, fileHeader] = generateDash(this, this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag, 0, {
+			playerData: this.options?.playerData
+		});
 		this.initialHeader = fileHeader;
 		this.initialUMP = umpResp;
 		this.lastDash = dash;
@@ -2128,7 +2147,7 @@ class YTABRVideoSource extends DashManifestRawSource {
 	}
 }
 class YTABRAudioSource extends DashManifestRawAudioSource {
-    constructor(itag, obj, url, sourceObj, ustreamerConfig, bgData, parentUrl, usedLogin, jsUrl) {
+    constructor(itag, obj, url, sourceObj, ustreamerConfig, bgData, parentUrl, usedLogin, jsUrl, options) {
 		super(obj);
 		this.itag = itag;
 		this.url = url;
@@ -2149,6 +2168,8 @@ class YTABRAudioSource extends DashManifestRawAudioSource {
 		if(obj.original)
 			this.original = obj.original;
 		this.overrideSource = undefined;
+		this.options = options;
+		this.sharedContext = options?.sharedContext;
     }
 
 	generate() {
@@ -2158,7 +2179,9 @@ class YTABRAudioSource extends DashManifestRawAudioSource {
 			return this.lastDash;
 		log("Generating ABR Audio Dash");
 		getMediaReusableAudioBuffers()?.freeAll();
-		let [dash, umpResp, fileHeader] = generateDash(this, this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag);
+		let [dash, umpResp, fileHeader] = generateDash(this, this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag, 0, {
+			playerData: this.options?.playerData
+		});
 		this.initialHeader = fileHeader;
 		this.initialUMP = umpResp;
 		this.lastDash = dash;
@@ -2180,11 +2203,14 @@ class YTABRAudioSource extends DashManifestRawAudioSource {
 		return req;
 	}
 }
+
 function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, retries, options) {
+	options = options ?? {};
 	if(!retries)
 		retries = 0;
-	if(retries <= 0 && dashReloads > 0)
-		retries = dashReloads;
+	const currentDashReloads = getDashReloads();
+	if(retries <= 0 && currentDashReloads > 0)
+		retries = currentDashReloads;
 
 	const now = (new Date()).getTime();
 	const lastAction = (new Date()).getTime() - (Math.random() * 5000);
@@ -2199,18 +2225,24 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 			abrUrl += "&cver=2.20250131.01.00";
 		}
 		if(abrUrl.indexOf("&rn=") <= 0) {
-			abrUrl += "&rn=1";
+			abrUrl += "&rn=" + ((options.rn) ? options.rn : "1");
 		}
 		if(abrUrl.indexOf("&alr=") <= 0) {
 			abrUrl += "&alr=yes";
 		}
 	}
 
+	const lastRequest = (options?.lastRequestTime) ? ((new Date()).getTime() - options.lastRequestTime) : 0;
 
-	const initialReq = getVideoPlaybackRequest(sourceObj, ustreamerConfig, 0, 0, 0, lastAction, now, undefined, parentSource.pot);
+	if(!options?.sessionZm && parentSource?.sharedContext?.sessionZm)
+		log("Using shared sessionZm");
+	const initialReq = getVideoPlaybackRequest(sourceObj, ustreamerConfig, 0, 0, lastRequest, lastAction, now, undefined, parentSource.pot,  {
+		sessionZm: options?.sessionZm ?? parentSource?.sharedContext?.sessionZm
+	});
 	const postData = initialReq.serializeBinary();
 	let initialResp = undefined;
 	
+	const requestTime = (new Date()).getTime();
 	if(!options?.httpClient)
 		initialResp = http.POST(abrUrl, postData, {
 			"Origin": "https://www.youtube.com",
@@ -2252,10 +2284,27 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 		if(!umpResp)
 			throw new ScriptException("Invalid UMP response found");
 
-		if(umpResp.streamCount == 0 && umpResp.snackbarId == 1 && retries < 3 && canUse("ReloadRequiredException")) {
-			log("Attempting playback workaround (#" + retries + " - G)");
-			bridge.toast("Attempting playback workaround (#" + retries + " - G)");
-			throw new ReloadRequiredException("Playback blocked (#" + retries + " - G)", JSON.stringify({dashReloads: retries + 1}));
+		log("UMPResp Parsed, StreamCount: " + umpResp.streamCount + ", snackBarId: " + umpResp.snackbarId + ", retries: " + retries + ", " + JSON.stringify(retries));
+		if(umpResp.streamCount == 0 && umpResp.snackbarId == 1 && retries < 3) {
+			if(canUse("ReloadRequiredException") && currentDashReloads < 1 && _settings.allow_ump_plugin_reloads) {
+				log("Attempting playback workaround (#" + retries + " - G)");
+				bridge.toast("Attempting playback workaround (#" + retries + " - G)");
+				throw new ReloadRequiredException("Playback blocked (#" + retries + " - G)", JSON.stringify({dashReloads: retries + 1}));
+			}
+			else if (bridge.sleep && umpResp.backOffTime && _settings.allow_ump_backoff) {
+				log("Waiting for " + parseInt(umpResp.backOffTime / 1000) + "s as required")
+				bridge.toast("Waiting for " + parseInt(umpResp.backOffTime / 1000) + "s as required");
+				bridge.sleep(umpResp.backOffTime);
+
+				if (umpResp.sessionZm)
+					options.sessionZm = umpResp.sessionZm;
+				options.rn = (options?.rn ?? 1) + 1;
+				options.lastRequestTime = requestTime;
+				if(parentSource.sharedContext) {
+					parentSource.sharedContext.sessionZm = options.sessionZm;
+				}
+				return generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, retries + 1, options);
+			}
 			/*
 			log("Re-enabling..");
 			overrideHttpClient = http.newClient(parentSource.usedLogin);
@@ -2900,7 +2949,7 @@ class YTABRExecutor {
 		return stream.data;
 	}
 }
-function getVideoPlaybackRequest(source, ustreamerConfig, playerPosMs, segmentIndex, lastRequest, lastAction, requestStarted, playbackCookie, pot) {
+function getVideoPlaybackRequest(source, ustreamerConfig, playerPosMs, segmentIndex, lastRequest, lastAction, requestStarted, playbackCookie, pot, options) {
 	const vidReq = new pb.VideoPlaybackRequest_pb.VideoPlaybackRequest();
 	const ustreamerBytes = Uint8Array.from(atob(ustreamerConfig.replaceAll("_", "/").replaceAll("-", "+")), c => c.charCodeAt(0))
 	vidReq.setVideoplaybackustreamerconfig(ustreamerBytes);
@@ -2938,6 +2987,12 @@ function getVideoPlaybackRequest(source, ustreamerConfig, playerPosMs, segmentIn
 	sessionInfo.setClientinfo(clientInfo);
 	if(pot)
 		sessionInfo.setPot(pot);
+	if(options?.sessionZm) {
+		const lCa = new pb.VideoPlaybackRequest_pb.lCa();
+		lCa.setType(options.sessionZm.type);
+		lCa.setValue(options.sessionZm.value);
+		sessionInfo.setZmList([lCa]);
+	}
 	if(playbackCookie)
 		sessionInfo.setPlaybackcookie(playbackCookie);
 	vidReq.setSessioninfo(sessionInfo);
@@ -4477,6 +4532,7 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 	const hasOriginal = !!(initialPlayerData.streamingData.adaptiveFormats
 		?.filter(x=>x.mimeType.startsWith("audio/"))
 		?.find(x=>(x.audioTrack?.displayName?.toLowerCase()?.indexOf("original") ?? -1) >= 0));
+	const sharedContext = {};
 
 	return new UnMuxVideoSourceDescriptor(
 		(initialPlayerData.streamingData.adaptiveFormats
@@ -4504,7 +4560,10 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 					codec: codecs,
 					bitrate: y.bitrate
 				}, abrStreamingUrl, y, initialPlayerData.playerConfig.mediaCommonConfig.mediaUstreamerRequestConfig.videoPlaybackUstreamerConfig,
-					getBGDataFromClientConfig(clientConfig, usedLogin, contextData?.pot), parentUrl, usedLogin, jsUrl);
+					getBGDataFromClientConfig(clientConfig, usedLogin, contextData?.pot), parentUrl, usedLogin, jsUrl, {
+						playerData:initialPlayerData,
+						sharedContext: sharedContext
+					});
 				result.priority = isAV1;
 				return result;
 			})).filter(x => x != null),
@@ -4537,7 +4596,10 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 						((y.audioTrack?.audioIsDefault ?? false))),
 					language: ytLangIdToLanguage(y.audioTrack?.id)
 				}, abrStreamingUrl, y, initialPlayerData.playerConfig.mediaCommonConfig.mediaUstreamerRequestConfig.videoPlaybackUstreamerConfig,
-					getBGDataFromClientConfig(clientConfig, usedLogin, contextData?.pot), parentUrl, usedLogin, jsUrl);
+					getBGDataFromClientConfig(clientConfig, usedLogin, contextData?.pot), parentUrl, usedLogin, jsUrl, {
+						playerData:initialPlayerData,
+						sharedContext: sharedContext
+					});
 
 				return source;
 			})).filter(x => x != null)
@@ -6813,6 +6875,7 @@ class UMPResponse {
 					case 35://Opcode35: Playbackcookie
 						const opCode35 = pb.Opcode35_pb.Opcode35.deserializeBinary(segment);
 						this.playbackCookie = opCode35.getPlaybackcookie();
+						this.backOffTime = opCode35.getBackofftimems();
 					break;
 					case 43://Message
 						const opCode43 = pb.Opcode43_pb.Opcode43.deserializeBinary(segment);
@@ -6827,6 +6890,14 @@ class UMPResponse {
 					case 57:
 						const opCode57 = pb.Opcode57_pb.Opcode57.deserializeBinary(segment);
 						console.log(opCode57);
+						const sendByDefault = opCode57.getSendbydefault();
+						const scope = opCode57.getScope();
+						if(sendByDefault) {
+							this.sessionZm = {
+								type: opCode57.getType(),
+								value: opCode57.getValue()
+							};
+						}
 						break;
 					case 67:
 						const opCode67 = pb.Opcode49_pb.Opcode49.deserializeBinary(segment);

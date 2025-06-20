@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 253,
+	"version": 254,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -259,6 +259,20 @@
 			"name": "Show every time UMP disconnects",
 			"description": "Shows a toast whenever UMP goes into a reconnection mode",
 			"type": "Boolean",
+			"default": "false" 
+		},
+		{
+			"variable": "allow_ump_plugin_reloads",
+			"name": "Allow UMP to reload plugin",
+			"description": "Allows the UMP protocol to reload a plugin if it deems required and supported.",
+			"type": "Boolean",
+			"default": "true"
+		},
+		{
+			"variable": "allow_ump_backoff",
+			"name": "Allow experimental UMP backoff",
+			"description": "This enables an experimental backoff which waits when Youtube requires it. This may cause slower loading in some cases (even between videos)",
+			"type": "Boolean",
 			"default": "false"
 		},
 		{
@@ -296,6 +310,9 @@
 
 
 	"changelog": {
+		"254": [
+			"Improvement: Experimental UMP Backoff setting"
+		],
 		"253": [
 			"Improvement: Attempted bypassing of blocked playback",
 			"Fixed: Short-only playlists are now loadable",
