@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 254,
+	"version": 255,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -281,6 +281,20 @@
 			"description": "Fetches the trending page if the normal home page failed to load",
 			"type": "Boolean",
 			"default": "true"
+		},
+		{
+			"variable": "isInlinePlaybackNoAd",
+			"name": "Use isInlinePlaybackNoAd",
+			"description": "May reduce playback blocking issues.",
+			"type": "Boolean",
+			"default": "true"
+		},
+		{
+			"variable": "isInlinePlaybackNoAd_login",
+			"name": "Use isInlinePlaybackNoAd (when logged in)",
+			"description": "May reduce playback blocking issues. Long term effects unknown.",
+			"type": "Boolean",
+			"default": "false"
 		}
 	],
 
@@ -310,6 +324,9 @@
 
 
 	"changelog": {
+		"255": [
+			"Improvement: Reduce/Resolve playback blocked"
+		],
 		"254": [
 			"Improvement: Experimental UMP Backoff setting"
 		],

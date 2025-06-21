@@ -580,6 +580,13 @@ else {
 				bridge.toast("Cipher: " + hashMatch[1]);
 		}
 
+		if((!useLogin && _settings?.isInlinePlaybackNoAd) || (useLogin && _settings?.isInlinePlaybackNoAd_login)) {
+			const sts = _sts[jsUrl];
+			if(sts) {
+				initialPlayerData = getPlayerData(videoId, sts, useLogin);
+			}
+		}
+
 		ageRestricted = initialPlayerData.playabilityStatus?.reason?.indexOf("your age") > 0 ?? false;
 		if (ageRestricted) {
 			if (_settings["allowAgeRestricted"]) {
@@ -855,6 +862,10 @@ function getPlayerData(videoId, sts, useLogin = true) {
 		},
 		racyCheckOk: true,
 		videoId: videoId
+	};
+	if((!useLogin && _settings?.isInlinePlaybackNoAd) || (useLogin && _settings?.isInlinePlaybackNoAd_login)) {
+		log("Using isInlinePlaybackNoAd");
+		body.playbackContext.contentPlaybackContext.isInlinePlaybackNoAd = true;
 	}
 	const newResp = http.POST("https://www.youtube.com/youtubei/v1/player?prettyPrint=false", JSON.stringify(body), authHeaders, useLogin);
 	if(!newResp.isOk) {
