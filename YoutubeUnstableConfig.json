@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 255,
+	"version": 256,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -323,6 +323,13 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"256": [
+			"HOTFIX: Request optimalization",
+			"Improvement: Reduce/Resolve playback blocked"
+		],
+		"255": [
+			"Improvement: Reduce/Resolve playback blocked"
+		],
 		"254": [
 			"Improvement: Experimental UMP Backoff setting"
 		],

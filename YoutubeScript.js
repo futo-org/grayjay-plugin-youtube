@@ -580,7 +580,7 @@ else {
 				bridge.toast("Cipher: " + hashMatch[1]);
 		}
 
-		if((!useLogin && _settings?.isInlinePlaybackNoAd) || (useLogin && _settings?.isInlinePlaybackNoAd_login)) {
+		if(!options?.noSources && ((!useLogin && _settings?.isInlinePlaybackNoAd) || (useLogin && _settings?.isInlinePlaybackNoAd_login))) {
 			const sts = _sts[jsUrl];
 			if(sts) {
 				initialPlayerData = getPlayerData(videoId, sts, useLogin);
