@@ -585,9 +585,10 @@ else {
 			const previousInitialPlayerData = initialPlayerData;
 			if(sts) {
 				initialPlayerData = getPlayerData(videoId, sts, useLogin);
-				if(false) {
+				if(getDashReloads() < 2) {
 					log("Invalid PlayerData from isInlinePlaybackNoAd, using without")
-					bridge.toast("Invalid PlayerData with isInlinePlaybackNoAd, using without");
+					if (_settings.showVerboseToasts)
+						bridge.toast("Invalid PlayerData with isInlinePlaybackNoAd, using without");
 					initialPlayerData = previousInitialPlayerData;
 				}
 			}
@@ -2303,10 +2304,11 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 
 		log("UMPResp Parsed, StreamCount: " + umpResp.streamCount + ", snackBarId: " + umpResp.snackbarId + ", retries: " + retries + ", " + JSON.stringify(retries));
 		if(umpResp.streamCount == 0 && umpResp.snackbarId == 1 && retries < 3) {
-			if(canUse("ReloadRequiredException") && currentDashReloads < 1 && _settings.allow_ump_plugin_reloads) {
-				log("Attempting playback workaround (#" + retries + " - G)");
-				bridge.toast("Attempting playback workaround (#" + retries + " - G)");
-				throw new ReloadRequiredException("Playback blocked (#" + retries + " - G)", JSON.stringify({dashReloads: retries + 1}));
+			log("Reload required: " + canUse("ReloadRequiredException") + ", Reload:" + currentDashReloads + ", Setting: " + _settings.allow_ump_plugin_reloads)
+			if(canUse("ReloadRequiredException") && ((currentDashReloads < 1 && _settings.allow_ump_backoff) || (currentDashReloads < 4 && !_settings.allow_ump_backoff)) && _settings.allow_ump_plugin_reloads) {
+				log("Attempting playback workaround (#" + retries + ")");
+				bridge.toast("Attempting playback workaround (#" + retries + ")");
+				throw new ReloadRequiredException("Playback blocked (#" + retries + ")", JSON.stringify({dashReloads: retries + 1}));
 			}
 			else if (bridge.sleep && umpResp.backOffTime && _settings.allow_ump_backoff) {
 				log("Waiting for " + parseInt(umpResp.backOffTime / 1000) + "s as required")
@@ -6926,7 +6928,8 @@ class UMPResponse {
 						else
 							opCode67Msg = ("Youtube Toast (OP67: " + opCode67MsgId + ")");
 						log(opCode67Msg); 
-						bridge.toast(opCode67Msg);
+						if(_settings.showVerboseToasts)
+							bridge.toast(opCode67Msg);
 						this.snackbarId = opCode67MsgId;
 						break;
 				}

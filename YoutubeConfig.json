@@ -325,7 +325,8 @@
 
 	"changelog": {
 		"257": [
-			"Improvement: Fallback without setting if fails"
+			"Improvement: Fallback without setting if fails",
+			"Improvement: Hide certain messages behind verbose toasts"
 		],
 		"256": [
 			"HOTFIX: Request optimalization",
