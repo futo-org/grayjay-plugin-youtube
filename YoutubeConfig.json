@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 256,
+	"version": 257,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -324,6 +324,9 @@
 
 
 	"changelog": {
+		"257": [
+			"Improvement: Fallback without setting if fails"
+		],
 		"256": [
 			"HOTFIX: Request optimalization",
 			"Improvement: Reduce/Resolve playback blocked"

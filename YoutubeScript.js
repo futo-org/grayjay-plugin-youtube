@@ -582,8 +582,14 @@ else {
 
 		if(!options?.noSources && ((!useLogin && _settings?.isInlinePlaybackNoAd) || (useLogin && _settings?.isInlinePlaybackNoAd_login))) {
 			const sts = _sts[jsUrl];
+			const previousInitialPlayerData = initialPlayerData;
 			if(sts) {
 				initialPlayerData = getPlayerData(videoId, sts, useLogin);
+				if(false) {
+					log("Invalid PlayerData from isInlinePlaybackNoAd, using without")
+					bridge.toast("Invalid PlayerData with isInlinePlaybackNoAd, using without");
+					initialPlayerData = previousInitialPlayerData;
+				}
 			}
 		}
 
