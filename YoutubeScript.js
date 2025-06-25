@@ -585,7 +585,7 @@ else {
 			const previousInitialPlayerData = initialPlayerData;
 			if(sts) {
 				initialPlayerData = getPlayerData(videoId, sts, useLogin);
-				if(getDashReloads() < 2) {
+				if(getDashReloads() > 1) {
 					log("Invalid PlayerData from isInlinePlaybackNoAd, using without")
 					if (_settings.showVerboseToasts)
 						bridge.toast("Invalid PlayerData with isInlinePlaybackNoAd, using without");

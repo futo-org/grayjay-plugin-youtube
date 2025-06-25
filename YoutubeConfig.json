@@ -324,6 +324,9 @@
 
 
 	"changelog": {
+		"258": [
+			"Hotfix: Fix handling of invalid PlayerData from isInlinePlaybackNoAd after reload"
+		],
 		"257": [
 			"Improvement: Fallback without setting if fails",
 			"Improvement: Hide certain messages behind verbose toasts"
