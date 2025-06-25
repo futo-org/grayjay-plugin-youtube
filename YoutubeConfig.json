@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 257,
+	"version": 258,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -324,6 +324,9 @@
 
 
 	"changelog": {
+		"258": [
+			"Hotfix: Fix handling of invalid PlayerData from isInlinePlaybackNoAd after reload"
+		],
 		"257": [
 			"Improvement: Fallback without setting if fails",
 			"Improvement: Hide certain messages behind verbose toasts"
