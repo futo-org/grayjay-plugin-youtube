@@ -3256,6 +3256,16 @@ class YTLiveEventPager extends LiveEventPager {
 		return this;
 	}
 }
+function colorToRgbaHex(argbColor) {
+	const colorInt = Number(argbColor);
+	if (!Number.isFinite(colorInt)) return null;
+	const a = (colorInt >>> 24) & 0xFF;
+	const r = (colorInt >>> 16) & 0xFF;
+	const g = (colorInt >>> 8) & 0xFF;
+	const b =  colorInt & 0xFF;
+	const to2 = n => n.toString(16).padStart(2, "0").toUpperCase();
+	return `#${to2(r)}${to2(g)}${to2(b)}${to2(a)}`;
+}
 function handleYoutubeLiveEvents(actions) {
 	let emojiMap = {};
 	let events = [];
@@ -3281,7 +3291,7 @@ function handleYoutubeLiveEvents(actions) {
 						events.push(new LiveEventComment(msgObj.name, msgObj.message, msgObj.thumbnail, msgObj.colorName, msgObj.badges));
 					else {
 						const amount = extractText_String(renderer.amount ?? renderer.purchaseAmountText ?? paidMessageRenderer?.amount ?? paidMessageRenderer?.purchaseAmountText);
-						events.push(new LiveEventDonation(amount, msgObj.name, msgObj.message ?? "", msgObj.thumbnail, 0, renderer.bodyBackgroundColor ? "#" + Number(renderer.bodyBackgroundColor).toString(16) : null));
+						events.push(new LiveEventDonation(amount, msgObj.name, msgObj.message ?? "", msgObj.thumbnail, 0, renderer.bodyBackgroundColor ? colorToRgbaHex(renderer.bodyBackgroundColor) : null));
 					}
 				}
 			}
@@ -3294,7 +3304,7 @@ function handleYoutubeLiveEvents(actions) {
 					const membershipRenderer = renderer.showItemEndpoint?.showLiveChatItemEndpoint?.renderer?.liveChatMembershipItemRenderer;
 					const msgObj = extractLiveMessage_Obj(membershipRenderer);
 					if(msgObj && msgObj.name)
-						events.push(new LiveEventDonation("Member", msgObj.name, msgObj.message, msgObj.thumbnail, (renderer.durationSec ?? 10) * 1000, membershipRenderer.bodyBackgroundColor ? "#" + Number(membershipRenderer.bodyBackgroundColor).toString(16) : null));
+						events.push(new LiveEventDonation("Member", msgObj.name, msgObj.message, msgObj.thumbnail, (renderer.durationSec ?? 10) * 1000, membershipRenderer.bodyBackgroundColor ? colorToRgbaHex(membershipRenderer.bodyBackgroundColor) : null));
 				}
 				else if(obj.item?.liveChatTickerPaidMessageItemRenderer) {
 					const renderer = obj.item?.liveChatTickerPaidMessageItemRenderer
@@ -3302,7 +3312,7 @@ function handleYoutubeLiveEvents(actions) {
 					const msgObj = extractLiveMessage_Obj(paidMessageRenderer);
 					const amount = extractText_String(renderer.amount ?? renderer.purchaseAmountText ?? paidMessageRenderer?.amount ?? paidMessageRenderer?.purchaseAmountText);
 					if(msgObj && msgObj.name)
-						events.push(new LiveEventDonation(amount, msgObj.name, msgObj.message, msgObj.thumbnail, (renderer.durationSec ?? 10) * 1000, paidMessageRenderer.bodyBackgroundColor ? "#" + Number(paidMessageRenderer.bodyBackgroundColor).toString(16) : null));
+						events.push(new LiveEventDonation(amount, msgObj.name, msgObj.message, msgObj.thumbnail, (renderer.durationSec ?? 10) * 1000, paidMessageRenderer.bodyBackgroundColor ? colorToRgbaHex(paidMessageRenderer.bodyBackgroundColor) : null));
 				}
 			}
 			else if(action.addBannerToLiveChatCommand) {
