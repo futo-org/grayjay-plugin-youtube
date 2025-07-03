@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 258,
+	"version": 259,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -323,6 +323,9 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"259": [
+			"Logging: Adding additional logging for edgecase"
+		],
 		"258": [
 			"Hotfix: Fix handling of invalid PlayerData from isInlinePlaybackNoAd after reload"
 		],

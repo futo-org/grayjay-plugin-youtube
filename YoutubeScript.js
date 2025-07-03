@@ -596,6 +596,7 @@ else {
 
 		ageRestricted = initialPlayerData.playabilityStatus?.reason?.indexOf("your age") > 0 ?? false;
 		if (ageRestricted) {
+			log("Content Details: Age Restricted");
 			if (_settings["allowAgeRestricted"]) {
 				const sts = _sts[jsUrl];
 				if (!initialPlayerData.streamingData && sts) {
@@ -611,6 +612,7 @@ else {
 		}
 		const controversial = initialPlayerData.playabilityStatus?.errorScreen?.playerErrorMessageRenderer?.reason?.simpleText?.indexOf("following content may") > 0 ?? false;
 		if(controversial) {
+			log("Content Details: Controversial");
 			if (_settings["allowControversialRestricted"]) {
 				bridge.toast("Controversial video, bypassing..");
 				const sts = _sts[jsUrl];
@@ -651,12 +653,14 @@ else {
 			jsUrl: jsUrl
 		};
 
+		log("extractVideoPage_VideoDetails (start)");
 		const videoDetails = extractVideoPage_VideoDetails(url, initialData, initialPlayerData, {
 			pot: options?.pot,
 			httpClient: overrideHttpClient,
 			url: url,
 			noSources: !!(options?.noSources)
 		}, jsUrl, useLogin, defaultUMP, clientConfig, usedLogin);
+		log("extractVideoPage_VideoDetails (fin)");
 		if(videoDetails == null)
 			throw new UnavailableException("No video found");
 
@@ -671,6 +675,7 @@ else {
 				throw new UnavailableException("No sources found");
 		}
 
+		log("getBGDataFromClientConfig");
 		let bgData = getBGDataFromClientConfig(clientConfig, usedLogin);
 
 
@@ -689,6 +694,7 @@ else {
 		}
 		//Substitute HLS manifest from iOS
 		if(USE_IOS_FALLBACK && videoDetails.hls && videoDetails.hls.url && !simplify) {
+			log("requestIOSStreamingData (hls)");
 			const iosDataResp = (batchIOS > 0) ?
 				resps[batchIOS] : 
 				requestIOSStreamingData(videoDetails.id.value);
@@ -712,6 +718,7 @@ else {
 				bridge.toast("Failed to get iOS stream data");
 		}
 		else if(USE_IOS_VIDEOS_FALLBACK && !USE_ABR_VIDEOS && !simplify) {
+			log("requestIOSStreamingData (sources)");
 			const iosDataResp = (batchIOS > 0) ?
 				resps[batchIOS] : 
 				requestIOSStreamingData(videoDetails.id.value, undefined, getBGDataFromClientConfig(clientConfig, usedLogin), usedLogin);
@@ -6414,6 +6421,9 @@ var _cipherDecode = {
 var _nDecrypt = {
 	
 };
+var _jsUrlScripts = {
+
+}
 var _sts = {
 	
 };
@@ -6496,12 +6506,26 @@ function decryptUrlN(url, jsUrl, doLogging) {
 function decodeCipher(cipher, jsUrl) {
 	if(!_cipherDecode[jsUrl])
 		throw new ScriptException("Cipher decoder was not available [" + jsUrl + "]");
-	return _cipherDecode[jsUrl](cipher);
+	try {
+		return _cipherDecode[jsUrl](cipher);
+	}
+	catch(ex) {
+		log("decodeCipher failed: " + ex);
+	    if(bridge.devSubmit) bridge.devSubmit("decodeCipher - failed due to: " + ex, jsUrl + "\n\n" + _jsUrlScripts[jsUrl]);
+		throw ex;
+	}
 }
 function decryptN(encryptedN, jsUrl) {
 	if(!_nDecrypt[jsUrl])
 		throw new ScriptException("N Decryptor was not available [" + jsUrl + "]");
-	return _nDecrypt[jsUrl](encryptedN);
+	try {
+		return _nDecrypt[jsUrl](encryptedN);
+	}
+	catch(ex) {
+		log("decryptN failed: " + ex);
+	    if(bridge.devSubmit) bridge.devSubmit("decryptN - failed due to: " + ex, jsUrl + "\n\n" + _jsUrlScripts[jsUrl]);
+		throw ex;
+	}
 }
 function testCipher(hash, codeOverride) {
 	const jsUrl = CIPHER_TEST_PREFIX + hash + CIPHER_TEST_SUFFIX;
@@ -6559,6 +6583,8 @@ function prepareCipher(jsUrl, codeOverride) {
 		console.log("Javascript Url: " + URL_BASE + jsUrl);
 		let playerCode = (codeOverride) ? codeOverride : playerCodeResp.body;
 		codeUsed = playerCode;
+
+		_jsUrlScripts[jsUrl] = playerCode;
 
 		let constantsMatch = playerCode.match(/var ([a-zA-Z_\$0-9]+)=(["'].+index.m3u8.+["']\.split\(.+\))/);
 		if(!constantsMatch) {
