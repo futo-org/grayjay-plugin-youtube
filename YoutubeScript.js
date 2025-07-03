@@ -6531,10 +6531,14 @@ function testCipher(hash, codeOverride) {
 	const jsUrl = CIPHER_TEST_PREFIX + hash + CIPHER_TEST_SUFFIX;
 	try{
 		const result = prepareCipher(jsUrl, codeOverride);
+		let decryptN = _nDecrypt[jsUrl];
+		let cipher = _cipherDecode[jsUrl];
 		clearCipher(jsUrl);
 		return {
 			success: result,
-			exception: ""
+			exception: "",
+			decryptN: decryptN,
+			cipher: cipher
 		};
 	}
 	catch(ex) {
@@ -6728,6 +6732,27 @@ function getNDecryptorFunctionCode(code, jsUrl, constantArrayName, constantArray
 	}
 	if(variableChecks.length > 0)
 		prefix += "var " + variableChecks.map(x=>x + "={}").join(",") + ";\n";
+
+	const globalFuncRegex = new RegExp(/var [A-Za-z0-9_$]+\s*=\s*function\(.*\)\s*{.*};$/gm);
+	let globalFuncCheck = undefined;
+	let globalFuncs = [];
+	let lastGlobalFuncCheckEnd = -1;
+	while((globalFuncCheck = globalFuncRegex.exec(code)) != null) {
+		if(globalFuncCheck && globalFuncCheck.length > 0) {
+			if(globalFuncs.indexOf(globalFuncCheck[0]) >= 0)
+				continue;
+			console.log("GlobalFuncCheck found in cipher: " + globalFuncCheck[0]);
+			const currentEnd = globalFuncCheck.index + globalFuncCheck[0].length;
+			if(lastGlobalFuncCheckEnd < 0 || (globalFuncCheck.index - lastGlobalFuncCheckEnd) < 20) {
+				globalFuncs.push(globalFuncCheck[0]);
+				lastGlobalFuncCheckEnd = currentEnd;
+			}
+			else
+				break;
+		}
+	}
+	if(globalFuncs.length > 0)
+		prefix += globalFuncs.join("\n") + "\n";
 	
 	return "(function(){" + 
 		prefix + " " +
