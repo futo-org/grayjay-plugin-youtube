@@ -3320,13 +3320,12 @@ function handleYoutubeLiveEvents(actions) {
 				const redirectRenderer = bannerRenderer?.contents?.liveChatBannerRedirectRenderer;
 
 				if(bannerRenderer && redirectRenderer && bannerRenderer.bannerType == "LIVE_CHAT_BANNER_TYPE_CROSS_CHANNEL_REDIRECT") {
-					
 					const url = redirectRenderer.inlineActionButton?.buttonRenderer?.command?.commandMetadata?.webCommandMetadata?.url;
+					const isOutgoing = url.startsWith("/watch");
 					const name = redirectRenderer.bannerMessage?.runs?.find(x=>x.bold)?.text;
 					const thumbnails = redirectRenderer.authorPhoto?.thumbnails;
-					
 					if(url && name && thumbnails && thumbnails.length && thumbnails.length > 0)
-						events.push(new LiveEventRaid(URL_BASE + url, name, thumbnails[thumbnails.length - 1]?.url));
+						events.push(new LiveEventRaid(isOutgoing ? URL_BASE + url : "", name, thumbnails[thumbnails.length - 1]?.url, isOutgoing));
 				}
 			}
 			else {
