@@ -276,6 +276,13 @@
 			"default": "false"
 		},
 		{
+			"variable": "allow_ump_backoff_async",
+			"name": "Allow experimental UMP backoff (async)",
+			"description": "Same as above setting, but only if async is supported",
+			"type": "Boolean",
+			"default": "true"
+		},
+		{
 			"variable": "fallback_home_trending",
 			"name": "Fallback to Trending for Home",
 			"description": "Fetches the trending page if the normal home page failed to load",

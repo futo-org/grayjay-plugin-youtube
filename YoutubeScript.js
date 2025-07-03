@@ -2140,19 +2140,38 @@ class YTABRVideoSource extends DashManifestRawSource {
 			return this.lastDash;
 		log("Generating ABR Video Dash for " + this.sourceObj.itag);
 		getMediaReusableVideoBuffers()?.freeAll();
-		let [dash, umpResp, fileHeader] = generateDash(this, this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag, 0, {
+
+		const me = this;
+		function handleDash(dash, umpResp, fileHeader) {
+			me.initialHeader = fileHeader;
+			me.initialUMP = umpResp;
+			me.lastDash = dash;
+
+			me.initStart = 0;
+			me.initEnd = fileHeader.indexRangeStart - 1;
+			me.indexStart = fileHeader.indexRangeStart;
+			me.indexEnd = fileHeader.indexRangeEnd;
+
+			return dash;
+		}
+
+
+		let result = generateDash(this, this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag, 0, {
 			playerData: this.options?.playerData
 		});
-		this.initialHeader = fileHeader;
-		this.initialUMP = umpResp;
-		this.lastDash = dash;
-
-		this.initStart = 0;
-		this.initEnd = fileHeader.indexRangeStart - 1;
-		this.indexStart = fileHeader.indexRangeStart;
-		this.indexEnd = fileHeader.indexRangeEnd;
-
-		return dash;
+		
+		if(result && result.then) {
+			return result.then((result)=>{
+				const [dash, umpResp, fileHeader] = result;
+				return handleDash(dash, umpResp, fileHeader);
+			}, (rejected)=>{
+				return rejected;
+			});
+		}
+		else {
+			const [dash, umpResp, fileHeader] = result;
+			return handleDash(dash, umpResp, fileHeader);
+		}
 	}
 	getRequestExecutor() {
 		if(this.overrideSource)
@@ -2197,19 +2216,41 @@ class YTABRAudioSource extends DashManifestRawAudioSource {
 			return this.lastDash;
 		log("Generating ABR Audio Dash");
 		getMediaReusableAudioBuffers()?.freeAll();
-		let [dash, umpResp, fileHeader] = generateDash(this, this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag, 0, {
+		//let [dash, umpResp, fileHeader] = generateDash(this, this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag, 0, {
+		//	playerData: this.options?.playerData
+		//});
+
+		const me = this;
+		function handleDash(dash, umpResp, fileHeader) {
+			me.initialHeader = fileHeader;
+			me.initialUMP = umpResp;
+			me.lastDash = dash;
+
+			me.initStart = 0;
+			me.initEnd = fileHeader.indexRangeStart - 1;
+			me.indexStart = fileHeader.indexRangeStart;
+			me.indexEnd = fileHeader.indexRangeEnd;
+			
+			return dash;
+		}
+
+
+		let result = generateDash(this, this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag, 0, {
 			playerData: this.options?.playerData
 		});
-		this.initialHeader = fileHeader;
-		this.initialUMP = umpResp;
-		this.lastDash = dash;
-
-		this.initStart = 0;
-		this.initEnd = fileHeader.indexRangeStart - 1;
-		this.indexStart = fileHeader.indexRangeStart;
-		this.indexEnd = fileHeader.indexRangeEnd;
 		
-		return dash;
+		if(result && result.then) {
+			return result.then((result)=>{
+				const [dash, umpResp, fileHeader] = result;
+				return handleDash(dash, umpResp, fileHeader);
+			}, (rejected)=>{
+				return rejected;
+			});
+		}
+		else {
+			const [dash, umpResp, fileHeader] = result;
+			return handleDash(dash, umpResp, fileHeader);
+		}
 	}
 	getRequestExecutor() {
 		if(this.overrideSource)
@@ -2305,10 +2346,36 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 		log("UMPResp Parsed, StreamCount: " + umpResp.streamCount + ", snackBarId: " + umpResp.snackbarId + ", retries: " + retries + ", " + JSON.stringify(retries));
 		if(umpResp.streamCount == 0 && umpResp.snackbarId == 1 && retries < 3) {
 			log("Reload required: " + canUse("ReloadRequiredException") + ", Reload:" + currentDashReloads + ", Setting: " + _settings.allow_ump_plugin_reloads)
-			if(canUse("ReloadRequiredException") && ((currentDashReloads < 1 && _settings.allow_ump_backoff) || (currentDashReloads < 4 && !_settings.allow_ump_backoff)) && _settings.allow_ump_plugin_reloads) {
+			const wantsAsyncBackoff = canUse("Async") && _settings.allow_ump_backoff_async;
+			if(canUse("ReloadRequiredException") && 
+					((currentDashReloads < 1 && _settings.allow_ump_backoff) || (currentDashReloads < 1 && wantsAsyncBackoff) || (currentDashReloads < 4 && !_settings.allow_ump_backoff && !wantsAsyncBackoff)) && 
+					_settings.allow_ump_plugin_reloads) {
 				log("Attempting playback workaround (#" + retries + ")");
 				bridge.toast("Attempting playback workaround (#" + retries + ")");
 				throw new ReloadRequiredException("Playback blocked (#" + retries + ")", JSON.stringify({dashReloads: retries + 1}));
+			}
+			else if(canUse("Async") && umpResp.backOffTime && (_settings.allow_ump_backoff_async || _settings.allow_ump_backoff)) {
+				log("Waiting for " + parseInt(umpResp.backOffTime / 1000) + "s as required (Async)")
+				bridge.toast("Waiting for " + parseInt(umpResp.backOffTime / 1000) + "s as required (Async)");
+				return new Promise((resolve, reject)=>{
+					setTimeout(()=>{
+						try {
+							log("Waiting finished");
+							if (umpResp.sessionZm)
+								options.sessionZm = umpResp.sessionZm;
+							options.rn = (options?.rn ?? 1) + 1;
+							options.lastRequestTime = requestTime;
+							if(parentSource.sharedContext) {
+								parentSource.sharedContext.sessionZm = options.sessionZm;
+							}
+							const result = generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, retries + 1, options);
+							resolve(result);
+						}
+						catch(ex) {
+							reject(ex);
+						}
+					}, umpResp.backOffTime);
+				});
 			}
 			else if (bridge.sleep && umpResp.backOffTime && _settings.allow_ump_backoff) {
 				log("Waiting for " + parseInt(umpResp.backOffTime / 1000) + "s as required")
@@ -2812,7 +2879,9 @@ class YTABRExecutor {
 		if(overrideSegment)
 			log("UMP [" + this.type + "] requesting with overrided segment: " + overrideSegment)
 		const now = (new Date()).getTime();
-		const initialReq = getVideoPlaybackRequest(this.source, this.ustreamerConfig, time, (overrideSegment) ? overrideSegment : segment, this.lastRequest, this.lastAction, now, this.playbackCookie, pot);
+		const initialReq = getVideoPlaybackRequest(this.source, this.ustreamerConfig, time, (overrideSegment) ? overrideSegment : segment, this.lastRequest, this.lastAction, now, this.playbackCookie, pot, {
+			sessionZm: this.parentSource?.sharedContext?.sessionZm
+		});
 		const postData = initialReq.serializeBinary();
 		const initialResp = http.POST(this.abrUrl, postData, {
 			"Origin": "https://www.youtube.com",
