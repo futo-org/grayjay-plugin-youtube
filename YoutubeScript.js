@@ -2354,11 +2354,11 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 			throw new ScriptException("Invalid UMP response found");
 
 		log("UMPResp Parsed, StreamCount: " + umpResp.streamCount + ", snackBarId: " + umpResp.snackbarId + ", retries: " + retries + ", " + JSON.stringify(retries));
-		if(umpResp.streamCount == 0 && umpResp.snackbarId == 1 && retries < 3) {
+		if(umpResp.streamCount == 0 && umpResp.snackbarId == 1 && retries < 4) {
 			log("Reload required: " + canUse("ReloadRequiredException") + ", Reload:" + currentDashReloads + ", Setting: " + _settings.allow_ump_plugin_reloads)
 			const wantsAsyncBackoff = canUse("Async") && _settings.allow_ump_backoff_async;
 			if(canUse("ReloadRequiredException") && 
-					((currentDashReloads < 1 && _settings.allow_ump_backoff) || (currentDashReloads < 1 && wantsAsyncBackoff) || (currentDashReloads < 4 && !_settings.allow_ump_backoff && !wantsAsyncBackoff)) && 
+					((currentDashReloads < 2 && _settings.allow_ump_backoff) || (currentDashReloads < 2 && wantsAsyncBackoff) || (currentDashReloads < 5 && !_settings.allow_ump_backoff && !wantsAsyncBackoff)) && 
 					_settings.allow_ump_plugin_reloads) {
 				log("Attempting playback workaround (#" + retries + ")");
 				bridge.toast("Attempting playback workaround (#" + retries + ")");
@@ -2377,7 +2377,7 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 							if(parentSource.sharedContext) {
 								parentSource.sharedContext.sessionZm = options.sessionZm;
 							}
-							
+
 							log("Waiting finished");
 							const result = generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, retries + 1, options);
 							resolve(result);
