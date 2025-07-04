@@ -2168,12 +2168,15 @@ class YTABRVideoSource extends DashManifestRawSource {
 		});
 		
 		if(result && result.then) {
-			return result.then((result)=>{
+			const newPromise = result.then((result)=>{
 				const [dash, umpResp, fileHeader] = result;
 				return handleDash(dash, umpResp, fileHeader);
 			}, (rejected)=>{
 				return rejected;
 			});
+			if(result.estDuration)
+				newPromise.estDuration = estDuration;
+			return newPromise;
 		}
 		else {
 			const [dash, umpResp, fileHeader] = result;
@@ -2371,7 +2374,7 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 				if(parentSource.sharedContext) {
 					parentSource.sharedContext.sessionZm = options.sessionZm;
 				}
-				return new Promise((resolve, reject)=>{
+				const promise = new Promise((resolve, reject)=>{
 					setTimeout(()=>{
 						try {
 							log("Waiting finished");
@@ -2383,6 +2386,8 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 						}
 					}, umpResp.backOffTime);
 				});
+				promise.estDuration = umpResp.backOffTime;
+				return promise;
 			}
 			else if (bridge.sleep && umpResp.backOffTime && _settings.allow_ump_backoff) {
 				log("Waiting for " + parseInt(umpResp.backOffTime / 1000) + "s as required")
