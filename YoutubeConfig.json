@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 258,
+	"version": 260,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -331,6 +331,12 @@
 
 
 	"changelog": {
+		"260": [
+			"FIX: Fix for undefined global functions (eg. hRx)"
+		],
+		"259": [
+			"Logging: Adding additional logging for edgecase"
+		],
 		"258": [
 			"Hotfix: Fix handling of invalid PlayerData from isInlinePlaybackNoAd after reload"
 		],

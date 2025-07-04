@@ -596,6 +596,7 @@ else {
 
 		ageRestricted = initialPlayerData.playabilityStatus?.reason?.indexOf("your age") > 0 ?? false;
 		if (ageRestricted) {
+			log("Content Details: Age Restricted");
 			if (_settings["allowAgeRestricted"]) {
 				const sts = _sts[jsUrl];
 				if (!initialPlayerData.streamingData && sts) {
@@ -611,6 +612,7 @@ else {
 		}
 		const controversial = initialPlayerData.playabilityStatus?.errorScreen?.playerErrorMessageRenderer?.reason?.simpleText?.indexOf("following content may") > 0 ?? false;
 		if(controversial) {
+			log("Content Details: Controversial");
 			if (_settings["allowControversialRestricted"]) {
 				bridge.toast("Controversial video, bypassing..");
 				const sts = _sts[jsUrl];
@@ -651,12 +653,14 @@ else {
 			jsUrl: jsUrl
 		};
 
+		log("extractVideoPage_VideoDetails (start)");
 		const videoDetails = extractVideoPage_VideoDetails(url, initialData, initialPlayerData, {
 			pot: options?.pot,
 			httpClient: overrideHttpClient,
 			url: url,
 			noSources: !!(options?.noSources)
 		}, jsUrl, useLogin, defaultUMP, clientConfig, usedLogin);
+		log("extractVideoPage_VideoDetails (fin)");
 		if(videoDetails == null)
 			throw new UnavailableException("No video found");
 
@@ -671,6 +675,7 @@ else {
 				throw new UnavailableException("No sources found");
 		}
 
+		log("getBGDataFromClientConfig");
 		let bgData = getBGDataFromClientConfig(clientConfig, usedLogin);
 
 
@@ -689,6 +694,7 @@ else {
 		}
 		//Substitute HLS manifest from iOS
 		if(USE_IOS_FALLBACK && videoDetails.hls && videoDetails.hls.url && !simplify) {
+			log("requestIOSStreamingData (hls)");
 			const iosDataResp = (batchIOS > 0) ?
 				resps[batchIOS] : 
 				requestIOSStreamingData(videoDetails.id.value);
@@ -712,6 +718,7 @@ else {
 				bridge.toast("Failed to get iOS stream data");
 		}
 		else if(USE_IOS_VIDEOS_FALLBACK && !USE_ABR_VIDEOS && !simplify) {
+			log("requestIOSStreamingData (sources)");
 			const iosDataResp = (batchIOS > 0) ?
 				resps[batchIOS] : 
 				requestIOSStreamingData(videoDetails.id.value, undefined, getBGDataFromClientConfig(clientConfig, usedLogin), usedLogin);
@@ -6492,6 +6499,9 @@ var _cipherDecode = {
 var _nDecrypt = {
 	
 };
+var _jsUrlScripts = {
+
+}
 var _sts = {
 	
 };
@@ -6574,21 +6584,39 @@ function decryptUrlN(url, jsUrl, doLogging) {
 function decodeCipher(cipher, jsUrl) {
 	if(!_cipherDecode[jsUrl])
 		throw new ScriptException("Cipher decoder was not available [" + jsUrl + "]");
-	return _cipherDecode[jsUrl](cipher);
+	try {
+		return _cipherDecode[jsUrl](cipher);
+	}
+	catch(ex) {
+		log("decodeCipher failed: " + ex);
+	    if(bridge.devSubmit) bridge.devSubmit("decodeCipher - failed due to: " + ex, jsUrl + "\n\n" + _jsUrlScripts[jsUrl]);
+		throw ex;
+	}
 }
 function decryptN(encryptedN, jsUrl) {
 	if(!_nDecrypt[jsUrl])
 		throw new ScriptException("N Decryptor was not available [" + jsUrl + "]");
-	return _nDecrypt[jsUrl](encryptedN);
+	try {
+		return _nDecrypt[jsUrl](encryptedN);
+	}
+	catch(ex) {
+		log("decryptN failed: " + ex);
+	    if(bridge.devSubmit) bridge.devSubmit("decryptN - failed due to: " + ex, jsUrl + "\n\n" + _jsUrlScripts[jsUrl]);
+		throw ex;
+	}
 }
 function testCipher(hash, codeOverride) {
 	const jsUrl = CIPHER_TEST_PREFIX + hash + CIPHER_TEST_SUFFIX;
 	try{
 		const result = prepareCipher(jsUrl, codeOverride);
+		let decryptN = _nDecrypt[jsUrl];
+		let cipher = _cipherDecode[jsUrl];
 		clearCipher(jsUrl);
 		return {
 			success: result,
-			exception: ""
+			exception: "",
+			decryptN: decryptN,
+			cipher: cipher
 		};
 	}
 	catch(ex) {
@@ -6637,6 +6665,8 @@ function prepareCipher(jsUrl, codeOverride) {
 		console.log("Javascript Url: " + URL_BASE + jsUrl);
 		let playerCode = (codeOverride) ? codeOverride : playerCodeResp.body;
 		codeUsed = playerCode;
+
+		_jsUrlScripts[jsUrl] = playerCode;
 
 		let constantsMatch = playerCode.match(/var ([a-zA-Z_\$0-9]+)=(["'].+index.m3u8.+["']\.split\(.+\))/);
 		if(!constantsMatch) {
@@ -6780,6 +6810,27 @@ function getNDecryptorFunctionCode(code, jsUrl, constantArrayName, constantArray
 	}
 	if(variableChecks.length > 0)
 		prefix += "var " + variableChecks.map(x=>x + "={}").join(",") + ";\n";
+
+	const globalFuncRegex = new RegExp(/var [A-Za-z0-9_$]+\s*=\s*function\(.*\)\s*{.*};$/gm);
+	let globalFuncCheck = undefined;
+	let globalFuncs = [];
+	let lastGlobalFuncCheckEnd = -1;
+	while((globalFuncCheck = globalFuncRegex.exec(code)) != null) {
+		if(globalFuncCheck && globalFuncCheck.length > 0) {
+			if(globalFuncs.indexOf(globalFuncCheck[0]) >= 0)
+				continue;
+			console.log("GlobalFuncCheck found in cipher: " + globalFuncCheck[0]);
+			const currentEnd = globalFuncCheck.index + globalFuncCheck[0].length;
+			if(lastGlobalFuncCheckEnd < 0 || (globalFuncCheck.index - lastGlobalFuncCheckEnd) < 20) {
+				globalFuncs.push(globalFuncCheck[0]);
+				lastGlobalFuncCheckEnd = currentEnd;
+			}
+			else
+				break;
+		}
+	}
+	if(globalFuncs.length > 0)
+		prefix += globalFuncs.join("\n") + "\n";
 	
 	return "(function(){" + 
 		prefix + " " +
