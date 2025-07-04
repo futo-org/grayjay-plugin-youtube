@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 260,
+	"version": 261,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -330,6 +330,12 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"261": [
+			"Improvement: Async support for generate calls",
+			"Fix: Fix issue where backoff streams would not load further",
+			"Fix: Livechat colors now use RGBA instead of ARGB (Needs newest app to view correctly)",
+			"Fix: Livestream raids now apply the isOutgoing properly, instead of everything being outgoing"
+		],
 		"260": [
 			"FIX: Fix for undefined global functions (eg. hRx)"
 		],
