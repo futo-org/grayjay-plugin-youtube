@@ -2175,7 +2175,7 @@ class YTABRVideoSource extends DashManifestRawSource {
 				return rejected;
 			});
 			if(result.estDuration)
-				newPromise.estDuration = estDuration;
+				newPromise.estDuration = result.estDuration;
 			return newPromise;
 		}
 		else {
