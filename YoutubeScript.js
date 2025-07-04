@@ -2367,16 +2367,17 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 			else if(canUse("Async") && umpResp.backOffTime && (_settings.allow_ump_backoff_async || _settings.allow_ump_backoff)) {
 				log("Waiting for " + parseInt(umpResp.backOffTime / 1000) + "s as required (Async)")
 				bridge.toast("Waiting for " + parseInt(umpResp.backOffTime / 1000) + "s as required (Async)");
-				if (umpResp.sessionZm)
-					options.sessionZm = umpResp.sessionZm;
-				options.rn = (options?.rn ?? 1) + 1;
-				options.lastRequestTime = requestTime;
-				if(parentSource.sharedContext) {
-					parentSource.sharedContext.sessionZm = options.sessionZm;
-				}
 				const promise = new Promise((resolve, reject)=>{
 					setTimeout(()=>{
 						try {
+							if (umpResp.sessionZm)
+								options.sessionZm = umpResp.sessionZm;
+							options.rn = (options?.rn ?? 1) + 1;
+							options.lastRequestTime = requestTime;
+							if(parentSource.sharedContext) {
+								parentSource.sharedContext.sessionZm = options.sessionZm;
+							}
+							
 							log("Waiting finished");
 							const result = generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, retries + 1, options);
 							resolve(result);
