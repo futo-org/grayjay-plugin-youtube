@@ -331,6 +331,7 @@
 	
 	"changelog": {
 		"262": [
+			"Fix: Cipher fix",
 			"Improvement: Backoff always if less than 5 seconds",
 			"Improvement: Reusing tokens if possible for backoff",
 			"Improvement: Reload once instead of twice",
