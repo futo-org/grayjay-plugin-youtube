@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 261,
+	"version": 262,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -294,7 +294,7 @@
 			"name": "Use isInlinePlaybackNoAd",
 			"description": "May reduce playback blocking issues.",
 			"type": "Boolean",
-			"default": "true"
+			"default": "false"
 		},
 		{
 			"variable": "isInlinePlaybackNoAd_login",
@@ -330,6 +330,12 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"262": [
+			"Improvement: Backoff always if less than 5 seconds",
+			"Improvement: Reusing tokens if possible for backoff",
+			"Improvement: Reload once instead of twice",
+			"Improvement: isInlinePlaybackNoAd off by default"
+		],
 		"261": [
 			"Improvement: Async support for generate calls",
 			"Fix: Fix issue where backoff streams would not load further",

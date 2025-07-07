@@ -2358,8 +2358,10 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 			log("Reload required: " + canUse("ReloadRequiredException") + ", Reload:" + currentDashReloads + ", Setting: " + _settings.allow_ump_plugin_reloads)
 			const wantsAsyncBackoff = canUse("Async") && _settings.allow_ump_backoff_async;
 			if(canUse("ReloadRequiredException") && 
-					((currentDashReloads < 2 && _settings.allow_ump_backoff) || (currentDashReloads < 2 && wantsAsyncBackoff) || (currentDashReloads < 5 && !_settings.allow_ump_backoff && !wantsAsyncBackoff)) && 
-					_settings.allow_ump_plugin_reloads) {
+					((currentDashReloads < 1 && _settings.allow_ump_backoff) || (currentDashReloads < 1 && wantsAsyncBackoff) || (currentDashReloads < 4 && !_settings.allow_ump_backoff && !wantsAsyncBackoff)) && 
+					_settings.allow_ump_plugin_reloads &&
+					(!(wantsAsyncBackoff && umpResp.backOffTime && umpResp.backOffTime < 5000))
+					) {
 				log("Attempting playback workaround (#" + retries + ")");
 				bridge.toast("Attempting playback workaround (#" + retries + ")");
 				throw new ReloadRequiredException("Playback blocked (#" + retries + ")", JSON.stringify({dashReloads: retries + 1}));
@@ -2370,12 +2372,20 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 				const promise = new Promise((resolve, reject)=>{
 					setTimeout(()=>{
 						try {
-							if (umpResp.sessionZm)
+							if (umpResp.sessionZm) {
 								options.sessionZm = umpResp.sessionZm;
+								const delta = (parentSource.sharedContext.sessionZmTime) ? ((new Date()).getTime() - parentSource.sharedContext.sessionZmTime) : -1;
+								if(delta > 0 && delta < 1500) {
+									if(_settings.showVerboseToasts)
+										bridge.toast("Reusing Zm");
+									options.sessionZm = parentSource.sharedContext.sessionZm;
+								}
+							}
 							options.rn = (options?.rn ?? 1) + 1;
 							options.lastRequestTime = requestTime;
 							if(parentSource.sharedContext) {
 								parentSource.sharedContext.sessionZm = options.sessionZm;
+								parentSource.sharedContext.sessionZmTime = (new Date()).getTime();
 							}
 
 							log("Waiting finished");
