@@ -544,7 +544,7 @@ else {
 		if (initialPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED" && (bridge.isLoggedIn() || !ageRestricted)) {
 			if(!!_settings?.allowLoginFallback && !useLogin) {
 				bridge.toast("Using login fallback to resolve:\n" + initialPlayerData?.playabilityStatus?.reason);
-				resps[0] = http.GET(url, headersUsed, true);
+				resps[0] = http.GET(urlFiltered, headersUsed, true);
 
 				html = resps[0].body;//requestPage(url);
 				initialData = getInitialData(html);
@@ -647,22 +647,24 @@ else {
 		}
 
 		let creationData = {
-			url: url,
+			url: urlFiltered,
 			initialData: initialData,
 			initialPlayerData: initialPlayerData,
 			jsUrl: jsUrl
 		};
 
 		log("extractVideoPage_VideoDetails (start)");
-		const videoDetails = extractVideoPage_VideoDetails(url, initialData, initialPlayerData, {
+		const videoDetails = extractVideoPage_VideoDetails(urlFiltered, initialData, initialPlayerData, {
 			pot: options?.pot,
 			httpClient: overrideHttpClient,
-			url: url,
+			url: urlFiltered,
 			noSources: !!(options?.noSources)
 		}, jsUrl, useLogin, defaultUMP, clientConfig, usedLogin);
 		log("extractVideoPage_VideoDetails (fin)");
-		if(videoDetails == null)
+		if(videoDetails == null) {
+        	if(bridge.devSubmit) bridge.devSubmit("getContentDetails - No video found", html);
 			throw new UnavailableException("No video found");
+		}
 
 		if(!videoDetails.live && 
 			(videoDetails.video?.videoSources == null || videoDetails.video.videoSources.length == 0) &&
