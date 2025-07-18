@@ -290,16 +290,9 @@
 			"default": "true"
 		},
 		{
-			"variable": "isInlinePlaybackNoAd",
-			"name": "Use isInlinePlaybackNoAd",
-			"description": "May reduce playback blocking issues.",
-			"type": "Boolean",
-			"default": "false"
-		},
-		{
-			"variable": "isInlinePlaybackNoAd_login",
-			"name": "Use isInlinePlaybackNoAd (when logged in)",
-			"description": "May reduce playback blocking issues. Long term effects unknown.",
+			"variable": "usePotForDetails",
+			"name": "Use POT for detail requests",
+			"description": "Adds the pot token to detail requests",
 			"type": "Boolean",
 			"default": "false"
 		}

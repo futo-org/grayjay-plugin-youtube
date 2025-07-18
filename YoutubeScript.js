@@ -580,17 +580,27 @@ else {
 				bridge.toast("Cipher: " + hashMatch[1]);
 		}
 
-		if(!options?.noSources && ((!useLogin && _settings?.isInlinePlaybackNoAd) || (useLogin && _settings?.isInlinePlaybackNoAd_login))) {
-			const sts = _sts[jsUrl];
-			const previousInitialPlayerData = initialPlayerData;
-			if(sts) {
-				initialPlayerData = getPlayerData(videoId, sts, useLogin);
-				if(getDashReloads() > 1) {
-					log("Invalid PlayerData from isInlinePlaybackNoAd, using without")
-					if (_settings.showVerboseToasts)
-						bridge.toast("Invalid PlayerData with isInlinePlaybackNoAd, using without");
-					initialPlayerData = previousInitialPlayerData;
+
+		const bgDataPlayer = getBGDataFromClientConfig(clientConfig, usedLogin);
+		const existingPot = tryGetPOT(bgDataPlayer)
+
+		if(!options?.noSources && _settings?.usePotForDetails) {
+			if(existingPot) {
+				const sts = _sts[jsUrl];
+				if(sts) {
+					log("Using POT to fetch player data")
+					if(_settings?.showVerboseToasts)
+						bridge.toast("Using POT to fetch player data"); 
+					initialPlayerData = getPlayerData(videoId, sts, useLogin, existingPot);
 				}
+			}
+			else {
+				tryGetBotguard((bg)=>{
+					bg.getTokenOrCreate(bgDataPlayer.visitorData, bgDataPlayer.dataSyncId, (pot)=>{
+						console.log("Botguard Token to use (detail pot):", pot);
+						log("Generated Botguard Token for POT Details");
+					}, bgDataPlayer.visitorDataType);
+				});
 			}
 		}
 
@@ -622,7 +632,7 @@ else {
 					if(initialPlayerData.playabilityStatus?.status == "UNPLAYABLE") {
 						if(bridge.isLoggedIn() && !!_settings?.allowLoginFallback) {
 							bridge.toast("Bypass failed, trying login fallback");
-							initialPlayerData = verifyAgePlayerData(videoId, sts, true);
+							initialPlayerData = verifyAgePlayerData(videoId, sts, true, (_settings?.usePotForDetails) ? existingPot : undefined);
 						}
 						else if(initialPlayerData.playabilityStatus?.reason?.indexOf("sign in") >= 0){
 							throw new ScriptLoginRequiredException("Controversial video requires login to retrieve"); 
@@ -653,8 +663,11 @@ else {
 			jsUrl: jsUrl
 		};
 
+		let bgData = getBGDataFromClientConfig(clientConfig, usedLogin);
+
 		log("extractVideoPage_VideoDetails (start)");
 		const videoDetails = extractVideoPage_VideoDetails(urlFiltered, initialData, initialPlayerData, {
+			bgData: bgData,
 			pot: options?.pot,
 			httpClient: overrideHttpClient,
 			url: urlFiltered,
@@ -676,9 +689,6 @@ else {
 			if(!simplify)
 				throw new UnavailableException("No sources found");
 		}
-
-		log("getBGDataFromClientConfig");
-		let bgData = getBGDataFromClientConfig(clientConfig, usedLogin);
 
 
 		//Substitute Dash manifest from Android
@@ -829,7 +839,7 @@ source.testUMP = function(url) {
 function isVerifyAge(initialPlayerData){
 	return (initialPlayerData.playabilityStatus.status == "CONTENT_CHECK_REQUIRED")
 }
-function verifyAgePlayerData(videoId, sts, useLogin = true) {
+function verifyAgePlayerData(videoId, sts, useLogin = true, pot = undefined) {
 	
 	const context = getClientContext(useLogin);
 	const authHeaders = useLogin ? getAuthContextHeaders(false) : {};
@@ -851,9 +861,9 @@ function verifyAgePlayerData(videoId, sts, useLogin = true) {
 	if(!resp.isOk)
 		throw new ScriptException("Failed to verify age");
 	
-	return getPlayerData(videoId, sts, useLogin);
+	return getPlayerData(videoId, sts, useLogin, pot);
 }
-function getPlayerData(videoId, sts, useLogin = true) {
+function getPlayerData(videoId, sts, useLogin = true, pot = undefined) {
 	const context = getClientContext(useLogin);
 	const authHeaders = useLogin ? getAuthContextHeaders(true) : {};
 	authHeaders["Accept-Language"] = "en-US";
@@ -877,6 +887,9 @@ function getPlayerData(videoId, sts, useLogin = true) {
 			}
 		},
 		racyCheckOk: true,
+		serviceIntegrityDimensions: (pot) ? {
+			poToken: pot
+		} : undefined,
 		videoId: videoId
 	};
 	if((!useLogin && _settings?.isInlinePlaybackNoAd) || (useLogin && _settings?.isInlinePlaybackNoAd_login)) {
@@ -4440,38 +4453,81 @@ function extractVideoPage_VideoDetails(parentUrl, initialData, initialPlayerData
 						format: "text/vtt",
 
 						getSubtitles() {
-							const subResp = http.GET(x.baseUrl, {});
-							if(!subResp.isOk)
-								return "";
-							const asr = subResp.body;
-							let lines = asr.match(REGEX_ASR);
-							const newSubs = [];
-							let skipped = 0;
-							for(let i = 0; i < lines.length; i++) {
-								const line = lines[i];
-								const lineParsed = /<text .*?start="(.*?)" .*?dur="(.*?)".*?>(.*?)<\/text>/gms.exec(line);
+							function convertSubtitleResponse(subResp) {
+								if(!subResp.isOk)
+									return "";
+								const asr = subResp.body;
+								let lines = asr.match(REGEX_ASR);
+								const newSubs = [];
+								let skipped = 0;
+								for(let i = 0; i < lines.length; i++) {
+									const line = lines[i];
+									const lineParsed = /<text .*?start="(.*?)" .*?dur="(.*?)".*?>(.*?)<\/text>/gms.exec(line);
 
-								const start = parseFloat(lineParsed[1]);
-								const dur = parseFloat(lineParsed[2]);
-								let end = start + dur;
-								const text = decodeHtml(lineParsed[3]);
+									const start = parseFloat(lineParsed[1]);
+									const dur = parseFloat(lineParsed[2]);
+									let end = start + dur;
+									const text = decodeHtml(lineParsed[3]);
 
-								const nextLine = (i + 1 < lines.length) ? lines[i + 1] : null;
-								if(nextLine) {
-									const lineParsedNext = /<text .*?start="(.*?)" .*?dur="(.*?)".*?>(.*?)<\/text>/gms.exec(nextLine);
-									const startNext = parseFloat(lineParsedNext[1]);
-									const durNext = parseFloat(lineParsedNext[2]);
-									const endNext = startNext + durNext;
-									if(startNext && startNext < end)
-										end = startNext;
+									const nextLine = (i + 1 < lines.length) ? lines[i + 1] : null;
+									if(nextLine) {
+										const lineParsedNext = /<text .*?start="(.*?)" .*?dur="(.*?)".*?>(.*?)<\/text>/gms.exec(nextLine);
+										const startNext = parseFloat(lineParsedNext[1]);
+										const durNext = parseFloat(lineParsedNext[2]);
+										const endNext = startNext + durNext;
+										if(startNext && startNext < end)
+											end = startNext;
+									}
+
+									newSubs.push((i - skipped + 1) + "\n" +
+										toSRTTime(start, true) + " --> " + toSRTTime(end, true) + "\n" +
+										text + "\n");
 								}
-
-								newSubs.push((i - skipped + 1) + "\n" +
-									toSRTTime(start, true) + " --> " + toSRTTime(end, true) + "\n" +
-									text + "\n");
+								console.log(newSubs);
+								return "WEBVTT\n\n" + newSubs.join('\n');
 							}
-							console.log(newSubs);
-							return "WEBVTT\n\n" + newSubs.join('\n');
+
+							const bgData = contextData?.bgData;
+							const pot = contextData.pot;
+							if(pot) {
+								bridge.toast("Subtitles using included POT");
+								const subResp = http.GET(x.baseUrl + "&pot=" + pot, {});
+								return (convertSubtitleResponse(subResp));
+							}
+							else if(canUse("Async") && bgData) {
+								bridge.toast("Subtitles using generated POT");
+								return new Promise((resolve, reject)=>{
+									setTimeout(()=>{
+										if(!didResolve) {
+											reject("timeout");
+											didResolve = true;
+										}
+									}, 2000)
+									let didResolve = false;
+									tryGetBotguard((bg)=>{
+										bg.getTokenOrCreate(bgData.visitorData, bgData.dataSyncId, (pot)=>{
+											log("Botguard token to use (Subtitles): " + pot);
+											console.log("Botguard Token to use (Subtitles):", pot);
+											bridge.toast("Subtitles got POT");
+											
+											const subResp = http.GET(x.baseUrl + "&potc=1&pot=" + encodeURIComponent(pot), {});
+
+											if(!didResolve) {
+												didResolve = true;
+												resolve(convertSubtitleResponse(subResp));
+											}
+											else {
+
+											}
+										}, bgData.visitorDataType);
+									})
+								});
+							}
+							else {
+								bridge.toast("Subtitles without POT");
+								const subResp = http.GET(x.baseUrl, {});
+								return convertSubtitleResponse(subResp);
+							}
 						}
 					};
 				}
@@ -5215,9 +5271,17 @@ function extractItemSectionRenderer_Shelves(itemSectionRenderer, contextData) {
 			        playlists.push(playlist);
 			},
 			lockupViewModel(renderer) {
-				const playlist = extractPlaylistLockupViewModel_Playlist(renderer);
-				if(playlist)
-					playlists.push(playlist);
+
+				if(renderer.contentType == "LOCKUP_CONTENT_TYPE_VIDEO") {
+					const vid = extractVideoLockupModel_Video(renderer, contextData);
+					if(vid)
+						videos.push(vid);
+				}
+				else {
+					const playlist = extractPlaylistLockupViewModel_Playlist(renderer);
+					if(playlist)
+						playlists.push(playlist);
+				}
 			},
 			shelfRenderer(renderer) {
 			    const shelf = extractShelfRenderer_Shelf(renderer);
@@ -7649,6 +7713,15 @@ source.testBotguard = (token) => {
 }
 
 var existingBotguard = undefined;
+function tryGetPOT(bgData) {
+	const bg = getExistingBotguard();
+	if(bg) {
+		const existingToken = bg.getExistingToken(bgData.visitorData, bgData.dataSyncId, bgData.visitorDataType);
+		if(existingToken)
+			return existingToken;
+	}
+	return undefined;
+}
 function tryGetBotguard(cb) {
 	if(existingBotguard) {
 		cb(existingBotguard);
@@ -7875,6 +7948,15 @@ class BotGuardGenerator {
 		return this.mint;
 	}
 
+	getExistingToken(visitorId, dataSyncId, type) {
+		if(!visitorId && !dataSyncId)
+			return undefined;
+
+		let idToUse = visitorId ?? dataSyncId;
+
+		const existing = this.generatedTokens[idToUse];
+		return existing;
+	}
 	getTokenOrCreate(visitorId, dataSyncId, cb, type) {
 		if(!visitorId && !dataSyncId)
 			throw new ScriptException("No visitor or datasync Id provided for botguard");
