@@ -580,20 +580,6 @@ else {
 				bridge.toast("Cipher: " + hashMatch[1]);
 		}
 
-		if(!options?.noSources && ((!useLogin && _settings?.isInlinePlaybackNoAd) || (useLogin && _settings?.isInlinePlaybackNoAd_login))) {
-			const sts = _sts[jsUrl];
-			const previousInitialPlayerData = initialPlayerData;
-			if(sts) {
-				initialPlayerData = getPlayerData(videoId, sts, useLogin);
-				if(getDashReloads() > 1) {
-					log("Invalid PlayerData from isInlinePlaybackNoAd, using without")
-					if (_settings.showVerboseToasts)
-						bridge.toast("Invalid PlayerData with isInlinePlaybackNoAd, using without");
-					initialPlayerData = previousInitialPlayerData;
-				}
-			}
-		}
-
 		ageRestricted = initialPlayerData.playabilityStatus?.reason?.indexOf("your age") > 0 ?? false;
 		if (ageRestricted) {
 			log("Content Details: Age Restricted");
