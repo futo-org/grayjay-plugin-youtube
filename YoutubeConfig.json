@@ -318,6 +318,7 @@
 
 	"changelog": {
 		"264": [
+			"Fix: Recommendations not showing",
 			"Fix: Fix scenario where Login Fallback would not work for some users (Video unavailable)",
 			"Improvement: Remove disfunctional setting"
 		],
