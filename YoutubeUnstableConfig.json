@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 263,
+	"version": 264,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -288,13 +288,6 @@
 			"description": "Fetches the trending page if the normal home page failed to load",
 			"type": "Boolean",
 			"default": "true"
-		},
-		{
-			"variable": "usePotForDetails",
-			"name": "Use POT for detail requests",
-			"description": "Adds the pot token to detail requests",
-			"type": "Boolean",
-			"default": "false"
 		}
 	],
 
