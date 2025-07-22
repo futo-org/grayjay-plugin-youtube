@@ -106,8 +106,9 @@ const USER_AGENT_TVHTML5_EMBED = "Mozilla/5.0 (CrKey armv7l 1.5.16041) AppleWebK
 
 const USE_MOBILE_PAGES = true;
 const USE_ANDROID_FALLBACK = false;
-const USE_IOS_FALLBACK = true;
+const USE_IOS_LIVE_FALLBACK = true;
 const USE_IOS_VIDEOS_FALLBACK = true;
+const USE_TV_VIDEOS_FALLBACK = false;
 
 let USE_ABR_VIDEOS = false;
 
@@ -450,356 +451,774 @@ source.isContentDetailsUrl = (url) => {
 	return REGEX_VIDEO_URL_DESKTOP.test(url) || REGEX_VIDEO_URL_SHARE.test(url) || REGEX_VIDEO_URL_SHARE_LIVE.test(url) || REGEX_VIDEO_URL_SHORT.test(url) || REGEX_VIDEO_URL_CLIP.test(url) || REGEX_VIDEO_URL_EMBED.test(url);
 };
 
+class YTSessionClient {
 
-if(false && (bridge.buildSpecVersion ?? 1) > 1) {
-	//TODO: Implement more compact version using new api batch spec
-}
-else {
-	source.getContentDetails = (url, useAuth, simplify, forceUmp, options) => {
-		useAuth = !!_settings?.authDetails || !!useAuth;
-		console.clear(); //Temp fix for memory leaking
+	constructor() {
+		//this.client = http.newClient();
+		//this.clientAuth = bridge.isLoggedIn() ? http.newClient(true) : this.client;
+		this.clientConfig = null;
+		this.clientConfigAuth = null;
+		this.initialized = false;
+	}
 
-		if(options?.noSources) {
-			console.log("getContentDetails without sources requested");
+	initialize() {
+		this.clientConfig = this.getClientInit(this.client);
+		this.clientConfigAuth = this.getClientInit(this.clientAuth, true);
+		console.log("YTSessionClient clientConfig", this.clientConfig);
+		console.log("YTSessionClient clientConfigAuth", this.clientConfigAuth);
+		this.initialized = true;
+		bridge.toast("Using YTSession Client");
+	}
+
+	getClientInit(client, usedLogin) {
+		//TODO: Add client-specific requests
+		let headers = {"Accept-Language": "en-US", "Cookie": "PREF=hl=en&gl=US" };
+		const respHome = (usedLogin) ? 
+			http.GET(URL_HOME, headers, true) : 
+			http.GET(URL_HOME, headers, false); //client.GET(URL_HOME, headers);
+		if(!respHome.isOk)
+			throw new ScriptException("Failed to initialize YTSessionClient due to [" + respHome.code + "]");
+
+		const homeHtml = respHome.body;
+		const clientConfig = getClientConfig(homeHtml);
+		const initialData = getInitialData(homeHtml);
+
+		const jsUrlMatch = homeHtml.match("PLAYER_JS_URL\"\\s?:\\s?\"(.*?)\"");
+		const jsUrl = (jsUrlMatch) ? jsUrlMatch[1] : clientConfig.PLAYER_JS_URL;
+		const isNewCipher = prepareCipher(jsUrl);
+
+		return {
+			initialData: initialData,
+			clientConfig: clientConfig,
+			jsUrl: jsUrl,
+			sts: _sts[jsUrl],
+			bgData: getBGDataFromClientConfig(clientConfig, !!usedLogin)
 		}
+	}
 
-		log("ABR Enabled: " + USE_ABR_VIDEOS);
-		const defaultUMP = USE_ABR_VIDEOS || forceUmp;
+	getContentDetails(url, useAuth, simplify, forceUmp, options) {
+		if(!this.initialized)
+			throw new ScriptException("YTSessionClient not initialized");
+
+		if(options?.noSources)
+			log("getContentDetails without sources requested");
+
+		forceUmp = forceUmp || USE_ABR_VIDEOS;
 
 		url = convertIfOtherUrl(url);
-
-		const clientContext = getClientContext(false);
-
+		let urlFiltered = filterDetailUrl(url);
 		const videoId = extractVideoIDFromUrl(url);
+		let useLogin = useAuth;
+
 		if(IS_TESTING)
 			console.log("VideoID:", videoId);
-
-
-		const useLogin = useAuth && bridge.isLoggedIn();
 
 		const headersUsed = (useLogin) ? getAuthContextHeaders(false) : {};
 		headersUsed["Accept-Language"] = "en-US";
 		headersUsed["Cookie"] = "PREF=hl=en&gl=US"
 
-		let urlFiltered = url;
-		const timestampMatch = REGEX_TIMESTAMP.exec(url);
-		if(timestampMatch) {
-			log("Video with timestamp detected, filtering out");
-			urlFiltered = url.substring(0, timestampMatch.index);
-			const urlFilteredSuffix = url.substring(timestampMatch.index + timestampMatch[0].length);
-			if(urlFiltered.indexOf("?") <= 0 && urlFilteredSuffix.length > 0 && urlFilteredSuffix[0] == "&")
-				urlFiltered += "?" + urlFilteredSuffix.substring(1);
-			else
-				urlFiltered += urlFilteredSuffix;
-		}
+		let context = (useLogin) ? this.clientConfigAuth : this.clientConfig;
 
-		let batchCounter = 1;
+		//#region Request Batch
 		let batch = http.batch();
 
-		let overrideHttpResp = undefined;
-		if(!overrideHttpClient)
-			batch = batch.GET(urlFiltered, headersUsed, useLogin);
-		else {
-			log("getContentDetails using custom http client");
-			batch = batch.DUMMY();
-			overrideHttpResp = overrideHttpClient.GET(urlFiltered, headersUsed);
-		}
-		
-		let batchYoutubeDislikesIndex = -1;
-		if(videoId && _settings["youtubeDislikes"] && !simplify) {
-			batch.GET(URL_YOUTUBE_DISLIKES + videoId, {}, false);
-			batchYoutubeDislikesIndex = batchCounter++;
-		}
+		//Request: Player data [0]
+		batch = getPlayerData(videoId, context.sts, useLogin, batch);
 
-		let batchIOS = -1;
-		/*
-		if(USE_IOS_VIDEOS_FALLBACK && !defaultUMP && !simplify) {
-			requestIOSStreamingData(videoId, batch, getBGDataFromClientConfig(clientConfig, usedLogin));
-			batchIOS = batchCounter++;
-		}*/
+		//Request: ReturnYoutubeDislikes [1]
+		if(videoId && _settings["youtubeDislikes"] && !simplify)
+			batch = getYoutubeDislikes(videoId, batch);
+		else batch = batch.DUMMY();
 
-		const resps = batch.execute();
-		if(overrideHttpResp)
-			resps[0] = overrideHttpResp;
+		//Request: iOS Streaming Data [2]
+		if(!USE_ABR_VIDEOS && !simplify)
+			batch = requestIOSStreamingData(videoId, batch, context.bgData, useLogin);
+		else batch = batch.DUMMY();
 
-		throwIfCaptcha(resps[0]);
-		if(!resps[0].isOk) {
-			throw new ScriptException("Failed to request page [" + resps[0].code + "]");
-		}
+		const [respPlayerData, respDislikes, respiOS] = batch.execute();
+		//#endregion
 
-		let html = resps[0].body;//requestPage(url);
-		let initialData = getInitialData(html);
-		let initialPlayerData = getInitialPlayerData(html);
-		let clientConfig = getClientConfig(html);
-		let usedLogin = useLogin && bridge.isLoggedIn();
-		
+		//#region PlayerData
+		if(!respPlayerData?.isOk)
+			throw new ScriptException("Could not retrieve playerdata");
+		let playerData = JSON.parse(respPlayerData.body);
+		//#endregion
 
-		/*
-		if(USE_IOS_VIDEOS_FALLBACK && !defaultUMP && !simplify) {
-			resps.push(requestIOSStreamingData(videoId, undefined, getBGDataFromClientConfig(clientConfig, usedLogin)));
-			batchIOS = batchCounter++;
-		}*/
-
-		let ageRestricted = initialPlayerData.playabilityStatus?.reason?.indexOf("your age") > 0 ?? false;
-		if (initialPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED" && (bridge.isLoggedIn() || !ageRestricted)) {
+		//#region Login Required
+		if (playerData.playabilityStatus?.status == "LOGIN_REQUIRED" && bridge.isLoggedIn() && !useLogin) {
 			if(!!_settings?.allowLoginFallback && !useLogin) {
-				bridge.toast("Using login fallback to resolve:\n" + initialPlayerData?.playabilityStatus?.reason);
+				bridge.toast("Using login fallback to resolve:\n" + playerData?.playabilityStatus?.reason);
 				resps[0] = http.GET(urlFiltered, headersUsed, true);
+				const newPlayerData = getPlayerData(videoId, this.sts, true);
+				if (newPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED")
+					throw new ScriptLoginRequiredException("Login required\nReason: " + newPlayerData?.playabilityStatus?.reason);
 
-				html = resps[0].body;//requestPage(url);
-				initialData = getInitialData(html);
-				initialPlayerData = getInitialPlayerData(html);
-				clientConfig = getClientConfig(html);
-				usedLogin = true && bridge.isLoggedIn();
-
-				if (initialPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED")
-					throw new ScriptLoginRequiredException("Login required\nReason: " + initialPlayerData?.playabilityStatus?.reason);
+				playerData = newPlayerData;
+				useLogin = true;
 			}
 			else
+				throw new ScriptLoginRequiredException("Login required\nReason: " + playerData?.playabilityStatus?.reason);
+		}
+		//#endregion
+
+		context = (useLogin) ? this.clientConfigAuth : this.clientConfig;
+
+
+
+		//Video details
+		let contextData = {
+			url: urlFiltered,
+			jsUrl: context.jsUrl
+		};
+		const videoDetails = extractVideoPlayerData_VideoDetails(playerData, context.jsUrl, contextData);
+
+
+		//#region Extract Streams
+		if(!simplify) {
+			if(!videoDetails.isLive) {
+				//#region iOS
+				if(!forceUmp && USE_IOS_VIDEOS_FALLBACK && respiOS) {
+
+					if(respiOS.isOk) {
+						const iosData = JSON.parse(respiOS.body);
+						if(IS_TESTING)
+							console.log("IOS Streaming Data", iosData);
+
+						if(iosData?.streamingData?.adaptiveFormats) {
+							let newDescriptor = extractAdaptiveFormats_VideoDescriptor(iosData.streamingData.adaptiveFormats, context.jsUrl, contextData, "IOS ");
+
+							if(!!_settings.verifyIOSPlayback && !canDoRequestWithBody) {
+								log("Not doing verifyIOSPlayback because canDoRequestWithBody false");
+							}
+							if(!canDoRequestWithBody || !_settings.verifyIOSPlayback || verifyDirectPlayback(newDescriptor)) {
+								videoDetails.video = newDescriptor;
+								if(!!_settings["showVerboseToasts"])
+									bridge.toast("Using iOS sources fallback (" + (batchIOS > 0 ? "cached" : "lazily") + ")");
+							}
+							else {
+								log("IOS PLAYBACK VERIFICATION FAILED, FALLBACK");
+							}
+						}
+					}
+				}
+				//#endregion
+
+				// - UMP
+				if(!videoDetails.video)
+					videoDetails.video = extractABR_VideoDescriptor(playerData, context.jsUrl, context.clientConfig, url, useLogin, contextData);
+
+				// - No sources found
+				if(!videoDetails.video)
+					videoDetails.video = new VideoSourceDescriptor([]);
+			}
+			else {
+				//#region LIVE
+
+				if(USE_IOS_LIVE_FALLBACK) {
+					log("requestIOSStreamingData (hls)");
+					const iosDataResp = respiOS ?? requestIOSStreamingData(videoDetails.id.value);
+						
+					if(iosDataResp.isOk) {
+						const iosData = JSON.parse(iosDataResp.body);
+						if(IS_TESTING)
+							console.log("IOS Streaming Data", iosData);
+						if(iosData?.streamingData?.hlsManifestUrl) {
+							log("Using iOS HLS substitute");
+							const existingUrl = videoDetails.hls.url;
+							videoDetails.hls.name = "HLS (IOS)";
+							videoDetails.hls.url = iosData.streamingData.hlsManifestUrl;
+							if(existingUrl == videoDetails.live?.url) {
+								videoDetails.live.name = "HLS (IOS)";
+								videoDetails.live.url = iosData.streamingData.hlsManifestUrl;
+							}
+						}
+					}
+					else
+						bridge.toast("Failed to get iOS stream data");
+				}
+				else {
+					//TODO: Non-iOS live streams
+				}
+				//#endregion
+			}
+		}
+		//#endregion
+
+		//#region Return YoutubeDislikes
+		if(respDislikes)
+			videoDetails.rating = handleYoutubeDislikes(respDislikes) ?? videoDetails.rating;
+		//#endregion
+
+
+		videoDetails.bgData = this.bgData;
+
+		//Playback Tracker
+		if(!!_settings["youtubeActivity"] && useLogin) {
+			videoDetails.__playerData = playerData;
+			videoDetails.getPlaybackTracker = function(url) {
+				return source.getPlaybackTracker(url, playerData)
+			};
+		}
+
+		//TODO: getContentChapters
+		/*
+		videoDetails.getContentChapters = function() {
+			return source.getContentChapters(url, videoDetails.__initialData);
+		};*/
+
+		//TODO: getContentRecommendations
+		/*
+		videoDetails.getContentRecommendations = function() {
+			const initialData = videoDetails.__initialData;
+			if(!initialData)
+				return new VideoPager([], false);
+			return source.getContentRecommendations(url, initialData);
+		}*/
+
+		return videoDetails;
+	}
+
+
+	
+}
+function extractVideoPlayerData_VideoDetails(playerData, jsUrl, contextData) {
+	if(!playerData.videoDetails) return null;
+
+	if (IS_TESTING) {
+		console.log("playerData:", playerData);
+		console.log("streamingData:", playerData?.streamingData);
+	}
+	const videoDetails = playerData.videoDetails;
+	const nonce = randomString(16);
+
+	const hlsSource = (playerData?.streamingData?.hlsManifestUrl) ?
+		new HLSSource({
+			url: playerData?.streamingData?.hlsManifestUrl
+		}) : null;
+	const dashSource = (playerData?.streamingData?.dashManifestUrl) ?
+		new DashSource({
+			url: playerData?.streamingData?.dashManifestUrl
+		}) : null;
+
+	const abrStreamingUrl = (!contextData?.noSources && playerData?.streamingData?.serverAbrStreamingUrl) ? 
+		decryptUrlN(playerData.streamingData.serverAbrStreamingUrl, jsUrl, false) : undefined;
+	//useAbr = abrStreamingUrl && (!!useAbr || USE_ABR_VIDEOS);
+	const video = {
+		id: new PlatformID(PLATFORM, videoDetails.videoId, config.id),
+		name: videoDetails.title,
+		thumbnails: new Thumbnails(videoDetails.thumbnail?.thumbnails.map(x=>new Thumbnail(escapeUnicode(x.url), x.height)) ?? []),
+		author: new PlatformAuthorLink(new PlatformID(PLATFORM, videoDetails.channelId, config.id, PLATFORM_CLAIMTYPE), videoDetails.author, URL_BASE + "/channel/" + videoDetails.channelId, null, null),
+		duration: parseInt(videoDetails.lengthSeconds),
+		viewCount: parseInt(videoDetails.viewCount),
+		url: contextData.url,
+		isLive: videoDetails?.isLive ?? false,
+		description: videoDetails.shortDescription,
+		hls: (videoDetails?.isLive ?? false) ? hlsSource : null,
+		dash: (videoDetails?.isLive ?? false) ? dashSource : null,
+		live: (videoDetails?.isLive ?? false) ? (hlsSource ?? dashSource) : null,
+		video: undefined,
+		subtitles: playerData
+			.captions
+			?.playerCaptionsTracklistRenderer
+			?.captionTracks
+			?.map(x=>{
+				let kind = x.baseUrl.match(REGEX_URL_KIND);
+				if(kind)
+					kind = kind[1];
+
+				if(!kind || kind == "asr") {
+					return {
+						name: extractText_String(x.name),
+						url: x.baseUrl,
+						format: "text/vtt",
+
+						getSubtitles() {
+							const subResp = http.GET(x.baseUrl, {});
+							if(!subResp.isOk)
+								return "";
+							const asr = subResp.body;
+							let lines = asr.match(REGEX_ASR);
+							const newSubs = [];
+							let skipped = 0;
+							for(let i = 0; i < lines.length; i++) {
+								const line = lines[i];
+								const lineParsed = /<text .*?start="(.*?)" .*?dur="(.*?)".*?>(.*?)<\/text>/gms.exec(line);
+
+								const start = parseFloat(lineParsed[1]);
+								const dur = parseFloat(lineParsed[2]);
+								let end = start + dur;
+								const text = decodeHtml(lineParsed[3]);
+
+								const nextLine = (i + 1 < lines.length) ? lines[i + 1] : null;
+								if(nextLine) {
+									const lineParsedNext = /<text .*?start="(.*?)" .*?dur="(.*?)".*?>(.*?)<\/text>/gms.exec(nextLine);
+									const startNext = parseFloat(lineParsedNext[1]);
+									const durNext = parseFloat(lineParsedNext[2]);
+									const endNext = startNext + durNext;
+									if(startNext && startNext < end)
+										end = startNext;
+								}
+
+								newSubs.push((i - skipped + 1) + "\n" +
+									toSRTTime(start, true) + " --> " + toSRTTime(end, true) + "\n" +
+									text + "\n");
+							}
+							console.log(newSubs);
+							return "WEBVTT\n\n" + newSubs.join('\n');
+						}
+					};
+				}
+				else if(kind == "vtt") {
+					return {
+						name: extractText_String(x.name),
+						url: x.baseUrl,
+						format: "text/vtt",
+					};
+				}
+				else return null;
+			})?.filter(x=>x != null) ?? []
+	};
+
+	const result = new PlatformVideoDetails(video);
+	result.video = null;
+	return result;
+}
+
+
+function filterDetailUrl(url) {
+	let urlFiltered = url;
+	const timestampMatch = REGEX_TIMESTAMP.exec(url);
+	if(timestampMatch) {
+		urlFiltered = url.substring(0, timestampMatch.index);
+		const urlFilteredSuffix = url.substring(timestampMatch.index + timestampMatch[0].length);
+		if(urlFiltered.indexOf("?") <= 0 && urlFilteredSuffix.length > 0 && urlFilteredSuffix[0] == "&")
+			urlFiltered += "?" + urlFilteredSuffix.substring(1);
+		else
+			urlFiltered += urlFilteredSuffix;
+	}
+	return url;
+}
+
+function getYoutubeDislikes(videoId, batch) {
+	if(batch)
+		batch.GET(URL_YOUTUBE_DISLIKES + videoId, {}, false);
+	else {
+		const resp = http.GET(URL_YOUTUBE_DISLIKES + videoId, {}, false);
+		return handleYoutubeDislikes(resp);
+	}
+}
+function handleYoutubeDislikes(resp) {
+	try {
+		if(resp.isOk) {
+			const youtubeDislikeInfo = JSON.parse(resp.body);
+			if(IS_TESTING)
+				console.log("Youtube Dislike Info", youtubeDislikeInfo);
+			return new RatingLikesDislikes(videoDetails.rating.likes, youtubeDislikeInfo.dislikes);
+		}
+	}
+	catch(ex) {
+		console.log("Failed to fetch Youtube Dislikes", ex);
+	}
+}
+
+let FORCE_YTSESSION = false;
+let sessionClient = undefined;
+
+source.getContentDetails = (url, useAuth, simplify, forceUmp, options) => {
+	if(FORCE_YTSESSION || _settings?.use_session_client) {
+		if(!sessionClient) {
+			sessionClient = new YTSessionClient();
+			sessionClient.initialize();	
+		}
+		return sessionClient.getContentDetails(url, useAuth, simplify, options);
+	}
+
+	useAuth = !!_settings?.authDetails || !!useAuth;
+	console.clear(); //Temp fix for memory leaking
+
+	if (options?.noSources) {
+		console.log("getContentDetails without sources requested");
+	}
+
+	log("ABR Enabled: " + USE_ABR_VIDEOS);
+	const defaultUMP = USE_ABR_VIDEOS || forceUmp;
+
+	url = convertIfOtherUrl(url);
+
+	const clientContext = getClientContext(false);
+
+	const videoId = extractVideoIDFromUrl(url);
+	if (IS_TESTING)
+		console.log("VideoID:", videoId);
+
+
+	const useLogin = useAuth && bridge.isLoggedIn();
+
+	const headersUsed = (useLogin) ? getAuthContextHeaders(false) : {};
+	headersUsed["Accept-Language"] = "en-US";
+	headersUsed["Cookie"] = "PREF=hl=en&gl=US"
+
+	let urlFiltered = url;
+	const timestampMatch = REGEX_TIMESTAMP.exec(url);
+	if (timestampMatch) {
+		log("Video with timestamp detected, filtering out");
+		urlFiltered = url.substring(0, timestampMatch.index);
+		const urlFilteredSuffix = url.substring(timestampMatch.index + timestampMatch[0].length);
+		if (urlFiltered.indexOf("?") <= 0 && urlFilteredSuffix.length > 0 && urlFilteredSuffix[0] == "&")
+			urlFiltered += "?" + urlFilteredSuffix.substring(1);
+		else
+			urlFiltered += urlFilteredSuffix;
+	}
+
+	let batchCounter = 1;
+	let batch = http.batch();
+
+	let overrideHttpResp = undefined;
+	if (!overrideHttpClient)
+		batch = batch.GET(urlFiltered, headersUsed, useLogin);
+	else {
+		log("getContentDetails using custom http client");
+		batch = batch.DUMMY();
+		overrideHttpResp = overrideHttpClient.GET(urlFiltered, headersUsed);
+	}
+
+	let batchYoutubeDislikesIndex = -1;
+	if (videoId && _settings["youtubeDislikes"] && !simplify) {
+		batch.GET(URL_YOUTUBE_DISLIKES + videoId, {}, false);
+		batchYoutubeDislikesIndex = batchCounter++;
+	}
+
+	let batchIOS = -1;
+	/*
+	if(USE_IOS_VIDEOS_FALLBACK && !defaultUMP && !simplify) {
+		requestIOSStreamingData(videoId, batch, getBGDataFromClientConfig(clientConfig, usedLogin));
+		batchIOS = batchCounter++;
+	}*/
+
+	const resps = batch.execute();
+	if (overrideHttpResp)
+		resps[0] = overrideHttpResp;
+
+	throwIfCaptcha(resps[0]);
+	if (!resps[0].isOk) {
+		throw new ScriptException("Failed to request page [" + resps[0].code + "]");
+	}
+
+	let html = resps[0].body;//requestPage(url);
+	let initialData = getInitialData(html);
+	let initialPlayerData = getInitialPlayerData(html);
+	let clientConfig = getClientConfig(html);
+	let usedLogin = useLogin && bridge.isLoggedIn();
+
+
+	/*
+	if(USE_IOS_VIDEOS_FALLBACK && !defaultUMP && !simplify) {
+		resps.push(requestIOSStreamingData(videoId, undefined, getBGDataFromClientConfig(clientConfig, usedLogin)));
+		batchIOS = batchCounter++;
+	}*/
+
+	let ageRestricted = initialPlayerData.playabilityStatus?.reason?.indexOf("your age") > 0 ?? false;
+	if (initialPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED" && (bridge.isLoggedIn() || !ageRestricted)) {
+		if (!!_settings?.allowLoginFallback && !useLogin) {
+			bridge.toast("Using login fallback to resolve:\n" + initialPlayerData?.playabilityStatus?.reason);
+			resps[0] = http.GET(urlFiltered, headersUsed, true);
+
+			html = resps[0].body;//requestPage(url);
+			initialData = getInitialData(html);
+			initialPlayerData = getInitialPlayerData(html);
+			clientConfig = getClientConfig(html);
+			usedLogin = true && bridge.isLoggedIn();
+
+			if (initialPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED")
 				throw new ScriptLoginRequiredException("Login required\nReason: " + initialPlayerData?.playabilityStatus?.reason);
 		}
-		const invalidExperiments = [51217102, 51217476];
-		const reloadRequiredExperiments = [51397094];
-		var invalidExperimentIndexes = invalidExperiments.map(x=>clientConfig.FEXP_EXPERIMENTS.indexOf(x));
-		const isExperiment = clientConfig.FEXP_EXPERIMENTS && invalidExperimentIndexes.filter(x=>x >= 0).length > 0;
+		else
+			throw new ScriptLoginRequiredException("Login required\nReason: " + initialPlayerData?.playabilityStatus?.reason);
+	}
+	const invalidExperiments = [51217102, 51217476];
+	const reloadRequiredExperiments = [51397094];
+	var invalidExperimentIndexes = invalidExperiments.map(x => clientConfig.FEXP_EXPERIMENTS.indexOf(x));
+	const isExperiment = clientConfig.FEXP_EXPERIMENTS && invalidExperimentIndexes.filter(x => x >= 0).length > 0;
 
-		//log("Experiments: " + JSON.stringify(clientConfig.FEXP_EXPERIMENTS));
-		//log("Experiment Flags: " + JSON.stringify(clientConfig.EXPERIMENT_FLAGS));
-		//console.log("Experiments", clientConfig.FEXP_EXPERIMENTS);
+	//log("Experiments: " + JSON.stringify(clientConfig.FEXP_EXPERIMENTS));
+	//log("Experiment Flags: " + JSON.stringify(clientConfig.EXPERIMENT_FLAGS));
+	//console.log("Experiments", clientConfig.FEXP_EXPERIMENTS);
 
-		if(initialPlayerData?.playabilityStatus?.status == "UNPLAYABLE")
-			throw new UnavailableException("Video unplayable");
-		
-		const jsUrlMatch = html.match("PLAYER_JS_URL\"\\s?:\\s?\"(.*?)\"");
-		const jsUrl = (jsUrlMatch) ? jsUrlMatch[1] : clientContext.PLAYER_JS_URL;
-		const isNewCipher = (!options?.noSources) ? prepareCipher(jsUrl) : false;
+	if (initialPlayerData?.playabilityStatus?.status == "UNPLAYABLE")
+		throw new UnavailableException("Video unplayable");
 
-		if(jsUrl && _settings?.notify_cipher) {
-			const hashMatch = /player\/([a-zA-Z0-9]+)\/player/.exec(jsUrl);
-			if(hashMatch && hashMatch.length > 1)
-				bridge.toast("Cipher: " + hashMatch[1]);
-		}
+	const jsUrlMatch = html.match("PLAYER_JS_URL\"\\s?:\\s?\"(.*?)\"");
+	const jsUrl = (jsUrlMatch) ? jsUrlMatch[1] : clientContext.PLAYER_JS_URL;
+	const isNewCipher = (!options?.noSources) ? prepareCipher(jsUrl) : false;
 
-		ageRestricted = initialPlayerData.playabilityStatus?.reason?.indexOf("your age") > 0 ?? false;
-		if (ageRestricted) {
-			log("Content Details: Age Restricted");
-			if (_settings["allowAgeRestricted"]) {
-				const sts = _sts[jsUrl];
-				if (!initialPlayerData.streamingData && sts) {
-					initialPlayerData = requestTvHtml5EmbedStreamingData(initialPlayerData.videoDetails.videoId, sts);
-					console.log("Filled missing streaming data using TvHtml5Embed.");
-					if(initialPlayerData.playabilityStatus?.reason?.indexOf("sign in") >= 0){
-						throw new ScriptLoginRequiredException("Age restricted video requires login to retrieve"); 
-					}
+	if (jsUrl && _settings?.notify_cipher) {
+		const hashMatch = /player\/([a-zA-Z0-9]+)\/player/.exec(jsUrl);
+		if (hashMatch && hashMatch.length > 1)
+			bridge.toast("Cipher: " + hashMatch[1]);
+	}
+
+	ageRestricted = initialPlayerData.playabilityStatus?.reason?.indexOf("your age") > 0 ?? false;
+	if (ageRestricted) {
+		log("Content Details: Age Restricted");
+		if (_settings["allowAgeRestricted"]) {
+			const sts = _sts[jsUrl];
+			if (!initialPlayerData.streamingData && sts) {
+				initialPlayerData = requestTvHtml5EmbedStreamingData(initialPlayerData.videoDetails.videoId, sts);
+				console.log("Filled missing streaming data using TvHtml5Embed.");
+				if (initialPlayerData.playabilityStatus?.reason?.indexOf("sign in") >= 0) {
+					throw new ScriptLoginRequiredException("Age restricted video requires login to retrieve");
 				}
-			} else {
-				throw new AgeException("Age restricted videos can be allowed using the plugin settings");
 			}
+		} else {
+			throw new AgeException("Age restricted videos can be allowed using the plugin settings");
 		}
-		const controversial = initialPlayerData.playabilityStatus?.errorScreen?.playerErrorMessageRenderer?.reason?.simpleText?.indexOf("following content may") > 0 ?? false;
-		if(controversial) {
-			log("Content Details: Controversial");
-			if (_settings["allowControversialRestricted"]) {
-				bridge.toast("Controversial video, bypassing..");
-				const sts = _sts[jsUrl];
-				if (!initialPlayerData.streamingData && sts) {
-					initialPlayerData = requestTvHtml5EmbedStreamingData(initialPlayerData.videoDetails.videoId, sts);
-					console.log("Filled missing streaming data using TvHtml5Embed.");
-					if(initialPlayerData.playabilityStatus?.status == "UNPLAYABLE") {
-						if(bridge.isLoggedIn() && !!_settings?.allowLoginFallback) {
-							bridge.toast("Bypass failed, trying login fallback");
-							initialPlayerData = verifyAgePlayerData(videoId, sts, true);
-						}
-						else if(initialPlayerData.playabilityStatus?.reason?.indexOf("sign in") >= 0){
-							throw new ScriptLoginRequiredException("Controversial video requires login to retrieve"); 
-						}
-
-						if(initialPlayerData.playabilityStatus?.status == "UNPLAYABLE") {
-							throw new ScriptException("Bypass failed due to:\n" + initialPlayerData.playabilityStatus?.reason);
-						}
-						if(initialPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED") {
-							throw new ScriptException("Login bypass failed for controversial video");
-						}
+	}
+	const controversial = initialPlayerData.playabilityStatus?.errorScreen?.playerErrorMessageRenderer?.reason?.simpleText?.indexOf("following content may") > 0 ?? false;
+	if (controversial) {
+		log("Content Details: Controversial");
+		if (_settings["allowControversialRestricted"]) {
+			bridge.toast("Controversial video, bypassing..");
+			const sts = _sts[jsUrl];
+			if (!initialPlayerData.streamingData && sts) {
+				initialPlayerData = requestTvHtml5EmbedStreamingData(initialPlayerData.videoDetails.videoId, sts);
+				console.log("Filled missing streaming data using TvHtml5Embed.");
+				if (initialPlayerData.playabilityStatus?.status == "UNPLAYABLE") {
+					if (bridge.isLoggedIn() && !!_settings?.allowLoginFallback) {
+						bridge.toast("Bypass failed, trying login fallback");
+						initialPlayerData = verifyAgePlayerData(videoId, sts, true);
 					}
-				}
-			} else {
-				throw new UnavailableException("Controversial restricted videos can be allowed using the plugin settings");
-			}
-		}
-		
-		if(IS_TESTING) {
-			console.log("Initial Data", initialData);
-			console.log("Initial Player Data", initialPlayerData);
-		}
+					else if (initialPlayerData.playabilityStatus?.reason?.indexOf("sign in") >= 0) {
+						throw new ScriptLoginRequiredException("Controversial video requires login to retrieve");
+					}
 
-		let creationData = {
-			url: urlFiltered,
-			initialData: initialData,
-			initialPlayerData: initialPlayerData,
-			jsUrl: jsUrl
-		};
-
-		log("extractVideoPage_VideoDetails (start)");
-		const videoDetails = extractVideoPage_VideoDetails(urlFiltered, initialData, initialPlayerData, {
-			pot: options?.pot,
-			httpClient: overrideHttpClient,
-			url: urlFiltered,
-			noSources: !!(options?.noSources)
-		}, jsUrl, useLogin, defaultUMP, clientConfig, usedLogin);
-		log("extractVideoPage_VideoDetails (fin)");
-		if(videoDetails == null) {
-        	if(bridge.devSubmit) bridge.devSubmit("getContentDetails - No video found", html);
-			throw new UnavailableException("No video found");
-		}
-
-		if(!videoDetails.live && 
-			(videoDetails.video?.videoSources == null || videoDetails.video.videoSources.length == 0) &&
-			(!videoDetails.datetime || videoDetails.datetime < (((new Date()).getTime() / 1000) - 60 * 60))) {
-			if(isNewCipher) {
-				log("Unavailable video found with new cipher, clearing cipher");
-				clearCipher(jsUrl);
-			}
-			if(!simplify)
-				throw new UnavailableException("No sources found");
-		}
-
-		log("getBGDataFromClientConfig");
-		let bgData = getBGDataFromClientConfig(clientConfig, usedLogin);
-
-
-		//Substitute Dash manifest from Android
-		if(USE_ANDROID_FALLBACK && videoDetails.dash && videoDetails.dash.url) {
-			const androidData = requestAndroidStreamingData(videoDetails.id.value);
-			if(IS_TESTING)
-				console.log("Android Streaming Data", androidData);
-			if(androidData?.streamingData?.dashManifestUrl) {
-				log("Using Android dash substitute");
-				const existingUrl = videoDetails.dash.url;
-				videoDetails.dash.url = androidData.streamingData.dashManifestUrl;
-				if(existingUrl == videoDetails.live?.url)
-					videoDetails.live.url = androidData.streamingData.dashManifestUrl;
-			}
-		}
-		//Substitute HLS manifest from iOS
-		if(USE_IOS_FALLBACK && videoDetails.hls && videoDetails.hls.url && !simplify) {
-			log("requestIOSStreamingData (hls)");
-			const iosDataResp = (batchIOS > 0) ?
-				resps[batchIOS] : 
-				requestIOSStreamingData(videoDetails.id.value);
-				
-			if(iosDataResp.isOk) {
-				const iosData = JSON.parse(iosDataResp.body);
-				if(IS_TESTING)
-					console.log("IOS Streaming Data", iosData);
-				if(iosData?.streamingData?.hlsManifestUrl) {
-					log("Using iOS HLS substitute");
-					const existingUrl = videoDetails.hls.url;
-					videoDetails.hls.name = "HLS (IOS)";
-					videoDetails.hls.url = iosData.streamingData.hlsManifestUrl;
-					if(existingUrl == videoDetails.live?.url) {
-						videoDetails.live.name = "HLS (IOS)";
-						videoDetails.live.url = iosData.streamingData.hlsManifestUrl;
+					if (initialPlayerData.playabilityStatus?.status == "UNPLAYABLE") {
+						throw new ScriptException("Bypass failed due to:\n" + initialPlayerData.playabilityStatus?.reason);
+					}
+					if (initialPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED") {
+						throw new ScriptException("Login bypass failed for controversial video");
 					}
 				}
 			}
-			else
-				bridge.toast("Failed to get iOS stream data");
+		} else {
+			throw new UnavailableException("Controversial restricted videos can be allowed using the plugin settings");
 		}
-		else if(USE_IOS_VIDEOS_FALLBACK && !USE_ABR_VIDEOS && !simplify) {
+	}
+
+	if (IS_TESTING) {
+		console.log("Initial Data", initialData);
+		console.log("Initial Player Data", initialPlayerData);
+	}
+
+	let creationData = {
+		url: urlFiltered,
+		initialData: initialData,
+		initialPlayerData: initialPlayerData,
+		jsUrl: jsUrl
+	};
+
+	log("extractVideoPage_VideoDetails (start)");
+	const videoDetails = extractVideoPage_VideoDetails(urlFiltered, initialData, initialPlayerData, {
+		pot: options?.pot,
+		httpClient: overrideHttpClient,
+		url: urlFiltered,
+		noSources: !!(options?.noSources)
+	}, jsUrl, useLogin, defaultUMP, clientConfig, usedLogin);
+	log("extractVideoPage_VideoDetails (fin)");
+	if (videoDetails == null) {
+		if (bridge.devSubmit) bridge.devSubmit("getContentDetails - No video found", html);
+		throw new UnavailableException("No video found");
+	}
+
+	if (!videoDetails.live &&
+		(videoDetails.video?.videoSources == null || videoDetails.video.videoSources.length == 0) &&
+		(!videoDetails.datetime || videoDetails.datetime < (((new Date()).getTime() / 1000) - 60 * 60))) {
+		if (isNewCipher) {
+			log("Unavailable video found with new cipher, clearing cipher");
+			clearCipher(jsUrl);
+		}
+		if (!simplify)
+			throw new UnavailableException("No sources found");
+	}
+
+	log("getBGDataFromClientConfig");
+	let bgData = getBGDataFromClientConfig(clientConfig, usedLogin);
+
+
+	//Substitute Dash manifest from Android
+	if (USE_ANDROID_FALLBACK && videoDetails.dash && videoDetails.dash.url) {
+		const androidData = requestAndroidStreamingData(videoDetails.id.value);
+		if (IS_TESTING)
+			console.log("Android Streaming Data", androidData);
+		if (androidData?.streamingData?.dashManifestUrl) {
+			log("Using Android dash substitute");
+			const existingUrl = videoDetails.dash.url;
+			videoDetails.dash.url = androidData.streamingData.dashManifestUrl;
+			if (existingUrl == videoDetails.live?.url)
+				videoDetails.live.url = androidData.streamingData.dashManifestUrl;
+		}
+	}
+	//Substitute HLS manifest from iOS
+	if (USE_IOS_LIVE_FALLBACK && videoDetails.hls && videoDetails.hls.url && !simplify) {
+		log("requestIOSStreamingData (hls)");
+		const iosDataResp = (batchIOS > 0) ?
+			resps[batchIOS] :
+			requestIOSStreamingData(videoDetails.id.value);
+
+		if (iosDataResp.isOk) {
+			const iosData = JSON.parse(iosDataResp.body);
+			if (IS_TESTING)
+				console.log("IOS Streaming Data", iosData);
+			if (iosData?.streamingData?.hlsManifestUrl) {
+				log("Using iOS HLS substitute");
+				const existingUrl = videoDetails.hls.url;
+				videoDetails.hls.name = "HLS (IOS)";
+				videoDetails.hls.url = iosData.streamingData.hlsManifestUrl;
+				if (existingUrl == videoDetails.live?.url) {
+					videoDetails.live.name = "HLS (IOS)";
+					videoDetails.live.url = iosData.streamingData.hlsManifestUrl;
+				}
+			}
+		}
+		else
+			bridge.toast("Failed to get iOS stream data");
+	}
+	else if (!USE_ABR_VIDEOS && !simplify) {
+		let foundWorking = false;
+
+		let reqIndex = 0;
+		let altReqs = http.batch();
+		let tvReqIndex = -1;
+		let iosReqIndex = -1;
+		if (USE_TV_VIDEOS_FALLBACK) {
+			const sts = _sts[jsUrl];
+			altReqs = requestTvHtml5EmbedStreamingData(videoDetails.id.value, sts, getBGDataFromClientConfig(clientConfig, usedLogin), usedLogin, altReqs);
+			tvReqIndex = reqIndex;
+			reqIndex++;
+		}
+		if (USE_IOS_VIDEOS_FALLBACK && batchIOS <= 0) {
+			altReqs = requestIOSStreamingData(videoDetails.id.value, altReqs, getBGDataFromClientConfig(clientConfig, usedLogin), usedLogin);
+			iosReqIndex = reqIndex;
+			reqIndex++;
+		}
+		altReqs = altReqs.execute();
+
+		if (USE_TV_VIDEOS_FALLBACK) {
+			log("requestTVStreamingData (sources)");
+			const tvDataResp = (tvReqIndex >= 0) ? altReqs[tvReqIndex] : undefined;
+			if (tvDataResp && tvDataResp.isOk) {
+				const tvData = JSON.parse(tvDataResp.body);
+				if (IS_TESTING)
+					console.log("TV Streaming Data", tvData);
+
+				if (tvData?.streamingData?.adaptiveFormats) {
+					let newDescriptor = extractAdaptiveFormats_VideoDescriptor(tvData.streamingData.adaptiveFormats, jsUrl, creationData, "TV ");
+
+					if (!!_settings.verifyIOSPlayback && !canDoRequestWithBody) {
+						log("Not doing verifyDirectPlayback because canDoRequestWithBody false");
+					}
+					if (!canDoRequestWithBody || !_settings.verifyIOSPlayback || verifyDirectPlayback(newDescriptor)) {
+						videoDetails.video = newDescriptor;
+						foundWorking = true;
+						if (!!_settings["showVerboseToasts"])
+							bridge.toast("Using TV sources fallback (" + (batchIOS > 0 ? "cached" : "lazily") + ")");
+					}
+					else {
+						log("TV PLAYBACK VERIFICATION FAILED, FALLBACK");
+					}
+				}
+			}
+		}
+		if (!foundWorking && USE_IOS_VIDEOS_FALLBACK) {
 			log("requestIOSStreamingData (sources)");
 			const iosDataResp = (batchIOS > 0) ?
-				resps[batchIOS] : 
+				resps[batchIOS] :
 				requestIOSStreamingData(videoDetails.id.value, undefined, getBGDataFromClientConfig(clientConfig, usedLogin), usedLogin);
-			if(iosDataResp.isOk) {
+			if (iosDataResp.isOk) {
 				const iosData = JSON.parse(iosDataResp.body);
-				if(IS_TESTING)
+				if (IS_TESTING)
 					console.log("IOS Streaming Data", iosData);
 
-				if(iosData?.streamingData?.adaptiveFormats) {
-					if(!!_settings["showVerboseToasts"])
-						bridge.toast("Using iOS sources fallback (" + (batchIOS > 0 ? "cached" : "lazily") + ")");
+				if (iosData?.streamingData?.adaptiveFormats) {
 					let newDescriptor = extractAdaptiveFormats_VideoDescriptor(iosData.streamingData.adaptiveFormats, jsUrl, creationData, "IOS ");
 
-					if(!!_settings.verifyIOSPlayback && !canDoRequestWithBody) {
+					if (!!_settings.verifyIOSPlayback && !canDoRequestWithBody) {
 						log("Not doing verifyIOSPlayback because canDoRequestWithBody false");
 					}
-					if(!canDoRequestWithBody || !_settings.verifyIOSPlayback || verifyIOSPlayback(newDescriptor))
+					if (!canDoRequestWithBody || !_settings.verifyIOSPlayback || verifyDirectPlayback(newDescriptor)) {
 						videoDetails.video = newDescriptor;
+						foundWorking = true;
+						if (!!_settings["showVerboseToasts"])
+							bridge.toast("Using iOS sources fallback (" + (batchIOS > 0 ? "cached" : "lazily") + ")");
+					}
 					else {
 						log("IOS PLAYBACK VERIFICATION FAILED, FALLBACK");
 					}
 				}
-				else {
-					log("Failed to get iOS stream data, fallback to UMP")
-					if(!!_settings["showVerboseToasts"])
-						bridge.toast("Failed to get iOS stream data, fallback to UMP");
-					videoDetails.video = extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig, url, usedLogin, options) ?? new VideoSourceDescriptor([]);
-				}
-			}
-			else {
-				log("Failed to get iOS stream data, fallback to UMP (" + iosDataResp?.code + ")")
-				if(!!_settings["showVerboseToasts"])
-					bridge.toast("Failed to get iOS stream data, fallback to UMP");
-				videoDetails.video = extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig, url, usedLogin, options) ?? new VideoSourceDescriptor([]);
 			}
 		}
+		if (!foundWorking) {
+			log("Failed to get iOS stream data, fallback to UMP")
+			if (!!_settings["showVerboseToasts"])
+				bridge.toast("Failed to get iOS stream data, fallback to UMP");
+			videoDetails.video = extractABR_VideoDescriptor(initialPlayerData, jsUrl, clientConfig, url, usedLogin, options) ?? new VideoSourceDescriptor([]);
+		}
+	}
 
-		if(batchYoutubeDislikesIndex > 0) {
-			try {
-				const youtubeDislikeInfoResponse = resps[batchYoutubeDislikesIndex]
-				if(youtubeDislikeInfoResponse.isOk) {
-					const youtubeDislikeInfo = JSON.parse(youtubeDislikeInfoResponse.body);
-					if(IS_TESTING)
-						console.log("Youtube Dislike Info", youtubeDislikeInfo);
-					videoDetails.rating = new RatingLikesDislikes(videoDetails.rating.likes, youtubeDislikeInfo.dislikes);
-				}
-			}
-			catch(ex) {
-				console.log("Failed to fetch Youtube Dislikes", ex);
+	if (batchYoutubeDislikesIndex > 0) {
+		try {
+			const youtubeDislikeInfoResponse = resps[batchYoutubeDislikesIndex]
+			if (youtubeDislikeInfoResponse.isOk) {
+				const youtubeDislikeInfo = JSON.parse(youtubeDislikeInfoResponse.body);
+				if (IS_TESTING)
+					console.log("Youtube Dislike Info", youtubeDislikeInfo);
+				videoDetails.rating = new RatingLikesDislikes(videoDetails.rating.likes, youtubeDislikeInfo.dislikes);
 			}
 		}
+		catch (ex) {
+			console.log("Failed to fetch Youtube Dislikes", ex);
+		}
+	}
 
-		const finalResult = videoDetails;
-		finalResult.bgData = bgData;
+	const finalResult = videoDetails;
+	finalResult.bgData = bgData;
 
-		if(_setMetadata) {
-			finalResult.metaData = {
-				"initialData": JSON.stringify(initialData)
-			}
+	if (_setMetadata) {
+		finalResult.metaData = {
+			"initialData": JSON.stringify(initialData)
 		}
-		finalResult.__initialData = initialData;
-		if(!!_settings["youtubeActivity"] && useLogin) {
-			finalResult.__playerData = initialPlayerData;
-			finalResult.getPlaybackTracker = function(url) {
-				return source.getPlaybackTracker(url, initialPlayerData)
-			};
-		}
-		finalResult.getContentChapters = function() {
-			return source.getContentChapters(url, finalResult.__initialData);
+	}
+	finalResult.__initialData = initialData;
+	if (!!_settings["youtubeActivity"] && useLogin) {
+		finalResult.__playerData = initialPlayerData;
+		finalResult.getPlaybackTracker = function (url) {
+			return source.getPlaybackTracker(url, initialPlayerData)
 		};
-
-		finalResult.getContentRecommendations = function() {
-			const initialData = finalResult.__initialData;
-			if(!initialData)
-				return new VideoPager([], false);
-			return source.getContentRecommendations(url, initialData);
-		}
-
-		if(false) {
-			const bgData = getBGDataFromClientConfig(clientConfig, usedLogin);
-			tryGetBotguard((bg)=>{
-				bg.getTokenOrCreate(bgData.visitorData, bgData.dataSyncId, (pot)=>{
-					console.log("Botguard Token to use:", pot);
-					for(let src of finalResult.video.videoSources)
-						src.pot = pot;
-					for(let src of finalResult.video.audioSources)
-						src.pot = pot;
-				}, bgData.visitorDataType);
-			});
-		}
-		return finalResult;
+	}
+	finalResult.getContentChapters = function () {
+		return source.getContentChapters(url, finalResult.__initialData);
 	};
-}
+
+	finalResult.getContentRecommendations = function () {
+		const initialData = finalResult.__initialData;
+		if (!initialData)
+			return new VideoPager([], false);
+		return source.getContentRecommendations(url, initialData);
+	}
+
+	if (false) {
+		const bgData = getBGDataFromClientConfig(clientConfig, usedLogin);
+		tryGetBotguard((bg) => {
+			bg.getTokenOrCreate(bgData.visitorData, bgData.dataSyncId, (pot) => {
+				console.log("Botguard Token to use:", pot);
+				for (let src of finalResult.video.videoSources)
+					src.pot = pot;
+				for (let src of finalResult.video.audioSources)
+					src.pot = pot;
+			}, bgData.visitorDataType);
+		});
+	}
+	return finalResult;
+};
 
 source.testUMP = function(url) {
 	USE_ABR_VIDEOS = true;
@@ -839,7 +1258,7 @@ function verifyAgePlayerData(videoId, sts, useLogin = true) {
 	
 	return getPlayerData(videoId, sts, useLogin);
 }
-function getPlayerData(videoId, sts, useLogin = true) {
+function getPlayerData(videoId, sts, useLogin = true, batch) {
 	const context = getClientContext(useLogin);
 	const authHeaders = useLogin ? getAuthContextHeaders(true) : {};
 	authHeaders["Accept-Language"] = "en-US";
@@ -869,13 +1288,17 @@ function getPlayerData(videoId, sts, useLogin = true) {
 		log("Using isInlinePlaybackNoAd");
 		body.playbackContext.contentPlaybackContext.isInlinePlaybackNoAd = true;
 	}
-	const newResp = http.POST("https://www.youtube.com/youtubei/v1/player?prettyPrint=false", JSON.stringify(body), authHeaders, useLogin);
-	if(!newResp.isOk) {
-		console.log(newResp.body);
-		throw new ScriptException("Failed to fetch player data");
+	if(batch)
+		return batch.POST("https://www.youtube.com/youtubei/v1/player?prettyPrint=false", JSON.stringify(body), authHeaders, useLogin);
+	else {
+		const newResp = http.POST("https://www.youtube.com/youtubei/v1/player?prettyPrint=false", JSON.stringify(body), authHeaders, useLogin);
+		if(!newResp.isOk) {
+			console.log(newResp.body);
+			throw new ScriptException("Failed to fetch player data");
+		}
+		const json = JSON.parse(newResp.body);
+		return json;
 	}
-	const json = JSON.parse(newResp.body);
-	return json;
 }
 
 
@@ -2261,6 +2684,9 @@ class YTABRAudioSource extends DashManifestRawAudioSource {
 	}
 }
 
+let backOffSourceContext = null;
+let backOffSourceTime = 0;
+
 function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, retries, options) {
 	options = options ?? {};
 	if(!retries)
@@ -2356,7 +2782,12 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 			}
 			else if(canUse("Async") && umpResp.backOffTime && (_settings.allow_ump_backoff_async || _settings.allow_ump_backoff)) {
 				log("Waiting for " + parseInt(umpResp.backOffTime / 1000) + "s as required (Async)")
-				bridge.toast("Waiting for " + parseInt(umpResp.backOffTime / 1000) + "s as required (Async)");
+
+				if(backOffSourceContext != parentSource.sharedContext || ((new Date()).getTime() - backOffSourceTime) > 2000) {
+					backOffSourceContext = parentSource.sharedContext;
+					backOffSourceTime = (new Date()).getTime();
+					bridge.toast("Waiting for " + parseInt(umpResp.backOffTime / 1000) + "s as required (Async)");
+				}
 				const promise = new Promise((resolve, reject)=>{
 					setTimeout(()=>{
 						try {
@@ -2387,20 +2818,6 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 				});
 				promise.estDuration = umpResp.backOffTime;
 				return promise;
-			}
-			else if (bridge.sleep && umpResp.backOffTime && _settings.allow_ump_backoff) {
-				log("Waiting for " + parseInt(umpResp.backOffTime / 1000) + "s as required")
-				bridge.toast("Waiting for " + parseInt(umpResp.backOffTime / 1000) + "s as required");
-				bridge.sleep(umpResp.backOffTime);
-
-				if (umpResp.sessionZm)
-					options.sessionZm = umpResp.sessionZm;
-				options.rn = (options?.rn ?? 1) + 1;
-				options.lastRequestTime = requestTime;
-				if(parentSource.sharedContext) {
-					parentSource.sharedContext.sessionZm = options.sessionZm;
-				}
-				return generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, retries + 1, options);
 			}
 			/*
 			log("Re-enabling..");
@@ -2455,7 +2872,7 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 			else {
 				log("No stream data in initial UMP Response:\n" + JSON.stringify(umpResp));
 				log("Failed to load UMP, try restarting plugin/app.\n" + umpResp.opcodes.map(x=>x.opcode + ":" + x.length).join(", "));
-				bridge.toast("Failed to load UMP, try restarting plugin/app.\n" + umpResp.opcodes.map(x=>x.opcode + ":" + x.length).join(", "));
+				bridge.toast("Failed to load UMP, no stream data.\ntry restarting plugin/app.\n" + umpResp.opcodes.map(x=>x.opcode + ":" + x.length).join(", "));
 				throw new ScriptException("No stream data in initial UMP response");
 			}
 		}
@@ -3907,26 +4324,25 @@ function requestIOSStreamingData(videoId, batch, visitorData, useLogin) {
 		"&id=" + videoId
 
 	if(batch) {
-		batch.POST(url, JSON.stringify(body), headers, !!useLogin);
-		return null;
+		return batch.POST(url, JSON.stringify(body), headers, !!useLogin);
 	}
 	else {
 		const resp = http.POST(url, JSON.stringify(body), headers, !!useLogin);
 		return resp;
 	}
 }
-function verifyIOSPlayback(descriptor) {
+function verifyDirectPlayback(descriptor) {
 	const startTime = new Date();
 	if (!descriptor) {
-		log("verifyIOSPlayback failed due to no descriptor");
+		log("verifyDirectPlayback failed due to no descriptor");
 		return false;
 	}
 	if (!descriptor.audioSources) {
-		log("verifyIOSPlayback failed due to no descriptor");
+		log("verifyDirectPlayback failed due to no descriptor");
 		return false;
 	}
 	if (descriptor.audioSources.length == 0) {
-		log("verifyIOSPlayback failed due to no audio streams");
+		log("verifyDirectPlayback failed due to no audio streams");
 		return false;
 	}
 	const sourceToTest = descriptor.audioSources[0];
@@ -3940,13 +4356,13 @@ function verifyIOSPlayback(descriptor) {
 	});
 	const resp1 = http.request("HEAD", modified.url, modified.headers, false);
 	if (!resp1.isOk) {
-		log("verifyIOSPlayback failed due couldn't determine content lenght with HEAD");
+		log("verifyDirectPlayback failed due couldn't determine content lenght with HEAD");
 		return false;
 	}
 
 	let contentLength = (resp1.headers["content-length"]) ? resp1.headers["content-length"][0] : -1;
 	if(contentLength && contentLength <= 0) {
-		log("verifyIOSPlayback failed due couldn't determine content lenght with HEAD (missing header)\n" + JSON.stringify(resp1));
+		log("verifyDirectPlayback failed due couldn't determine content lenght with HEAD (missing header)\n" + JSON.stringify(resp1));
 		return false;
 	}
 
@@ -3959,11 +4375,11 @@ function verifyIOSPlayback(descriptor) {
 	const resp2 = http.GET(modified2.url, modified2.headers, false);
 	console.log(resp2);
 	if (!resp2.isOk) {
-		log("verifyIOSPlayback failed due couldn't get segment beyond 60 seconds");
+		log("verifyDirectPlayback failed due couldn't get segment beyond 60 seconds");
 		return false;
 	}
 	const timeToCheck = (new Date()).getTime() - startTime.getTime();
-	log("verifyIOSPlayback succeeded in " + timeToCheck + "ms");
+	log("verifyDirectPlayback succeeded in " + timeToCheck + "ms");
 	return true;
 }
 
@@ -4010,7 +4426,7 @@ function requestAndroidStreamingData(videoId) {
 	else
 		return null;
 }
-function requestTvHtml5EmbedStreamingData(videoId, sts, withLogin = false) {
+function requestTvHtml5EmbedStreamingData(videoId, sts, bgData, withLogin = false, batch) {
 	const body = {
 		videoId: videoId,
 		cpn: "" + randomString(16),
@@ -4053,6 +4469,8 @@ function requestTvHtml5EmbedStreamingData(videoId, sts, withLogin = false) {
 		"&t=" + token +
 		"&id=" + videoId
 
+	if(batch)
+		return batch.POST(url, JSON.stringify(body), headers, !!withLogin);
 	const resp = http.POST(url, JSON.stringify(body), headers, !!withLogin);
 	if(resp.isOk)
 		return JSON.parse(resp.body);
@@ -4407,7 +4825,7 @@ function extractVideoPage_VideoDetails(parentUrl, initialData, initialPlayerData
 		video: 
 			((!contextData?.noSources) ? //(!useAbr) ?
 				//extractAdaptiveFormats_VideoDescriptor(initialPlayerData?.streamingData?.adaptiveFormats, jsUrl, contextData, "") :
-				extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig, parentUrl, usedLogin, contextData) : undefined
+				extractABR_VideoDescriptor(initialPlayerData, jsUrl, clientConfig, parentUrl, usedLogin, contextData) : undefined
 			)
 			?? new VideoSourceDescriptor([]),
 		subtitles: initialPlayerData
@@ -4630,7 +5048,7 @@ function extractWeb_VideoDescriptor(initialPlayerData, jsUrl, initialData, clien
 */
 
 
-function extractABR_VideoDescriptor(initialPlayerData, jsUrl, initialData, clientConfig, parentUrl, usedLogin, contextData) {
+function extractABR_VideoDescriptor(initialPlayerData, jsUrl, clientConfig, parentUrl, usedLogin, contextData) {
 	
 	const abrStreamingUrl = (initialPlayerData?.streamingData?.serverAbrStreamingUrl) ? 
 		decryptUrlN(initialPlayerData.streamingData.serverAbrStreamingUrl, jsUrl, false) : undefined;
