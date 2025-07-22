@@ -1434,7 +1434,7 @@ source.getContentRecommendations = (url, initialData) => {
 	}
 	catch(ex) {
 
-		log("Failed to parse ContentRecommendations");
+		log("Failed to parse ContentRecommendations: " + ex + "\n" + ex?.stack);
 		if(bridge.devSubmit) {
 			try {
 				bridge.devSubmit("getContentRecommendations - Failed to parse recommendations", JSON.stringify(watchNextFeed));
@@ -5657,7 +5657,7 @@ function extractThumbnailViewModel_Data(thumbnailViewModel) {
 							result.videoCount = extractFirstNumber_Integer(subOverlay.thumbnailBadgeViewModel.text);
 							break;
 						}
-						else if(accessibilityText.indexOf("minutes") > 0 || accessibilityText.indexOf("seconds") > 0) {
+						else if(accessibilityText?.indexOf("minutes") > 0 || accessibilityText?.indexOf("seconds") > 0) {
 							result.duration = extractHumanTime_Seconds(subOverlay.thumbnailBadgeViewModel.text);
 						}
 					}
