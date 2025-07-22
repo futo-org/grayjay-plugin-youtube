@@ -317,6 +317,10 @@
 
 
 	"changelog": {
+		"264": [
+			"Fix: Fix scenario where Login Fallback would not work for some users (Video unavailable)",
+			"Improvement: Remove disfunctional setting"
+		],
 		"262": [
 			"Fix: Cipher fix",
 			"Improvement: Backoff always if less than 5 seconds",
