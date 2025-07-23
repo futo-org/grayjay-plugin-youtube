@@ -508,7 +508,7 @@ class YTSessionClient {
 		url = convertIfOtherUrl(url);
 		let urlFiltered = filterDetailUrl(url);
 		const videoId = extractVideoIDFromUrl(url);
-		let useLogin = useAuth;
+		let useLogin = useAuth || !!_settings?.authDetails;
 
 		if(IS_TESTING)
 			console.log("VideoID:", videoId);
@@ -545,19 +545,18 @@ class YTSessionClient {
 		//#endregion
 
 		//#region Login Required
-		if (playerData.playabilityStatus?.status == "LOGIN_REQUIRED" && bridge.isLoggedIn() && !useLogin) {
-			if(!!_settings?.allowLoginFallback && !useLogin) {
+		if (playerData.playabilityStatus?.status == "LOGIN_REQUIRED") {
+			if(!!_settings?.allowLoginFallback && bridge.isLoggedIn()) {
 				bridge.toast("Using login fallback to resolve:\n" + playerData?.playabilityStatus?.reason);
-				resps[0] = http.GET(urlFiltered, headersUsed, true);
-				const newPlayerData = getPlayerData(videoId, this.sts, true);
+				const newPlayerData = getControversialPlayerData(videoId, context.sts, true);
 				if (newPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED")
-					throw new ScriptLoginRequiredException("Login required\nReason: " + newPlayerData?.playabilityStatus?.reason);
+					throw new ScriptLoginRequiredException("Login required (fallback)\nReason: " + newPlayerData?.playabilityStatus?.reason);
 
 				playerData = newPlayerData;
 				useLogin = true;
 			}
 			else
-				throw new ScriptLoginRequiredException("Login required\nReason: " + playerData?.playabilityStatus?.reason);
+				throw new ScriptLoginRequiredException("Login required (No fallback)\nReason: " + playerData?.playabilityStatus?.reason);
 		}
 		//#endregion
 
@@ -985,7 +984,7 @@ source.getContentDetails = (url, useAuth, simplify, forceUmp, options) => {
 				if (initialPlayerData.playabilityStatus?.status == "UNPLAYABLE") {
 					if (bridge.isLoggedIn() && !!_settings?.allowLoginFallback) {
 						bridge.toast("Bypass failed, trying login fallback");
-						initialPlayerData = verifyAgePlayerData(videoId, sts, true);
+						initialPlayerData = getControversialPlayerData(videoId, sts, true);
 					}
 					else if (initialPlayerData.playabilityStatus?.reason?.indexOf("sign in") >= 0) {
 						throw new ScriptLoginRequiredException("Controversial video requires login to retrieve");
@@ -1234,7 +1233,7 @@ source.testUMP = function(url) {
 function isVerifyAge(initialPlayerData){
 	return (initialPlayerData.playabilityStatus.status == "CONTENT_CHECK_REQUIRED")
 }
-function verifyAgePlayerData(videoId, sts, useLogin = true) {
+function getControversialPlayerData(videoId, sts, useLogin = true) {
 	
 	const context = getClientContext(useLogin);
 	const authHeaders = useLogin ? getAuthContextHeaders(false) : {};
@@ -1284,10 +1283,6 @@ function getPlayerData(videoId, sts, useLogin = true, batch) {
 		racyCheckOk: true,
 		videoId: videoId
 	};
-	if((!useLogin && _settings?.isInlinePlaybackNoAd) || (useLogin && _settings?.isInlinePlaybackNoAd_login)) {
-		log("Using isInlinePlaybackNoAd");
-		body.playbackContext.contentPlaybackContext.isInlinePlaybackNoAd = true;
-	}
 	if(batch)
 		return batch.POST("https://www.youtube.com/youtubei/v1/player?prettyPrint=false", JSON.stringify(body), authHeaders, useLogin);
 	else {
