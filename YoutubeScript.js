@@ -487,6 +487,25 @@ class YTSessionClient {
 		const jsUrl = (jsUrlMatch) ? jsUrlMatch[1] : clientConfig.PLAYER_JS_URL;
 		const isNewCipher = prepareCipher(jsUrl);
 
+		if(false && _settings.use_session_client_pot) {
+				tryGetBotguard((bg)=>{
+					bg.getTokenOrCreate(this.clientConfig.bgData.visitorData, this.clientConfig.bgData.dataSyncId, (pot)=>{
+						log("Botguard token to use: " + pot);
+						console.log("Botguard Token to use:", pot);
+						this.pot = pot;
+					}, bgData.visitorDataType);
+				});
+				if (usedLogin) {
+					tryGetBotguard((bg)=>{
+						bg.getTokenOrCreate(this.clientConfigAuth.bgData.visitorData, this.clientConfigAuth.bgData.dataSyncId, (pot)=>{
+							log("Botguard token to use: " + pot);
+							console.log("Botguard Token to use:", pot);
+							this.pot = pot;
+						}, bgData.visitorDataType);
+					});
+				}
+		}
+
 		return {
 			initialData: initialData,
 			clientConfig: clientConfig,
@@ -523,7 +542,7 @@ class YTSessionClient {
 		let batch = http.batch();
 
 		//Request: Player data [0]
-		batch = getPlayerData(videoId, context.sts, useLogin, batch);
+		batch = getPlayerData(videoId, context.sts, useLogin, batch, context.pot);
 
 		//Request: ReturnYoutubeDislikes [1]
 		if(videoId && _settings["youtubeDislikes"] && !simplify)
@@ -547,8 +566,9 @@ class YTSessionClient {
 		//#region Login Required
 		if (playerData.playabilityStatus?.status == "LOGIN_REQUIRED") {
 			if(!!_settings?.allowLoginFallback && bridge.isLoggedIn()) {
+				context = this.clientConfigAuth;
 				bridge.toast("Using login fallback to resolve:\n" + playerData?.playabilityStatus?.reason);
-				const newPlayerData = getControversialPlayerData(videoId, context.sts, true);
+				const newPlayerData = getControversialPlayerData(videoId, context.sts, true, context.pot);
 				if (newPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED")
 					throw new ScriptLoginRequiredException("Login required (fallback)\nReason: " + newPlayerData?.playabilityStatus?.reason);
 
@@ -559,10 +579,6 @@ class YTSessionClient {
 				throw new ScriptLoginRequiredException("Login required (No fallback)\nReason: " + playerData?.playabilityStatus?.reason);
 		}
 		//#endregion
-
-		context = (useLogin) ? this.clientConfigAuth : this.clientConfig;
-
-
 
 		//Video details
 		let contextData = {
@@ -623,13 +639,15 @@ class YTSessionClient {
 							console.log("IOS Streaming Data", iosData);
 						if(iosData?.streamingData?.hlsManifestUrl) {
 							log("Using iOS HLS substitute");
-							const existingUrl = videoDetails.hls.url;
-							videoDetails.hls.name = "HLS (IOS)";
-							videoDetails.hls.url = iosData.streamingData.hlsManifestUrl;
-							if(existingUrl == videoDetails.live?.url) {
-								videoDetails.live.name = "HLS (IOS)";
-								videoDetails.live.url = iosData.streamingData.hlsManifestUrl;
-							}
+
+							const source = new HLSSource({
+								name: "HLS (IOS)",
+								url: iosData?.streamingData?.hlsManifestUrl
+							});
+
+							videoDetails.hls = source
+							videoDetails.live = source;
+							videoDetails.video = new VideoSourceDescriptor([source]);
 						}
 					}
 					else
@@ -638,6 +656,10 @@ class YTSessionClient {
 				else {
 					//TODO: Non-iOS live streams
 				}
+
+				
+				if(!videoDetails.video)
+					videoDetails.video = new VideoSourceDescriptor([]);
 				//#endregion
 			}
 		}
@@ -1233,7 +1255,7 @@ source.testUMP = function(url) {
 function isVerifyAge(initialPlayerData){
 	return (initialPlayerData.playabilityStatus.status == "CONTENT_CHECK_REQUIRED")
 }
-function getControversialPlayerData(videoId, sts, useLogin = true) {
+function getControversialPlayerData(videoId, sts, useLogin = true, pot = undefined) {
 	
 	const context = getClientContext(useLogin);
 	const authHeaders = useLogin ? getAuthContextHeaders(false) : {};
@@ -1249,15 +1271,15 @@ function getControversialPlayerData(videoId, sts, useLogin = true) {
 			"contentCheckOk": true
 		  }
 		},
-		"setControvercy": true
+		"setControvercy": true,
 	  };
 	const resp = http.POST(URL_VERIFY_AGE, JSON.stringify(body), authHeaders, useLogin);
 	if(!resp.isOk)
 		throw new ScriptException("Failed to verify age");
 	
-	return getPlayerData(videoId, sts, useLogin);
+	return getPlayerData(videoId, sts, useLogin, pot);
 }
-function getPlayerData(videoId, sts, useLogin = true, batch) {
+function getPlayerData(videoId, sts, useLogin = true, batch, pot = undefined) {
 	const context = getClientContext(useLogin);
 	const authHeaders = useLogin ? getAuthContextHeaders(true) : {};
 	authHeaders["Accept-Language"] = "en-US";
@@ -1281,6 +1303,9 @@ function getPlayerData(videoId, sts, useLogin = true, batch) {
 			}
 		},
 		racyCheckOk: true,
+		serviceIntegrityDimensions: (pot) ? {
+			poToken: pot
+		} : undefined,
 		videoId: videoId
 	};
 	if(batch)
