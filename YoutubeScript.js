@@ -4,6 +4,7 @@ const URL_HOME = "https://www.youtube.com";
 const URL_TRENDING = "https://www.youtube.com/feed/trending";
 const URL_CONTEXT = "https://www.youtube.com";
 const URL_CONTEXT_M = "https://m.youtube.com";
+const URL_VIDEO_NEXT = "https://www.youtube.com/youtubei/v1/next?prettyPrint=false";
 
 const URL_CHANNEL_VIDEOS = "/videos";
 const URL_CHANNEL_STREAMS = "/streams";
@@ -467,7 +468,8 @@ class YTSessionClient {
 		console.log("YTSessionClient clientConfig", this.clientConfig);
 		console.log("YTSessionClient clientConfigAuth", this.clientConfigAuth);
 		this.initialized = true;
-		bridge.toast("Using YTSession Client");
+		if(!!_settings["showVerboseToasts"])
+			bridge.toast("Using YTSession Client");
 	}
 
 	getClientInit(client, usedLogin) {
@@ -490,18 +492,22 @@ class YTSessionClient {
 		if(_settings.use_session_client_pot) {
 				tryGetBotguard((bg)=>{
 					bg.getTokenOrCreate(this.clientConfig.bgData.visitorData, this.clientConfig.bgData.dataSyncId, (pot)=>{
+						const potPart = (pot) ? pot.substring(0, 5) : "";
 						log("Botguard token to use: " + pot);
 						console.log("Botguard Token to use:", pot);
-						bridge.toast("YTSessionClient got pot")
+						if(!!_settings["showVerboseToasts"])
+							bridge.toast("YTSessionClient got pot [" + potPart + "]")
 						this.clientConfig.pot = pot;
 					}, this.clientConfig.bgData.visitorDataType);
 				});
 				if (usedLogin) {
 					tryGetBotguard((bg)=>{
 						bg.getTokenOrCreate(this.clientConfigAuth.bgData.visitorData, this.clientConfigAuth.bgData.dataSyncId, (pot)=>{
+						const potPart = (pot) ? pot.substring(0, 5) : "";
 							log("Botguard token to use: " + pot);
 							console.log("Botguard Token to use:", pot);
-							bridge.toast("YTSessionClient got pot (auth)")
+							if(!!_settings["showVerboseToasts"])
+								bridge.toast("YTSessionClient got pot (auth) [" + potPart + "]")
 							this.clientConfigAuth.pot = pot;
 						}, this.clientConfigAuth.bgData.visitorDataType);
 					});
@@ -546,23 +552,30 @@ class YTSessionClient {
 		//Request: Player data [0]
 		batch = getPlayerData(videoId, context.sts, useLogin, batch, context.pot);
 
-		//Request: ReturnYoutubeDislikes [1]
+		//Request: Initial data [1]
+		batch = getVideoDetailsInitialData(videoId, useLogin, batch);
+
+		//Request: ReturnYoutubeDislikes [2]
 		if(videoId && _settings["youtubeDislikes"] && !simplify)
 			batch = getYoutubeDislikes(videoId, batch);
 		else batch = batch.DUMMY();
 
-		//Request: iOS Streaming Data [2]
+		//Request: iOS Streaming Data [3]
 		if(!USE_ABR_VIDEOS && !simplify)
 			batch = requestIOSStreamingData(videoId, batch, context.bgData, useLogin);
 		else batch = batch.DUMMY();
 
-		const [respPlayerData, respDislikes, respiOS] = batch.execute();
+		const [respPlayerData, respInitialData, respDislikes, respiOS] = batch.execute();
 		//#endregion
 
-		//#region PlayerData
+		//#region Video Data
 		if(!respPlayerData?.isOk)
 			throw new ScriptException("Could not retrieve playerdata");
 		let playerData = JSON.parse(respPlayerData.body);
+
+		let initialData = null;
+		if(respInitialData?.isOk)
+			initialData = JSON.parse(respInitialData.body);
 		//#endregion
 
 		//#region Login Required
@@ -610,7 +623,7 @@ class YTSessionClient {
 							if(!canDoRequestWithBody || !_settings.verifyIOSPlayback || verifyDirectPlayback(newDescriptor)) {
 								videoDetails.video = newDescriptor;
 								if(!!_settings["showVerboseToasts"])
-									bridge.toast("Using iOS sources fallback (" + (batchIOS > 0 ? "cached" : "lazily") + ")");
+									bridge.toast("Using iOS sources");
 							}
 							else {
 								log("IOS PLAYBACK VERIFICATION FAILED, FALLBACK");
@@ -673,6 +686,8 @@ class YTSessionClient {
 			videoDetails.rating = handleYoutubeDislikes(respDislikes) ?? videoDetails.rating;
 		//#endregion
 
+		if(initialData)
+			extractVideoDetailsInitialData_Metadata(initialData, videoDetails);
 
 		videoDetails.bgData = this.bgData;
 
@@ -684,20 +699,20 @@ class YTSessionClient {
 			};
 		}
 
-		//TODO: getContentChapters
-		/*
-		videoDetails.getContentChapters = function() {
-			return source.getContentChapters(url, videoDetails.__initialData);
-		};*/
+		if(initialData)
+			videoDetails.__initialData = initialData;
 
-		//TODO: getContentRecommendations
-		/*
+		videoDetails.getContentChapters = function() {
+			if(!initialData)
+				return [];
+			return source.getContentChapters(url, initialData);
+		};
 		videoDetails.getContentRecommendations = function() {
-			const initialData = videoDetails.__initialData;
+			//const initialData = videoDetails.__initialData;
 			if(!initialData)
 				return new VideoPager([], false);
 			return source.getContentRecommendations(url, initialData);
-		}*/
+		}
 
 		return videoDetails;
 	}
@@ -1582,6 +1597,135 @@ function extractVideoChapters(initialData) {
     }
 
     return result;
+}
+function getVideoDetailsInitialData(videoId, useLogin, batch) {
+	useLogin = useLogin && bridge.isLoggedIn();
+
+	const context = getClientContext(useLogin);
+	const authHeaders = useLogin ? getAuthContextHeaders(true) : {};
+	authHeaders["Accept-Language"] = "en-US";
+	authHeaders["Cookie"] = "PREF=hl=en&gl=US"
+	const body = {
+		contentCheckOk: true,
+		context: context.INNERTUBE_CONTEXT,
+		playbackContext: {
+			contentPlaybackContext: {
+				lactMilliseconds: "-1",
+				vis: 0
+			}
+		},
+		racyCheckOk: true,
+		videoId: videoId
+	};
+	if(batch)
+		return batch.POST(URL_VIDEO_NEXT, JSON.stringify(body), authHeaders, useLogin);
+	else {
+		const newResp = http.POST(URL_VIDEO_NEXT, JSON.stringify(body), authHeaders, useLogin);
+		if(!newResp.isOk) {
+			console.log(newResp.body);
+			throw new ScriptException("Failed to fetch player data");
+		}
+		const json = JSON.parse(newResp.body);
+		return json;
+	}
+}
+function extractVideoDetailsInitialData_Metadata(initialData, knownData) {
+	const contents = initialData.contents;
+	const contentsContainer = contents.twoColumnWatchNextResults?.results?.results ??
+		null;
+	if(!contentsContainer || !contentsContainer.contents) return knownData;
+
+	let video = knownData ?? {};
+
+	for(let i = 0; i < contentsContainer.contents.length; i++) {
+		const content = contentsContainer.contents[i];
+		switchKey(content, {
+			videoPrimaryInfoRenderer(renderer) {
+				//if(renderer.title?.runs)
+				//	video.name = extractString_Runs(renderer.title.runs);
+				if(renderer.viewCount?.videoViewCountRenderer?.viewCount?.simpleText)
+					video.viewCount = extractFirstNumber_Integer(renderer.viewCount?.videoViewCountRenderer?.viewCount.simpleText)
+				else if(renderer.viewCount?.videoViewCountRenderer?.viewCount?.runs) {
+					video.viewCount = parseInt(extractFirstNumber_Integer(extractText_String(renderer.viewCount?.videoViewCountRenderer?.viewCount)));
+				}
+				if(renderer.viewCount?.videoViewCountRenderer?.isLive || renderer.viewCount?.videoViewCountRenderer?.viewCount?.isLive)
+					video.isLive = true;
+				else
+					video.isLive = false;
+				
+
+				if(renderer.videoActions?.menuRenderer?.topLevelButtons)
+					renderer.videoActions.menuRenderer.topLevelButtons.forEach((button)=>{
+						switchKey(button, {
+							segmentedLikeDislikeButtonRenderer(renderer) {
+								const likeButtonRenderer = renderer?.likeButton?.toggleButtonRenderer;
+								if(likeButtonRenderer) {
+									const likeTextData = likeButtonRenderer.defaultText;
+									if(likeTextData){
+										if(likeTextData.accessibility?.accessibilityData?.label)
+											video.rating = new RatingLikes(extractFirstNumber_Integer(likeTextData.accessibility.accessibilityData.label));
+										else if(likeTextData.simpleText)
+											video.rating = new RatingLikes(extractHumanNumber_Integer(likeTextData.simpleText));
+
+									}
+								}
+							},
+							segmentedLikeDislikeButtonViewModel(renderer) {
+							    if(IS_TESTING)
+							        console.log("Found new likes model:", renderer);
+							    let likeButtonViewModel = renderer?.likeButtonViewModel;
+							    if(likeButtonViewModel.likeButtonViewModel) //Youtube double nested, not sure if a bug on their end which may be removed
+							        likeButtonViewModel = likeButtonViewModel.likeButtonViewModel;
+							    let toggleButtonViewModel = likeButtonViewModel?.toggleButtonViewModel;
+							    if(toggleButtonViewModel.toggleButtonViewModel) //Youtube double nested, not sure if a bug on their end which may be removed
+							        toggleButtonViewModel = toggleButtonViewModel.toggleButtonViewModel;
+
+							    const buttonViewModel = toggleButtonViewModel?.defaultButtonViewModel?.buttonViewModel;
+							    if(buttonViewModel?.title) {
+							        let num = parseInt(buttonViewModel.title);
+							        if(!isNaN(num))
+							            video.rating = new RatingLikes(num);
+                                    num = extractHumanNumber_Integer(buttonViewModel.title);
+                                    if(!isNaN(num) && num >= 0)
+                                        video.rating = new RatingLikes(num);
+                                    else if(buttonViewModel.title?.toLowerCase() == "like")
+                                        video.rating = new RatingLikes(0);
+                                    else {
+	                                    if(bridge.devSubmit) bridge.devSubmit("extractVideoPage_VideoDetails - Found unknown likes model", JSON.stringify(buttonViewModel));
+                                        throw new ScriptException("Found unknown likes model, please report to dev:\n" + JSON.stringify(buttonViewModel.title));
+                                    }
+							    }
+							    else
+							        log("UNKNOWN LIKES MODEL:\n" + JSON.stringify(renderer, null, "   "));
+							}
+						});
+					});
+
+
+				if(!video.datetime || video.datetime <= 0) {
+					let date = 0;
+					
+					if (date <= 0 && renderer.relativeDateText?.simpleText)
+						date = extractAgoText_Timestamp(renderer.relativeDateText.simpleText);
+					if(date <= 0 && renderer.dateText?.simpleText)
+						date = extractDate_Timestamp(renderer.dateText.simpleText);
+
+					video.datetime = date;
+				}
+			},
+			videoSecondaryInfoRenderer(renderer) {
+				if(renderer.owner.videoOwnerRenderer)
+					video.author = extractVideoOwnerRenderer_AuthorLink(renderer.owner.videoOwnerRenderer);
+				if(renderer.description?.runs)
+					video.description = extractRuns_Html(renderer.description.runs);
+			},
+			itemSectionRenderer() {
+				//Comments
+			}
+		});
+	}
+
+	return video;
 }
 function getVideoDetailsHtml(url, useLogin) {
 	const shouldUseLogin = useLogin && bridge.isLoggedIn();
