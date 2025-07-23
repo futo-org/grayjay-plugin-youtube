@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 265,
+	"version": 266,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -101,9 +101,16 @@
 			"default": "false"
 		},
 		{
+			"variable": "useiOS",
+			"name": "Enable iOS Streams",
+			"description": "Attempts to use iOS streams if available, may be smoother experience. May not always be available.",
+			"type": "Boolean",
+			"default": "true"
+		},
+		{
 			"variable": "useUMP",
-			"name": "Force Experimental UMP Streams",
-			"description": "Force usage of experimental implementation of UMP. May be unstable and cost more performance.",
+			"name": "Force UMP Streams",
+			"description": "Force usage of implementation of UMP. May be unstable and cost more performance.",
 			"type": "Boolean",
 			"default": "false"
 		},
@@ -291,15 +298,15 @@
 		},
 		{
 			"variable": "use_session_client",
-			"name": "Use new Youtube Session Client",
+			"name": "Use Youtube Session Client",
 			"description": "Uses a different way of fetching video contents through a consistent session.",
 			"type": "Boolean",
 			"default": "true"
 		},
 		{
 			"variable": "use_session_client_pot",
-			"name": "Use new Youtube Session Client",
-			"description": "Uses a different way of fetching video contents through a consistent session.",
+			"name": "Use Youtube Session POT tokens",
+			"description": "Enables POT generation for session requests",
 			"type": "Boolean",
 			"default": "true"
 		}
@@ -331,6 +338,9 @@
 
 
 	"changelog": {
+		"266": [
+			"Improvement: Youtube Session client, may improve overall experience, but may still contain bugs"
+		],
 		"265": [
 			"Improvement: New Youtube detail request flow with session retention (WIP)"
 		],

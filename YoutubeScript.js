@@ -487,21 +487,23 @@ class YTSessionClient {
 		const jsUrl = (jsUrlMatch) ? jsUrlMatch[1] : clientConfig.PLAYER_JS_URL;
 		const isNewCipher = prepareCipher(jsUrl);
 
-		if(false && _settings.use_session_client_pot) {
+		if(_settings.use_session_client_pot) {
 				tryGetBotguard((bg)=>{
 					bg.getTokenOrCreate(this.clientConfig.bgData.visitorData, this.clientConfig.bgData.dataSyncId, (pot)=>{
 						log("Botguard token to use: " + pot);
 						console.log("Botguard Token to use:", pot);
-						this.pot = pot;
-					}, bgData.visitorDataType);
+						bridge.toast("YTSessionClient got pot")
+						this.clientConfig.pot = pot;
+					}, this.clientConfig.bgData.visitorDataType);
 				});
 				if (usedLogin) {
 					tryGetBotguard((bg)=>{
 						bg.getTokenOrCreate(this.clientConfigAuth.bgData.visitorData, this.clientConfigAuth.bgData.dataSyncId, (pot)=>{
 							log("Botguard token to use: " + pot);
 							console.log("Botguard Token to use:", pot);
-							this.pot = pot;
-						}, bgData.visitorDataType);
+							bridge.toast("YTSessionClient got pot (auth)")
+							this.clientConfigAuth.pot = pot;
+						}, this.clientConfigAuth.bgData.visitorDataType);
 					});
 				}
 		}
@@ -592,7 +594,7 @@ class YTSessionClient {
 		if(!simplify) {
 			if(!videoDetails.isLive) {
 				//#region iOS
-				if(!forceUmp && USE_IOS_VIDEOS_FALLBACK && respiOS) {
+				if(!forceUmp && USE_IOS_VIDEOS_FALLBACK && respiOS && !!_settings.useiOS) {
 
 					if(respiOS.isOk) {
 						const iosData = JSON.parse(respiOS.body);
@@ -629,7 +631,7 @@ class YTSessionClient {
 			else {
 				//#region LIVE
 
-				if(USE_IOS_LIVE_FALLBACK) {
+				if(USE_IOS_LIVE_FALLBACK && !!_settings.useiOS) {
 					log("requestIOSStreamingData (hls)");
 					const iosDataResp = respiOS ?? requestIOSStreamingData(videoDetails.id.value);
 						
@@ -655,6 +657,7 @@ class YTSessionClient {
 				}
 				else {
 					//TODO: Non-iOS live streams
+					throw new ScriptException("No handling for live videos without iOS implemented");
 				}
 
 				
