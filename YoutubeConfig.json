@@ -295,6 +295,13 @@
 			"description": "Uses a different way of fetching video contents through a consistent session.",
 			"type": "Boolean",
 			"default": "true"
+		},
+		{
+			"variable": "use_session_client_pot",
+			"name": "Use new Youtube Session Client",
+			"description": "Uses a different way of fetching video contents through a consistent session.",
+			"type": "Boolean",
+			"default": "true"
 		}
 	],
 

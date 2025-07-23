@@ -800,7 +800,7 @@ function filterDetailUrl(url) {
 
 function getYoutubeDislikes(videoId, batch) {
 	if(batch)
-		batch.GET(URL_YOUTUBE_DISLIKES + videoId, {}, false);
+		return batch.GET(URL_YOUTUBE_DISLIKES + videoId, {}, false);
 	else {
 		const resp = http.GET(URL_YOUTUBE_DISLIKES + videoId, {}, false);
 		return handleYoutubeDislikes(resp);
