@@ -337,6 +337,11 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"268": [
+			"Improvement: Improved performance for fetching video details (through Youtube session client)",
+			"Improvement: Improved compatibility for fetching video details (through Youtube session client)",
+			"Fix: Time/viewcount for recommendation videos"
+		],
 		"267": [
 			"Improvement: Improved performance for fetching video details (through Youtube session client)",
 			"Improvement: Improved compatibility for fetching video details (through Youtube session client)"

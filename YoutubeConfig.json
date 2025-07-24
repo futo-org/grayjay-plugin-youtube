@@ -340,7 +340,8 @@
 	"changelog": {
 		"268": [
 			"Improvement: Improved performance for fetching video details (through Youtube session client)",
-			"Improvement: Improved compatibility for fetching video details (through Youtube session client)"
+			"Improvement: Improved compatibility for fetching video details (through Youtube session client)",
+			"Fix: Time/viewcount for recommendation videos"
 		],
 		"266": [
 			"Improvement: Youtube Session client, may improve overall experience, but may still contain bugs"

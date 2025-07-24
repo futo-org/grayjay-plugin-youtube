@@ -6147,12 +6147,13 @@ function extractVideoLockupModel_Video(videoRenderer, contextData) {
 		const metadataRows = videoRenderer.metadata?.lockupMetadataViewModel?.metadata?.contentMetadataViewModel?.metadataRows;
 		if(!metadataRows || metadataRows.length < 1)
 			return null;
-		const metadataParts = metadataRows[0].metadataParts;
+		let metadataParts = metadataRows[0].metadataParts;
 		if(!metadataParts)
 			return null;
 		let i = 0;
 		let viewCount = 0;
 		let date = 0;
+
 		for(let metadataPart of metadataParts) {
 
 			//Author
@@ -6197,9 +6198,30 @@ function extractVideoLockupModel_Video(videoRenderer, contextData) {
 				}
 			}
 			//Viewcount
-
-
 			i++;
+		}
+		if(metadataRows.length > 1 && metadataRows[1].metadataParts) {
+			metadataParts = metadataRows[1].metadataParts;
+			i = 0;
+			for(let metadataPart of metadataParts) {
+				if(metadataPart.text) {
+					const partText = metadataPart.text.content;
+					
+					if(partText) {
+						const matchViews = partText.match(/([0-9]+[A-Z]) views?/);
+						if(matchViews) {
+							viewCount = extractHumanNumber_Integer(matchViews[1]);
+							continue;
+						}
+						const matchAgo = partText.match(REGEX_HUMAN_AGO);
+						if(matchAgo) {
+							date = extractAgoText_Timestamp(partText);
+							continue;
+						}
+					}
+				}
+				i++;
+			}
 		}
 
 		const thumbnailViewModel = videoRenderer?.contentImage?.thumbnailViewModel;
