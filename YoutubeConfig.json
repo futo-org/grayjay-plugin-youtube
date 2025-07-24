@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 267,
+	"version": 268,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -338,7 +338,7 @@
 
 
 	"changelog": {
-		"267": [
+		"268": [
 			"Improvement: Improved performance for fetching video details (through Youtube session client)",
 			"Improvement: Improved compatibility for fetching video details (through Youtube session client)"
 		],

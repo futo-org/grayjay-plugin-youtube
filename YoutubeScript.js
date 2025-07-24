@@ -140,6 +140,8 @@ function getDashReloads() {
 	return dashReloads;
 }
 
+let canBatchDummy = false;
+
 const rootWindow = this;
 
 const canDoRequestWithBody = !!http.requestWithBody;
@@ -169,11 +171,17 @@ source.reEnable = (conf, settings) => {
 };
 
 source.enable = (conf, settings, saveStateStr) => {
+	config = conf ?? {};
+	_settings = settings ?? {};
 
 	if(typeof setTimeout !== 'function')
 		throw new ScriptException("Please update Grayjay, missing setTimeout");
-	config = conf ?? {};
-	_settings = settings ?? {};
+	
+	const batch = http.batch();
+	canBatchDummy = !!batch.DUMMY
+	if(!canBatchDummy && _settings?.use_session_client) {
+		log("Old client, YTSession client disabled")
+	}
 
 	if(typeof __reloadData !== "undefined") {
 		try {
@@ -864,12 +872,15 @@ let FORCE_YTSESSION = false;
 let sessionClient = undefined;
 
 source.getContentDetails = (url, useAuth, simplify, forceUmp, options) => {
-	if(FORCE_YTSESSION || _settings?.use_session_client) {
+	if(FORCE_YTSESSION || (_settings?.use_session_client && canBatchDummy)) {
 		if(!sessionClient) {
 			sessionClient = new YTSessionClient();
 			sessionClient.initialize();	
 		}
 		return sessionClient.getContentDetails(url, useAuth, simplify, options);
+	}
+	else if(!canBatchDummy && _settings?.use_session_client) {
+		bridge.toast("YTSession client not supported, using old logic");
 	}
 
 	useAuth = !!_settings?.authDetails || !!useAuth;
