@@ -1306,7 +1306,7 @@ function getControversialPlayerData(videoId, sts, useLogin = true, pot = undefin
 	if(!resp.isOk)
 		throw new ScriptException("Failed to verify age");
 	
-	return getPlayerData(videoId, sts, useLogin, pot);
+	return getPlayerData(videoId, sts, useLogin, undefined, pot);
 }
 function getPlayerData(videoId, sts, useLogin = true, batch, pot = undefined) {
 	const context = getClientContext(useLogin);
