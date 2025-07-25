@@ -4404,7 +4404,7 @@ function requestPage(url, headers, useAuth = false) {
 		return resp.body;
 	else throw new ScriptException("Failed to request page [" + resp.code + "]");
 }
-function requestInitialData(url, useMobile = false, useAuth = false) {
+function requestInitialData(url, useMobile = false, useAuth = false, overrideHtml) {
 	let headers = {"Accept-Language": "en-US", "Cookie": "PREF=hl=en&gl=US" };
 	if(useMobile)
 		headers["User-Agent"] = USER_AGENT_TABLET;
@@ -4435,7 +4435,8 @@ function requestInitialData(url, useMobile = false, useAuth = false) {
 		    else throw new CriticalException("Failed to refuse Google consent [" + respConsent.code + "]");
 		}
 
-
+		if(overrideHtml)
+			html = overrideHtml;
 		const initialData = getInitialData(html);
 		return initialData;
 	}
@@ -4664,18 +4665,30 @@ function getInitialData(html, useAuth = false) {
 	try {
 	const match = html.match(REGEX_INITIAL_DATA);
 		if(match) {
-			const initialDataRaw = match[1].startsWith("'") && match[1].endsWith("'") ?
+			const initialDataRaw = match[1]
+			const initialDataRawCleaned = match[1].startsWith("'") && match[1].endsWith("'") ?
 				decodeHexEncodedString(match[1].substring(1, match[1].length - 1))
 					//TODO: Find proper decoding strat
 					.replaceAll("\\\\\"", "\\\"") : 
 				match[1];
 			let initialData = null;
 			try{
-				initialData = JSON.parse(initialDataRaw);
+				initialData = JSON.parse(initialDataRawCleaned);
 			}
 			catch(ex) {
-				console.log("Failed to parse initial data: ", initialDataRaw);
-				throw ex;
+				console.log("Failed to parse initial data: ", initialDataRawCleaned);
+				log("Attempting initial data parsing using eval");
+				try {
+					if(!!_settings["showVerboseToasts"])
+						bridge.toast("Attempting eval to resolve initial data");
+					initialData = JSON.parse(eval(initialDataRaw));
+					console.log("Succesful initial data using eval", initialData);
+				log("Successful initial data parsing using eval");
+				}
+				catch(ex) {
+					log("Failed to resolve initial data");
+					throw ex;
+				}
 			}
 			
 			

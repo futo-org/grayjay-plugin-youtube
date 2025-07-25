@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 269,
+	"version": 270,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -337,6 +337,13 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"270": [
+			"HOTFIX: Fix home page not parsing for some users",
+			"HOTFIX: Fix 'batch.POST is not a function'",
+			"Improvement: Improved performance for fetching video details (through Youtube session client)",
+			"Improvement: Improved compatibility for fetching video details (through Youtube session client)",
+			"Fix: Time/viewcount for recommendation videos"
+		],
 		"269": [
 			"HOTFIX: Fix 'batch.POST is not a function'",
 			"Improvement: Improved performance for fetching video details (through Youtube session client)",
