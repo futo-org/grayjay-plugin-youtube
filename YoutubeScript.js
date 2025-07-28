@@ -649,6 +649,10 @@ class YTSessionClient {
 				// - No sources found
 				if(!videoDetails.video)
 					videoDetails.video = new VideoSourceDescriptor([]);
+
+				if ((videoDetails.video?.videoSources?.length ?? 0) + (videoDetails?.video?.audioSources?.length ?? 0) < 1) {
+					if (bridge.devSubmit) bridge.devSubmit("getContentDetails - No sources found", JSON.stringify(playerData));
+				}
 			}
 			else {
 				//#region LIVE
