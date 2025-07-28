@@ -21,6 +21,7 @@ const URL_SUB_CHANNELS_M = "https://m.youtube.com/feed/channels";
 const URL_SUBSCRIPTIONS_M = "https://m.youtube.com/feed/subscriptions";
 const URL_PLAYLIST = "https://youtube.com/playlist?list=";
 const URL_PLAYLISTS_M = "https://m.youtube.com/feed/library";
+const URL_HISTORY_M = "https://m.youtube.com/feed/history";
 
 const URL_VERIFY_AGE = URL_BASE + "/youtubei/v1/verify_age";
 
@@ -2651,7 +2652,53 @@ source.getUserSubscriptions = function() {
 	return channels.map(x=>x.url); */
 }
 
+source.getUserHistory = function() {
+	if (!bridge.isLoggedIn()) {
+		bridge.log("Failed to retrieve subscriptions page because not logged in.");
+		throw new ScriptException("Not logged in");
+	}
+	let histPage = requestPage(URL_HISTORY_M, { "User-Agent": USER_AGENT_PHONE }, true);
+	let result = getInitialData(histPage);
+	let config = getClientConfig(histPage);
+	const contents = result?.contents?.singleColumnBrowseResultsRenderer?.tabs[0]?.tabRenderer?.content?.sectionListRenderer?.contents;
+	if(!contents) {
+		log("No contents found for history");
+		return new VideoPager([]);
+	}
 
+	let videos = [];
+	let continuationToken = null;
+	for(let i = 0; i < contents.length; i++) {
+		const content = contents[i];
+		
+		switchKey(content, {
+			itemSectionRenderer(renderer) {
+				if(renderer) {
+					const shelves = extractItemSectionRenderer_Shelves(renderer, {
+						hasHistoryHeaders: true
+					});
+					if(shelves.videos)
+						videos = videos.concat(shelves.videos);
+				}
+			},
+			continuationItemRenderer(renderer) {
+				let token = renderer?.continuationEndpoint?.continuationCommand;
+				if(token) {
+					continuationToken = token;
+				}
+			}
+		})
+	}
+	if(!continuationToken) {
+		return new VideoPager(videos);
+	}
+	else {
+		const pageId = config?.DELEGATED_SESSION_ID;
+		return new BrowseVideoPager(videos, continuationToken, true, pageId, {
+			hasHistoryHeaders: true
+		});
+	}
+}
 
 //#endregion
 
@@ -4092,6 +4139,39 @@ class YTComment extends Comment {
 	}
 }
 
+function getShortsFeed(useAuth) {
+	const context = getClientContext(useAuth);
+	const body = {
+		context: context,
+		disablePlayerResponse: true,
+		inputType: "REEL_WATCH_INPUT_TYPE_SEEDLESS",
+		params: "CA8%3D"
+	}
+	const resp = {}; //TODO: https://www.youtube.com/youtubei/v1/reel/reel_item_watch?prettyPrint=false
+	const sequenceContinuation = resp.responseContext?.sequenceContinuation;
+
+	if(!sequenceContinuation)
+		return new VideoPager([]);
+
+	return new ShortsVideoPager([], sequenceContinuation, useAuth);
+}
+class ShortsVideoPager extends VideoPager {
+	constructor(videos, sequenceId = null, useAuth) {
+		super(videos ?? [], !!sequenceId, {});
+		this.sequenceId = sequenceId;
+	}
+
+	nextPage() {
+		const body = {
+			context: undefined,
+			playbackContext: undefined,
+			sequenceParams: this.sequenceId
+		}
+
+		//TODO: https://www.youtube.com/youtubei/v1/reel/reel_watch_sequence?prettyPrint=false
+	}
+}
+
 class RichGridPager extends VideoPager {
 	constructor(tab, context, useMobile = false, useAuth = false) {
 		super(tab.videos, tab.videos.length > 0 && !!tab.continuation, context);
@@ -4183,6 +4263,36 @@ class RichGridPlaylistPager extends PlaylistPager {
 			}
 			else
 				log("Call [RichGridPager.nextPage] continuation gave no appended items, setting empty page with hasMore to false");
+		}
+		this.hasMore = false;
+		this.results = [];
+		return this;
+	}
+}
+class BrowseVideoPager extends VideoPager {
+	constructor(videos, continuation, useAuth, pageId, contextData) {
+		super(videos, !!continuation);
+		this.continuation = continuation;
+		this.hasMore = !!continuation;
+		this.useAuth = !!useAuth;
+		this.pageId = pageId;
+		this.contextData = contextData;
+	}
+	
+	nextPage() {
+		this.context.page = this.context.page + 1;
+		if(this.continuation) {
+			const continueItems = validateContinuation(()=>requestBrowse({
+				continuation: this.continuation.token
+			}, USE_MOBILE_PAGES, this.useAuth, 0, this.pageId));
+			if(continueItems.length > 0) {
+				const fakeSectionList = {
+					contents: continueItems
+				};
+				const newItemSection = extractSectionListRenderer_Sections(fakeSectionList, this.contextData);
+				if(newItemSection.videos)
+					return new BrowseVideoPager(newItemSection.videos, newItemSection.continuation, 0, this.pageId, this.contextData);
+			}
 		}
 		this.hasMore = false;
 		this.results = [];
@@ -4323,7 +4433,7 @@ function requestNext(body, useAuth = false, useMobile = false) {
 	}
 	return JSON.parse(resp.body);
 }
-function requestBrowse(body, useMobile = false, useAuth = false, attempt = 0) {
+function requestBrowse(body, useMobile = false, useAuth = false, attempt = 0, pageId = null) {
 	const clientContext = getClientContext(useAuth);
 	if(!clientContext || !clientContext.INNERTUBE_CONTEXT || !clientContext.INNERTUBE_API_KEY)
 		throw new ScriptException("Missing client context");
@@ -4332,6 +4442,8 @@ function requestBrowse(body, useMobile = false, useAuth = false, attempt = 0) {
 	let headers = !bridge.isLoggedIn() ? {} : getAuthContextHeaders(useMobile);
 	if(useMobile)
 		headers["User-Agent"] = USER_AGENT_TABLET;
+	if(pageId)
+		headers["X-Goog-Pageid"] = pageId;
 	headers["Content-Type"] = "application/json";
  
 	const baseUrl = !useMobile ? URL_BROWSE : URL_BROWSE_MOBILE;
@@ -5779,6 +5891,27 @@ function extractItemSectionRenderer_Shelves(itemSectionRenderer, contextData) {
 	let channels = [];
 	let playlists = [];
 	let continuationToken = undefined;
+	if(!contents)
+		return {
+			shelves: shelves.filter(x=>x != null),
+			videos: videos.filter(x=>x != null),
+			channels: channels.filter(x=>x != null),
+			playlists: playlists.filter(x=>x != null)
+		};
+
+	if(contextData.hasHistoryHeaders) {
+		if(itemSectionRenderer?.header?.itemSectionHeaderRenderer?.title) {
+			const dateText = extractText_String(itemSectionRenderer?.header?.itemSectionHeaderRenderer?.title);
+			if(dateText) {
+				const date = extractHumanRelativeDate_Date(dateText);
+				log("History Date:" + dateText + " to " + date);
+				if(date)
+					contextData.playbackDate = parseInt(date.getTime() / 1000);
+				else
+					contextData.playbackDate = undefined;
+			}
+		}
+	}
 
 	contents.forEach((item)=>{
 		switchKey(item, {
@@ -6008,72 +6141,78 @@ function extractRichItemRenderer_Video(itemRenderer, contextData) {
 }
 function extractVideoWithContextRenderer_Video(videoRenderer, contextData) {
 	try {
-	const liveBadges = videoRenderer.thumbnailOverlays?.filter(x=>
-		x.thumbnailOverlayTimeStatusRenderer?.style == "LIVE" ||
-		x.thumbnailOverlayTimeStatusRenderer?.accessibility?.accessibilityData?.label == "LIVE");
-	let isLive = liveBadges != null && liveBadges.length > 0;
+		const liveBadges = videoRenderer.thumbnailOverlays?.filter(x=>
+			x.thumbnailOverlayTimeStatusRenderer?.style == "LIVE" ||
+			x.thumbnailOverlayTimeStatusRenderer?.accessibility?.accessibilityData?.label == "LIVE");
+		let isLive = liveBadges != null && liveBadges.length > 0;
 
-	const isMemberOnly = !!videoRenderer.badges?.find(x=>
-		x?.metadataBadgeRenderer?.label == "Members only" || 
-		x?.metadataBadgeRenderer?.label == "Members first");
-	if(isMemberOnly && !_settings.allowMemberContent) {
-		log("MEMBER ONLY VIDEO IGNORED");
-		return null;
-	}
+		const resumePlaybackRenderer = videoRenderer.thumbnailOverlays?.find(x=>x.thumbnailOverlayResumePlaybackRenderer)?.thumbnailOverlayResumePlaybackRenderer;
 
-	isLive = isLive || ((videoRenderer.badges?.filter(x=>x.metadataBadgeRenderer?.style == "BADGE_STYLE_TYPE_LIVE_NOW")?.length ?? 0) > 0)
+		const isMemberOnly = !!videoRenderer.badges?.find(x=>
+			x?.metadataBadgeRenderer?.label == "Members only" || 
+			x?.metadataBadgeRenderer?.label == "Members first");
+		if(isMemberOnly && !_settings.allowMemberContent) {
+			log("MEMBER ONLY VIDEO IGNORED");
+			return null;
+		}
 
-	let plannedDate = null;
-	if(videoRenderer.upcomingEventData?.startTime)
-		plannedDate = parseInt(videoRenderer.upcomingEventData.startTime);
-	isLive = isLive || !!plannedDate
-	//if(!isLive && !videoRenderer.publishedTimeText?.simpleText)
-	//	return  null; //Not a normal video
+		isLive = isLive || ((videoRenderer.badges?.filter(x=>x.metadataBadgeRenderer?.style == "BADGE_STYLE_TYPE_LIVE_NOW")?.length ?? 0) > 0)
+
+		let plannedDate = null;
+		if(videoRenderer.upcomingEventData?.startTime)
+			plannedDate = parseInt(videoRenderer.upcomingEventData.startTime);
+		isLive = isLive || !!plannedDate
+		//if(!isLive && !videoRenderer.publishedTimeText?.simpleText)
+		//	return  null; //Not a normal video
 
 
-	const author = (contextData && contextData.authorLink) ?
-		contextData.authorLink : extractVideoWithContextRenderer_AuthorLink(videoRenderer);
+		const author = (contextData && contextData.authorLink) ?
+			contextData.authorLink : extractVideoWithContextRenderer_AuthorLink(videoRenderer);
 
-	if(IS_TESTING)
-		;//console.log(videoRenderer);
+		if(IS_TESTING)
+			;//console.log(videoRenderer);
 
-	//if(!videoRenderer?.lengthText?.runs || !videoRenderer.publishedTimeText?.runs)
-	//	isLive = true; //If no length, live after all?
+		//if(!videoRenderer?.lengthText?.runs || !videoRenderer.publishedTimeText?.runs)
+		//	isLive = true; //If no length, live after all?
 
-    let viewCount = 0;
-    if(videoRenderer?.shortViewCountText)
-        viewCount = extractHumanNumber_Integer(extractText_String(videoRenderer.shortViewCountText));
-    else log("No viewcount found on video " + videoRenderer.videoId);
+		let viewCount = 0;
+		if(videoRenderer?.shortViewCountText)
+			viewCount = extractHumanNumber_Integer(extractText_String(videoRenderer.shortViewCountText));
+		else log("No viewcount found on video " + videoRenderer.videoId);
 
-	const title = (videoRenderer.headline) ? extractText_String(videoRenderer.headline) : extractText_String(videoRenderer.title);
+		const title = (videoRenderer.headline) ? extractText_String(videoRenderer.headline) : extractText_String(videoRenderer.title);
 
-	if (isLive) {
-		return new PlatformVideo({
-			id: new PlatformID(PLATFORM, videoRenderer.videoId, config.id),
-			name: ((isMemberOnly) ? "[MEMBER] " : "") + escapeUnicode(title),
-			thumbnails: extractThumbnail_Thumbnails(videoRenderer.thumbnail),
-			author: author,
-			uploadDate: plannedDate ?? parseInt(new Date().getTime() / 1000),
-			duration: 0,
-			viewCount: viewCount,
-			url: URL_BASE + "/watch?v=" + videoRenderer.videoId,
-			isLive: true,
-			extractType: "VideoWithContext"
-		});
-	} else {
-		return new PlatformVideo({
-			id: new PlatformID(PLATFORM, videoRenderer.videoId, config.id),
-			name: ((isMemberOnly) ? "[MEMBER] " : "") + escapeUnicode(title),
-			thumbnails: extractThumbnail_Thumbnails(videoRenderer.thumbnail),
-			author: author,
-			uploadDate: parseInt(extractAgoText_Timestamp(extractText_String(videoRenderer.publishedTimeText))),
-			duration: extractHumanTime_Seconds(extractText_String(videoRenderer.lengthText)),
-			viewCount: viewCount,
-			url: URL_BASE + "/watch?v=" + videoRenderer.videoId,
-			isLive: false,
-			extractType: "VideoWithContext"
-		});
-	}
+		if (isLive) {
+			return new PlatformVideo({
+				id: new PlatformID(PLATFORM, videoRenderer.videoId, config.id),
+				name: ((isMemberOnly) ? "[MEMBER] " : "") + escapeUnicode(title),
+				thumbnails: extractThumbnail_Thumbnails(videoRenderer.thumbnail),
+				author: author,
+				uploadDate: plannedDate ?? parseInt(new Date().getTime() / 1000),
+				duration: 0,
+				viewCount: viewCount,
+				url: URL_BASE + "/watch?v=" + videoRenderer.videoId,
+				isLive: true,
+				extractType: "VideoWithContext"
+			});
+		} else {
+			const duration = extractHumanTime_Seconds(extractText_String(videoRenderer.lengthText));
+			return new PlatformVideo({
+				id: new PlatformID(PLATFORM, videoRenderer.videoId, config.id),
+				name: ((isMemberOnly) ? "[MEMBER] " : "") + escapeUnicode(title),
+				thumbnails: extractThumbnail_Thumbnails(videoRenderer.thumbnail),
+				author: author,
+				uploadDate: parseInt(extractAgoText_Timestamp(extractText_String(videoRenderer.publishedTimeText))),
+				duration: duration,
+				viewCount: viewCount,
+				url: URL_BASE + "/watch?v=" + videoRenderer.videoId,
+				isLive: false,
+				extractType: "VideoWithContext",
+				playbackTime: ((duration && duration > 0 && resumePlaybackRenderer && resumePlaybackRenderer?.percentDurationWatched) ?
+					parseInt(duration * (resumePlaybackRenderer.percentDurationWatched / 100)) : undefined),
+				playbackDate: contextData?.playbackDate
+			});
+		}
 	}
 	catch(ex) {
 		throw "Failed to extract VideoWithContextRenderer_Video due to:\n" + ex;
@@ -6087,6 +6226,8 @@ function extractVideoRenderer_Video(videoRenderer, contextData) {
 		x.thumbnailOverlayTimeStatusRenderer?.accessibility?.accessibilityData?.label == "LIVE");
 	let isLive = (liveBadges != null && liveBadges.length > 0) ||
 		(liveOverlays != null && liveOverlays.length > 0);
+
+	const resumePlaybackRenderer = videoRenderer.thumbnailOverlays?.find(x=>x.thumbnailOverlayResumePlaybackRenderer)?.thumbnailOverlayResumePlaybackRenderer;
 
 	const isMemberOnly = !!videoRenderer.badges?.find(x=>
 		x?.metadataBadgeRenderer?.label == "Members only" || 
@@ -6104,8 +6245,8 @@ function extractVideoRenderer_Video(videoRenderer, contextData) {
 	
 	isLive = isLive || ((videoRenderer.badges?.filter(x=>x.metadataBadgeRenderer?.style == "BADGE_STYLE_TYPE_LIVE_NOW")?.length ?? 0) > 0)
 
-	if(!isLive && !videoRenderer.publishedTimeText?.simpleText)
-		return  null; //Not a normal video
+	//if(!isLive && !videoRenderer.publishedTimeText?.simpleText)
+	//	return  null; //Not a normal video
 
 
 
@@ -6131,19 +6272,24 @@ function extractVideoRenderer_Video(videoRenderer, contextData) {
 			isLive: true,
 			extractType: "Video"
 		});
-	else
+	else {
+		const duration = videoRenderer.lengthText ? extractHumanTime_Seconds(videoRenderer.lengthText.simpleText) : 0;
 		return new PlatformVideo({
 			id: new PlatformID(PLATFORM, videoRenderer.videoId, config.id),
 			name: ((isMemberOnly) ? "[MEMBER] " : "") + escapeUnicode(extractText_String(videoRenderer.title)),
 			thumbnails: extractThumbnail_Thumbnails(videoRenderer.thumbnail),
 			author: author,
 			uploadDate: videoRenderer.publishedTimeText ? parseInt(extractAgoText_Timestamp(videoRenderer.publishedTimeText.simpleText)) : 0,
-			duration: videoRenderer.lengthText ? extractHumanTime_Seconds(videoRenderer.lengthText.simpleText) : 0,
+			duration: duration,
 			viewCount: extractFirstNumber_Integer(extractText_String(videoRenderer.viewCountText)),
 			url: URL_BASE + "/watch?v=" + videoRenderer.videoId,
 			isLive: false,
-			extractType: "Video"
+			extractType: "Video",
+			playbackTime: ((duration && duration > 0 && resumePlaybackRenderer && resumePlaybackRenderer?.percentDurationWatched) ?
+				parseInt(duration * (resumePlaybackRenderer.percentDurationWatched / 100)) : undefined),
+			playbackDate: contextData?.playbackDate
 		});
+	}
 	}
 	catch(ex) {
 		throw "Failed to extract VideoRenderer_Video due to:\n" + ex;
@@ -6801,6 +6947,48 @@ function extractHumanDate_Timestamp(dateParts) {
 	return (day > 0 && month > 0 && year > 0) ? 
 		new Date(year + "-" + month + "-" + day).getTime() / 1000 : 
 		-1;
+}
+
+function extractHumanRelativeDate_Date(dateStr) {
+	const now = new Date();
+	const nowDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+	const dayLength = 24*60*60*1000;
+	
+	dateStr = dateStr.toLowerCase();
+	if(dateStr == "today")
+		return nowDay;
+	if(dateStr == "yesterday")
+		return new Date(nowDay.getTime() - dayLength);
+
+	const relDay = dayToIndex(dateStr);
+	if(relDay >= 0) {
+		const currentDay = nowDay.getDay();
+		let daysAgo = currentDay - relDay;
+		if(daysAgo < 0)
+			daysAgo = (6 - daysAgo) + currentDay;
+		return new Date(nowDay.getTime() - dayLength * daysAgo);
+	}
+	//TODO: add date parsing..
+	return undefined;
+}
+function dayToIndex(dateStr) {
+	switch(dateStr.toLowerCase()) {
+		case "sunday":
+			return 0;
+		case "monday":
+			return 1;
+		case "tuesday":
+			return 2;
+		case "wednesday":
+			return 3;
+		case "thursday":
+			return 4;
+		case "friday":
+			return 5;
+		case "saturday":
+			return 6;
+	}
+	return -1;
 }
 
 function escapeUnicode(str) {
