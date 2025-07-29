@@ -616,6 +616,9 @@ class YTSessionClient {
 		const videoDetails = extractVideoPlayerData_VideoDetails(playerData, context.jsUrl, contextData);
 
 
+		if(initialData)
+			extractVideoDetailsInitialData_Metadata(initialData, videoDetails);
+
 		//#region Extract Streams
 		if(!simplify) {
 			if(!videoDetails.isLive) {
@@ -702,9 +705,6 @@ class YTSessionClient {
 		if(respDislikes)
 			videoDetails.rating = handleYoutubeDislikes(videoDetails.rating.likes, respDislikes) ?? videoDetails.rating;
 		//#endregion
-
-		if(initialData)
-			extractVideoDetailsInitialData_Metadata(initialData, videoDetails);
 
 		videoDetails.bgData = this.bgData;
 
