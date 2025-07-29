@@ -566,7 +566,7 @@ class YTSessionClient {
 
 		//Request: ReturnYoutubeDislikes [2]
 		if(videoId && _settings["youtubeDislikes"] && !simplify)
-			batch = getYoutubeDislikes(videoId, batch);
+			batch = getYoutubeDislikes(videoId, -1, batch);
 		else batch = batch.DUMMY();
 
 		//Request: iOS Streaming Data [3]
@@ -574,12 +574,16 @@ class YTSessionClient {
 			batch = requestIOSStreamingData(videoId, batch, context.bgData, useLogin);
 		else batch = batch.DUMMY();
 
-		const [respPlayerData, respInitialData, respDislikes, respiOS] = batch.execute();
+		let [respPlayerData, respInitialData, respDislikes, respiOS] = batch.execute();
 		//#endregion
 
 		//#region Video Data
-		if(!respPlayerData?.isOk)
-			throw new ScriptException("Could not retrieve playerdata");
+		if(!respPlayerData?.isOk) {
+			if(respiOS && respiOS.isOk)
+				respPlayerData = respiOS;
+			else
+				throw new ScriptException("Could not retrieve playerdata");
+		}
 		let playerData = JSON.parse(respPlayerData.body);
 
 		let initialData = null;
@@ -696,7 +700,7 @@ class YTSessionClient {
 
 		//#region Return YoutubeDislikes
 		if(respDislikes)
-			videoDetails.rating = handleYoutubeDislikes(respDislikes) ?? videoDetails.rating;
+			videoDetails.rating = handleYoutubeDislikes(videoDetails.rating.likes, respDislikes) ?? videoDetails.rating;
 		//#endregion
 
 		if(initialData)
@@ -851,21 +855,21 @@ function filterDetailUrl(url) {
 	return url;
 }
 
-function getYoutubeDislikes(videoId, batch) {
+function getYoutubeDislikes(videoId, likes, batch) {
 	if(batch)
 		return batch.GET(URL_YOUTUBE_DISLIKES + videoId, {}, false);
 	else {
 		const resp = http.GET(URL_YOUTUBE_DISLIKES + videoId, {}, false);
-		return handleYoutubeDislikes(resp);
+		return handleYoutubeDislikes(likes, resp);
 	}
 }
-function handleYoutubeDislikes(resp) {
+function handleYoutubeDislikes(likes, resp) {
 	try {
 		if(resp.isOk) {
 			const youtubeDislikeInfo = JSON.parse(resp.body);
 			if(IS_TESTING)
 				console.log("Youtube Dislike Info", youtubeDislikeInfo);
-			return new RatingLikesDislikes(videoDetails.rating.likes, youtubeDislikeInfo.dislikes);
+			return new RatingLikesDislikes(likes, youtubeDislikeInfo.dislikes);
 		}
 	}
 	catch(ex) {
@@ -5903,7 +5907,7 @@ function extractItemSectionRenderer_Shelves(itemSectionRenderer, contextData) {
 			playlists: playlists.filter(x=>x != null)
 		};
 
-	if(contextData.hasHistoryHeaders) {
+	if(contextData?.hasHistoryHeaders) {
 		if(itemSectionRenderer?.header?.itemSectionHeaderRenderer?.title) {
 			const dateText = extractText_String(itemSectionRenderer?.header?.itemSectionHeaderRenderer?.title);
 			if(dateText) {
