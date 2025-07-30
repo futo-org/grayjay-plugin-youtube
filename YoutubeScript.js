@@ -731,6 +731,13 @@ class YTSessionClient {
 			return source.getContentRecommendations(url, initialData);
 		}
 
+		if(initialData?.contents?.twoColumnWatchNextResults?.conversationBar?.liveChatRenderer?.continuations[0]?.reloadContinuationData?.continuation) {
+			const vodContinuation = initialData?.contents?.twoColumnWatchNextResults?.conversationBar?.liveChatRenderer?.continuations[0]?.reloadContinuationData?.continuation;
+			videoDetails.getVODEvents = function() {
+				return new YTVODEventPager(vodContinuation)
+			}
+		}
+
 		return videoDetails;
 	}
 
@@ -1816,6 +1823,149 @@ source.getLiveEvents = function(url) {
 		throw new ScriptException("Live chat continuation not found");
 
 	return new YTLiveEventPager(matchKey[1], matchContinuation[1]);
+}
+source.testVODEvents = function(url, count, index, pager) {
+	if(count < 0)
+		return;
+	if(pager) {
+		setTimeout(()=>{
+			pager.nextPage(index * 1000);
+			console.log(pager.results);
+			this.testVODEvents(url, count - 1, index + 1, pager);
+		}, 1000);
+		return;
+	}
+	const vod = this.getVODEvents(url);
+	this.testVODEvents(url, count - 1, index, vod);
+}
+source.getVODEvents = function(url, initialData) {
+	const id = extractVideoIDFromUrl(url);
+	if(!id)
+		throw new ScriptException("No valid id found");
+	initialData = initialData ?? requestInitialData(url, false);
+
+	const vodContinuation = initialData?.contents?.twoColumnWatchNextResults?.conversationBar?.liveChatRenderer?.continuations[0]?.reloadContinuationData?.continuation;
+	if(!vodContinuation)
+		throw new ScriptException("Could not find live chat continuation token");
+
+	return new YTVODEventPager(vodContinuation);
+}
+const URL_LIVE_CHAT_REPLAY = "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat_replay?prettyPrint=false";
+class YTVODEventPager extends LiveEventPager {
+	constructor(continuation) {
+		super([], continuation != null);
+		this.continuation = continuation;
+		this.hasMore = true;
+		this.knownEmojis = {};
+		this.unhandled = [];
+		this.unhandledStart = -1;
+		this.unhandledEnd = -1;
+		this.nextPage(1);
+	}
+
+	nextPage(ms) {
+		if(!ms) {
+			this.hasMore = false;
+			this.results = [];
+			return;
+		}
+		let actions = undefined;
+		const maxEvent = ms + 1000;
+
+		let isCache = false;
+		if(this.unhandledStart - 500 <= ms && this.unhandledEnd > ms) {
+			actions = this.unhandled;
+			isCache = true;
+		}
+		else {
+			const data = this.getLiveChatReplay(ms);
+			actions = data.continuationContents.liveChatContinuation.actions;
+		}
+
+		let toProcess = [];
+		let toHandleLater = [];
+		let toHandleLaterStart = maxEvent - 1;
+		let toHandleLaterEnd = maxEvent;
+		for(let action of actions) {
+			if(action.replayChatItemAction) {
+				if(action?.replayChatItemAction?.videoOffsetTimeMsec) {
+					const time = parseInt(action.replayChatItemAction.videoOffsetTimeMsec);
+					if((time >= ms || (isCache && time >= ms - 500)) && time < maxEvent) { //Within request range, or if cached, half a sec margin
+						toProcess.push(action);
+					}
+					else if(time >= ms && time > maxEvent) {
+						toHandleLater.push(action)
+						if(time > toHandleLaterEnd)
+							toHandleLaterEnd = time;
+					}
+				}
+			}
+		}
+
+		const emojiMap = {};
+		const actionResults = handleYoutubeLiveEvents(toProcess, emojiMap);
+		let events = [];
+
+		if(actionResults) {
+			const emojiMap = actionResults.emojis;
+			events = actionResults.events.filter(x=>x.time >= ms);
+
+			let newEmojiCount = 0;
+			for(let kv in emojiMap) {
+				if(this.knownEmojis[kv])
+					delete emojiMap[kv];
+				else {
+					this.knownEmojis[kv] = emojiMap[kv];
+					newEmojiCount++;
+				}
+			}
+			if(newEmojiCount > 0) {
+				console.log("New Emojis:", emojiMap);
+				events.unshift(new LiveEventEmojis(emojiMap));
+			}
+			
+		}
+		else
+			events = [];
+
+		let lastEvent = 0;
+		for(let event of events) {
+			if(event.time && event.time > lastEvent)
+				lastEvent = event.time;
+		}
+		this.lastEvent = lastEvent;
+		this.results = events;
+		this.unhandled = toHandleLater;
+		this.unhandledStart = toHandleLaterStart;
+		this.unhandledEnd = toHandleLaterEnd;
+		this.nextRequest = 1000;
+		log("YTVODEventPager ms (" + ms + "-" + maxEvent + "), " + (isCache ? "cached" : "live") + ",  processed: " + toProcess.length + ", results: " + events.length + ", later: " + toHandleLater.length + " (" + toHandleLaterStart + "-" + toHandleLaterEnd + ")");
+	}
+
+	getLiveChatReplay(offset) {
+		const resp = http.POST(URL_LIVE_CHAT_REPLAY, JSON.stringify({
+			context: {
+				client: {
+					clientName: "WEB",
+					clientVersion: "2.20220901.00.00",
+					clientFormFactor: "UNKNOWN_FORM_FACTOR",
+					utcOffsetMinutes: 0,
+					memoryTotalKbytes: 100000,
+					timeZone: "ETC/UTC"
+				},
+				user: {
+					lockedSafetyMode: false
+				}
+			},
+			continuation: this.continuation,
+			currentPlayerState: {
+				playerOffsetMs: offset
+			}
+		}), {}, false);
+		if(!resp.isOk)
+			throw new ScriptException("Failed to get live chat replay [" + resp.code + "]");
+		return JSON.parse(resp.body);
+	}
 }
 
 source.getPlaybackTracker = function(url, initialPlayerData) {
@@ -3996,12 +4146,23 @@ function colorToRgbaHex(argbColor) {
 	const to2 = n => n.toString(16).padStart(2, "0").toUpperCase();
 	return `#${to2(r)}${to2(g)}${to2(b)}${to2(a)}`;
 }
-function handleYoutubeLiveEvents(actions) {
-	let emojiMap = {};
+function handleYoutubeLiveEvents(actions, emojiMap) {
+	emojiMap = emojiMap ?? {};
 	let events = [];
 	for(let action of actions) {
 		try {
-			if(action.addChatItemAction) {
+
+			let replayItem = undefined;
+			if(action.replayChatItemAction) {
+				const subActions = action.replayChatItemAction.actions;
+				const replayEvents = handleYoutubeLiveEvents(subActions, emojiMap);
+				for(let replayEv of replayEvents.events) {
+					if(action?.replayChatItemAction?.videoOffsetTimeMsec)
+						replayEv.time = parseInt(action.replayChatItemAction.videoOffsetTimeMsec);
+					events.push(replayEv);
+				}
+			}
+			else if(action.addChatItemAction) {
 				const obj = action.addChatItemAction;
 
 				const isPaid = !!obj.item?.liveChatPaidMessageRenderer
