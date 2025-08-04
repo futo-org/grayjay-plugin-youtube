@@ -4380,6 +4380,7 @@ class ShortsVideoPager extends VideoPager {
 
 		this.results = videos;
 		this.hasMore = !!continuation || (this.nextPageData && this.nextPageData.length > 0);
+		return this;
 	}
 }
 function fetchReelItemWatch(useAuth, id, playerParams) {
