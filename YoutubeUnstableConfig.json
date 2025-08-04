@@ -331,6 +331,7 @@
 	
 	"changelog": {
 		"271": [
+			"Feature: Shorts feed support",
 			"Feature: Historic/VOD live chat",
 			"Fix: Remove old trending fallback setting"
 		],

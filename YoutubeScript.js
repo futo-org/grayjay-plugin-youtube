@@ -745,7 +745,7 @@ class YTSessionClient {
 	
 }
 function extractVideoPlayerData_VideoDetails(playerData, jsUrl, contextData) {
-	if(!playerData.videoDetails) return null;
+	if(!playerData?.videoDetails) return null;
 
 	if (IS_TESTING) {
 		console.log("playerData:", playerData);
@@ -763,6 +763,8 @@ function extractVideoPlayerData_VideoDetails(playerData, jsUrl, contextData) {
 			url: playerData?.streamingData?.dashManifestUrl
 		}) : null;
 
+	const microFormat = playerData?.microformat?.playerMicroformatRenderer;
+
 	const abrStreamingUrl = (!contextData?.noSources && playerData?.streamingData?.serverAbrStreamingUrl) ? 
 		decryptUrlN(playerData.streamingData.serverAbrStreamingUrl, jsUrl, false) : undefined;
 	//useAbr = abrStreamingUrl && (!!useAbr || USE_ABR_VIDEOS);
@@ -772,7 +774,7 @@ function extractVideoPlayerData_VideoDetails(playerData, jsUrl, contextData) {
 		thumbnails: new Thumbnails(videoDetails.thumbnail?.thumbnails.map(x=>new Thumbnail(escapeUnicode(x.url), x.height)) ?? []),
 		author: new PlatformAuthorLink(new PlatformID(PLATFORM, videoDetails.channelId, config.id, PLATFORM_CLAIMTYPE), videoDetails.author, URL_BASE + "/channel/" + videoDetails.channelId, null, null),
 		duration: parseInt(videoDetails.lengthSeconds),
-		viewCount: parseInt(videoDetails.viewCount),
+		viewCount: parseInt(videoDetails.viewCount ?? microFormat?.viewCount),
 		url: contextData.url,
 		isLive: videoDetails?.isLive ?? false,
 		description: videoDetails.shortDescription,
@@ -4309,36 +4311,202 @@ class YTComment extends Comment {
 }
 
 function getShortsFeed(useAuth) {
-	const context = getClientContext(useAuth);
-	const body = {
-		context: context,
-		disablePlayerResponse: true,
-		inputType: "REEL_WATCH_INPUT_TYPE_SEEDLESS",
-		params: "CA8%3D"
-	}
-	const resp = {}; //TODO: https://www.youtube.com/youtubei/v1/reel/reel_item_watch?prettyPrint=false
-	const sequenceContinuation = resp.responseContext?.sequenceContinuation;
+	const [video, sequenceContinuation, context] = fetchReelItemWatch(useAuth);
 
 	if(!sequenceContinuation)
 		return new VideoPager([]);
 
-	return new ShortsVideoPager([], sequenceContinuation, useAuth);
+	return new ShortsVideoPager((video) ? [video] : [], sequenceContinuation, context, useAuth);
+}
+source.getShorts = function(){
+	if(!bridge.isLoggedIn())
+		return getShortsFeed(false);
+	else
+		return getShortsFeed(true);
 }
 class ShortsVideoPager extends VideoPager {
-	constructor(videos, sequenceId = null, useAuth) {
+	constructor(videos, sequenceId = null, context = null, useAuth) {
 		super(videos ?? [], !!sequenceId, {});
+		this.context = context;
 		this.sequenceId = sequenceId;
+		this.useAuth = useAuth;
+		this.nextPage(videos);
+		this.nextPageData = [];
 	}
 
-	nextPage() {
-		const body = {
-			context: undefined,
-			playbackContext: undefined,
-			sequenceParams: this.sequenceId
+	nextPage(addVideos) {
+
+		let continuation = undefined;
+		let videos = addVideos ?? [];
+		if(this.nextPageData && this.nextPageData.length > 0) {
+			const first = this.nextPageData.shift();		
+			const [video, continuation] = fetchReelItemWatch(this.useAuth, first.videoId, first.playerParams);
+			if(video) {
+				videos.push(video);
+			} 
+			else {
+				this.nextPage();
+			}
+		}
+		else {
+			const body = {
+				context: this.context?.INNERTUBE_CONTEXT,
+				playbackContext: undefined,
+				sequenceParams: this.sequenceId
+			}
+			const resp = http.POST("https://www.youtube.com/youtubei/v1/reel/reel_watch_sequence?prettyPrint=false", JSON.stringify(body), {}, this.useAuth);
+			if(!resp.isOk)
+				throw new ScriptException("Failed to get initial source feed [" + resp.code + "]");
+			const json = JSON.parse(resp.body);
+
+			let nextPageData = [];
+			for(let command of json.entries) {
+				const reelWatchEndpoint = command?.command?.reelWatchEndpoint;
+				if(reelWatchEndpoint) {
+					const video = extractReelWatchEndpoint_Video(reelWatchEndpoint);
+					if(video) {
+						if(video.name)
+							videos.push(video);
+						else
+							nextPageData.push(reelWatchEndpoint);
+					}
+				}
+			}
+			this.nextPageData = nextPageData;
+			
+			continuation = json?.continuationEndpoint?.continuationCommand?.token;
+			this.sequenceId = continuation;
 		}
 
-		//TODO: https://www.youtube.com/youtubei/v1/reel/reel_watch_sequence?prettyPrint=false
+		this.results = videos;
+		this.hasMore = !!continuation || (this.nextPageData && this.nextPageData.length > 0);
 	}
+}
+function fetchReelItemWatch(useAuth, id, playerParams) {
+	const context = getClientContext(useAuth);
+	const body = {
+		context: context.INNERTUBE_CONTEXT,
+		disablePlayerResponse: !!(id || playerParams),
+		inputType: "REEL_WATCH_INPUT_TYPE_SEEDLESS",
+		params: "CA8%3D",
+		playerRequest: (id || playerParams) ? {
+			videoId: id ?? undefined,
+			//params: playerParams ?? undefined
+		} : undefined
+	}
+	const resp = http.POST("https://www.youtube.com/youtubei/v1/reel/reel_item_watch?prettyPrint=false", JSON.stringify(body), {}, useAuth);
+	if(!resp.isOk)
+		throw new ScriptException("Failed to get initial source feed [" + resp.code + "]");
+	const json = JSON.parse(resp.body);
+
+	return extractReelItemWatch_VideoAndContinuation(json)?.concat([context]);
+}
+
+function extractReelItemWatch_VideoAndContinuation(json) {
+	if(!json)
+		return undefined;
+
+	const sequenceContinuation = json?.sequenceContinuation;
+
+	let id = undefined;
+	let title = "";
+	let thumbnail = undefined;//extractThumbnail_Thumbnails(endpoint.thumbnail);
+	let author = undefined;//videoDetails?.author;
+	let date = 0;//videoDetails?.datetime;
+	let duration = 0;//videoDetails?.duration;
+	let viewCount = 0;//videoDetails?.viewCount;
+	const endpoint = json?.replacementEndpoint?.reelWatchEndpoint;
+
+	const videoDetails = extractVideoPlayerData_VideoDetails(json?.playerResponse, undefined, {
+		noSources: true
+	});
+	const endpointVideo = extractReelWatchEndpoint_Video(endpoint);
+
+	const metadataItems = json?.overlay?.reelPlayerOverlayRenderer?.metapanel?.reelMetapanelViewModel?.metadataItems;
+	for(let metadataItem of metadataItems) {
+		switchKey(metadataItem, {
+			reelChannelBarViewModel(renderer) {
+
+			},
+			reelMultiFormatLinkViewModel(renderer) {
+				//if(renderer.title)
+				//	title = extractText_String(renderer.title);
+			},
+			shortsVideoTitleViewModel(renderer) {
+				if(!title && renderer.text)
+					title = extractText_String(renderer.text);
+			},
+			reelSoundMetadataViewModel(renderer) {
+
+			}
+		});
+	}
+
+	if(json?.overlay?.reelPlayerOverlayRenderer?.reelPlayerHeaderSupportedRenderers) {
+		let renderer = json?.overlay?.reelPlayerOverlayRenderer?.reelPlayerHeaderSupportedRenderers;
+
+		const likeCount = json.overlay.reelPlayerOverlayRenderer?.likeButton?.likeButtonRenderer?.likeCount;
+
+		if(renderer.reelPlayerHeaderRenderer) {
+			if(renderer.reelPlayerHeaderRenderer?.timestampText) {
+				date = extractAgoText_Timestamp(extractText_String(renderer.reelPlayerHeaderRenderer?.timestampText));
+			}
+		}
+	}
+
+	id = id ?? videoDetails?.id.value ?? endpointVideo?.id?.value;
+	title = title ?? videoDetails?.name ?? endpointVideo?.name;
+	thumbnail = thumbnail ?? videoDetails?.thumbnails ?? endpointVideo?.thumbnails;
+	author = author ?? videoDetails?.author ?? endpointVideo?.author;
+	date = date ?? videoDetails?.datetime ?? endpointVideo?.datetime;
+	duration = duration ?? videoDetails?.duration ?? endpointVideo?.duration;
+	viewCount = viewCount ?? videoDetails?.viewCount ?? endpointVideo?.viewCount;
+
+	const video = new PlatformVideo({
+			id: new PlatformID(PLATFORM, id, config.id),
+			name: escapeUnicode(extractText_String(title)),
+			thumbnails: thumbnail,
+			author: author,
+			uploadDate: date,
+			duration: duration,
+			viewCount: viewCount,
+			url: URL_BASE + "/watch?v=" + id,
+			isLive: false,
+			extractType: "Short",
+		});
+
+	return [video, sequenceContinuation]
+}
+function extractReelWatchEndpoint_Video(endpoint) {
+	if(!endpoint)
+		return undefined;
+	const id = endpoint.videoId;
+	const url = URL_BASE + "/watch?v=" + id;
+	
+	const videoDetails = (endpoint?.unserializedPrefetchData?.playerResponse) ? extractVideoPlayerData_VideoDetails(endpoint?.unserializedPrefetchData?.playerResponse, undefined, {
+		noSources: true
+	}) : null;
+
+	const title = videoDetails?.name;
+	const thumbnail = extractThumbnail_Thumbnails(endpoint.thumbnail);
+	const author = videoDetails?.author;
+	const date = videoDetails?.datetime;
+	const duration = videoDetails?.duration;
+	const viewCount = videoDetails?.viewCount;
+
+
+	return new PlatformVideo({
+			id: new PlatformID(PLATFORM, id, config.id),
+			name: escapeUnicode(extractText_String(title)),
+			thumbnails: thumbnail,
+			author: author,
+			uploadDate: date,
+			duration: duration,
+			viewCount: viewCount,
+			url: URL_BASE + "/watch?v=" + id,
+			isLive: false,
+			extractType: "Short",
+		});
 }
 
 class RichGridPager extends VideoPager {
