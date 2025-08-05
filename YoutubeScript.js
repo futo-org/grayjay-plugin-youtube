@@ -798,38 +798,7 @@ function extractVideoPlayerData_VideoDetails(playerData, jsUrl, contextData) {
 						format: "text/vtt",
 
 						getSubtitles() {
-							const subResp = http.GET(x.baseUrl, {});
-							if(!subResp.isOk)
-								return "";
-							const asr = subResp.body;
-							let lines = asr.match(REGEX_ASR);
-							const newSubs = [];
-							let skipped = 0;
-							for(let i = 0; i < lines.length; i++) {
-								const line = lines[i];
-								const lineParsed = /<text .*?start="(.*?)" .*?dur="(.*?)".*?>(.*?)<\/text>/gms.exec(line);
-
-								const start = parseFloat(lineParsed[1]);
-								const dur = parseFloat(lineParsed[2]);
-								let end = start + dur;
-								const text = decodeHtml(lineParsed[3]);
-
-								const nextLine = (i + 1 < lines.length) ? lines[i + 1] : null;
-								if(nextLine) {
-									const lineParsedNext = /<text .*?start="(.*?)" .*?dur="(.*?)".*?>(.*?)<\/text>/gms.exec(nextLine);
-									const startNext = parseFloat(lineParsedNext[1]);
-									const durNext = parseFloat(lineParsedNext[2]);
-									const endNext = startNext + durNext;
-									if(startNext && startNext < end)
-										end = startNext;
-								}
-
-								newSubs.push((i - skipped + 1) + "\n" +
-									toSRTTime(start, true) + " --> " + toSRTTime(end, true) + "\n" +
-									text + "\n");
-							}
-							console.log(newSubs);
-							return "WEBVTT\n\n" + newSubs.join('\n');
+							return getConvertedSubtitles(x, contextData);
 						}
 					};
 				}
@@ -1084,8 +1053,13 @@ source.getContentDetails = (url, useAuth, simplify, forceUmp, options) => {
 		jsUrl: jsUrl
 	};
 
+	log("getBGDataFromClientConfig");
+	let bgData = getBGDataFromClientConfig(clientConfig, usedLogin);
+
+
 	log("extractVideoPage_VideoDetails (start)");
 	const videoDetails = extractVideoPage_VideoDetails(urlFiltered, initialData, initialPlayerData, {
+		bgData: bgData,
 		pot: options?.pot,
 		httpClient: overrideHttpClient,
 		url: urlFiltered,
@@ -1107,10 +1081,6 @@ source.getContentDetails = (url, useAuth, simplify, forceUmp, options) => {
 		if (!simplify)
 			throw new UnavailableException("No sources found");
 	}
-
-	log("getBGDataFromClientConfig");
-	let bgData = getBGDataFromClientConfig(clientConfig, usedLogin);
-
 
 	//Substitute Dash manifest from Android
 	if (USE_ANDROID_FALLBACK && videoDetails.dash && videoDetails.dash.url) {
@@ -5485,38 +5455,7 @@ function extractVideoPage_VideoDetails(parentUrl, initialData, initialPlayerData
 						format: "text/vtt",
 
 						getSubtitles() {
-							const subResp = http.GET(x.baseUrl, {});
-							if(!subResp.isOk)
-								return "";
-							const asr = subResp.body;
-							let lines = asr.match(REGEX_ASR);
-							const newSubs = [];
-							let skipped = 0;
-							for(let i = 0; i < lines.length; i++) {
-								const line = lines[i];
-								const lineParsed = /<text .*?start="(.*?)" .*?dur="(.*?)".*?>(.*?)<\/text>/gms.exec(line);
-
-								const start = parseFloat(lineParsed[1]);
-								const dur = parseFloat(lineParsed[2]);
-								let end = start + dur;
-								const text = decodeHtml(lineParsed[3]);
-
-								const nextLine = (i + 1 < lines.length) ? lines[i + 1] : null;
-								if(nextLine) {
-									const lineParsedNext = /<text .*?start="(.*?)" .*?dur="(.*?)".*?>(.*?)<\/text>/gms.exec(nextLine);
-									const startNext = parseFloat(lineParsedNext[1]);
-									const durNext = parseFloat(lineParsedNext[2]);
-									const endNext = startNext + durNext;
-									if(startNext && startNext < end)
-										end = startNext;
-								}
-
-								newSubs.push((i - skipped + 1) + "\n" +
-									toSRTTime(start, true) + " --> " + toSRTTime(end, true) + "\n" +
-									text + "\n");
-							}
-							console.log(newSubs);
-							return "WEBVTT\n\n" + newSubs.join('\n');
+							return getConvertedSubtitles(x, contextData);
 						}
 					};
 				}
@@ -5646,6 +5585,89 @@ function extractVideoPage_VideoDetails(parentUrl, initialData, initialPlayerData
     return result;
 }
 
+function convertSubtitleResponse(subResp) {
+	if (!subResp.isOk)
+		return "";
+	const asr = subResp.body;
+	if(asr.length == 0)
+		throw new ScriptException("Subtitles empty response");
+	let lines = asr.match(REGEX_ASR);
+	const newSubs = [];
+	let skipped = 0;
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i];
+		const lineParsed = /<text .*?start="(.*?)" .*?dur="(.*?)".*?>(.*?)<\/text>/gms.exec(line);
+
+		const start = parseFloat(lineParsed[1]);
+		const dur = parseFloat(lineParsed[2]);
+		let end = start + dur;
+		const text = decodeHtml(lineParsed[3]);
+
+		const nextLine = (i + 1 < lines.length) ? lines[i + 1] : null;
+		if (nextLine) {
+			const lineParsedNext = /<text .*?start="(.*?)" .*?dur="(.*?)".*?>(.*?)<\/text>/gms.exec(nextLine);
+			const startNext = parseFloat(lineParsedNext[1]);
+			const durNext = parseFloat(lineParsedNext[2]);
+			const endNext = startNext + durNext;
+			if (startNext && startNext < end)
+				end = startNext;
+		}
+
+		newSubs.push((i - skipped + 1) + "\n" +
+			toSRTTime(start, true) + " --> " + toSRTTime(end, true) + "\n" +
+			text + "\n");
+	}
+	console.log(newSubs);
+	return "WEBVTT\n\n" + newSubs.join('\n');
+}
+function getConvertedSubtitles(subRaw, contextData) {
+	const bgData = contextData?.bgData;
+	const pot = contextData.pot;
+	if (pot) {
+		bridge.toast("Subtitles using included POT");
+		const subResp = http.GET(subRaw.baseUrl + "&pot=" + pot, {});
+		return (convertSubtitleResponse(subResp));
+	}
+	else if (canUse("Async") && bgData) {
+		bridge.toast("Subtitles using generated POT");
+		return new Promise((resolve, reject) => {
+			setTimeout(() => {
+				if (!didResolve) {
+					reject("timeout");
+					didResolve = true;
+				}
+			}, 2000)
+			let didResolve = false;
+			tryGetBotguard((bg) => {
+				bg.getTokenOrCreate(bgData.visitorData, bgData.dataSyncId, (pot) => {
+					log("Botguard token to use (Subtitles): " + pot);
+					console.log("Botguard Token to use (Subtitles):", pot);
+					bridge.toast("Subtitles got POT");
+
+					const url = subRaw.baseUrl + "&potc=1&pot=" + encodeURIComponent(pot) + "&c=" + bgData.c + "&cver=" + bgData.cver;
+					console.log(url);
+					const subResp = http.GET(url, {});
+
+					if (!didResolve) {
+						didResolve = true;
+						resolve(convertSubtitleResponse(subResp));
+					}
+					else {
+
+					}
+				}, bgData.visitorDataType);
+			})
+		});
+	}
+	else {
+		bridge.toast("Subtitles without POT");
+		const subResp = http.GET(subRaw.baseUrl, {});
+		return convertSubtitleResponse(subResp);
+	}
+}
+
+
+
 function getBGDataFromClientConfig(clientConfig, usedLogin) {
 
 	let visitorDataType = "Unknown";
@@ -5662,12 +5684,14 @@ function getBGDataFromClientConfig(clientConfig, usedLogin) {
 	const visitorDataLogin = usedLogin ? (clientConfig?.EOM_VISITOR_DATA ?? clientConfig?.VISITOR_DATA) : null;
 	console.log("VisitorData: ", visitorData);
 	log("VisitorDataType: " + visitorDataType);
-
+	console.log("clientconfig:", clientConfig);
 	return { 
 		visitorData: visitorData?.replaceAll("%3D", "="),
 		visitorDataLogin: visitorDataLogin?.replaceAll("%3D", "="),
 		dataSyncId: clientConfig?.DATASYNC_ID, 
-		visitorDataType: visitorDataType
+		visitorDataType: visitorDataType,
+		c: clientConfig?.INNERTUBE_CONTEXT?.client?.clientName,
+		cver: clientConfig?.INNERTUBE_CONTEXT?.client?.clientVersion
 	}
 }
 
