@@ -611,7 +611,8 @@ class YTSessionClient {
 		//Video details
 		let contextData = {
 			url: urlFiltered,
-			jsUrl: context.jsUrl
+			jsUrl: context.jsUrl,
+			bgData: context.bgData
 		};
 		const videoDetails = extractVideoPlayerData_VideoDetails(playerData, context.jsUrl, contextData);
 
@@ -798,7 +799,7 @@ function extractVideoPlayerData_VideoDetails(playerData, jsUrl, contextData) {
 						format: "text/vtt",
 
 						getSubtitles() {
-							return getConvertedSubtitles(x, contextData);
+							return getConvertedSubtitles(videoDetails.videoId, x, contextData);
 						}
 					};
 				}
@@ -3590,7 +3591,7 @@ class YTABRExecutor {
 			log("Remaining audio executors: " + _executorsAudio.length);
 		}
 		this.freeAllSegments();
-		//console.clear(); //Temp fix for memory leaking
+		console.clear(); //Temp fix for memory leaking
 	}
 
 	recreateExecutor(newContext){
@@ -3629,7 +3630,7 @@ class YTABRExecutor {
 	}
 
 	executeRequest(url, headers, retryCount, overrideSegment) {
-		//console.clear();
+		console.clear();
 		if(this.childExecutor)
 			return this.childExecutor.executeRequest(url, headers, retryCount, overrideSegment);
 		if(!retryCount)
@@ -5467,7 +5468,7 @@ function extractVideoPage_VideoDetails(parentUrl, initialData, initialPlayerData
 						format: "text/vtt",
 
 						getSubtitles() {
-							return getConvertedSubtitles(x, contextData);
+							return getConvertedSubtitles(videoDetails.videoId, x, contextData);
 						}
 					};
 				}
@@ -5632,7 +5633,7 @@ function convertSubtitleResponse(subResp) {
 	console.log(newSubs);
 	return "WEBVTT\n\n" + newSubs.join('\n');
 }
-function getConvertedSubtitles(subRaw, contextData) {
+function getConvertedSubtitles(videoId, subRaw, contextData) {
 	const bgData = contextData?.bgData;
 	const pot = contextData.pot;
 	if (pot) {
@@ -5651,7 +5652,7 @@ function getConvertedSubtitles(subRaw, contextData) {
 			}, 2000)
 			let didResolve = false;
 			tryGetBotguard((bg) => {
-				bg.getTokenOrCreate(bgData.visitorData, bgData.dataSyncId, (pot) => {
+				bg.getTokenOrCreateCustom(videoId, (pot) => {
 					log("Botguard token to use (Subtitles): " + pot);
 					console.log("Botguard Token to use (Subtitles):", pot);
 					bridge.toast("Subtitles got POT");
@@ -5667,12 +5668,13 @@ function getConvertedSubtitles(subRaw, contextData) {
 					else {
 
 					}
-				}, bgData.visitorDataType);
+				});
 			})
 		});
 	}
 	else {
 		bridge.toast("Subtitles without POT");
+		log("Subtitles without POT (canUse:" + canUse("Async") + ", bgData: " + JSON.stringify(bgData) + ")")
 		const subResp = http.GET(subRaw.baseUrl, {});
 		return convertSubtitleResponse(subResp);
 	}
@@ -8524,6 +8526,14 @@ source.testUMP = async function(url, startSegment, endSegment, itag, isAudio, cb
 		}, 1000);
 	});
 };
+source.testSubtitles = function(url) {
+	let content = source.getContentDetails(url);
+	console.log(content);
+	let subtitle = content.subtitles[0];
+	console.log(subtitle);
+	let subtitleRaw = subtitle.getSubtitles();
+	console.log(subtitleRaw);
+}
 source.testIOS = async function(url, itag, isAudio){
 	const item = this.getContentDetails(url);
 	console.log(item);
@@ -9088,6 +9098,22 @@ class BotGuardGenerator {
 		return this.mint;
 	}
 
+	getTokenOrCreateCustom(customToken, cb) {
+		if(!customToken)
+			throw new ScriptException("No token Id provided for botguard");
+
+		let idToUse = customToken;
+
+		const existing = this.generatedTokens[idToUse];
+		if(!existing) {
+			log("No existing botguard customToken, generating new");
+			this.generateBase64(customToken, customToken, (token)=>{
+				cb(token);
+			}, type);
+		}
+		else //TODO: check expiry?
+			cb(existing.tokenBase64);
+	}
 	getTokenOrCreate(visitorId, dataSyncId, cb, type) {
 		if(!visitorId && !dataSyncId)
 			throw new ScriptException("No visitor or datasync Id provided for botguard");
