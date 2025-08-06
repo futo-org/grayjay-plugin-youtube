@@ -8231,17 +8231,18 @@ class UMPResponse {
 						const opCode35 = pb.Opcode35_pb.Opcode35.deserializeBinary(segment);
 						this.playbackCookie = opCode35.getPlaybackcookie();
 						this.backOffTime = opCode35.getBackofftimems();
-					break;
+						break;
 					case 43://Message
 						const opCode43 = pb.Opcode43_pb.Opcode43.deserializeBinary(segment);
 						this.redirectUrl = opCode43?.getRedirecturl();
 						log("Redirect url found: " + this.redirectUrl);
+						break;
 					case 44: //Unknown
 						const opCode44 = pb.Opcode44_pb.Opcode44.deserializeBinary(segment);
 						console.error("UMP Error", opCode44.getBda());
 						log("Error:" + opCode44.getBda());
 						console.log("");
-					break;
+						break;
 					case 47: //Unknown
 						const opCode47 = pb.Opcode47_pb.Opcode47.deserializeBinary(segment);
 						console.log(opCode47);
