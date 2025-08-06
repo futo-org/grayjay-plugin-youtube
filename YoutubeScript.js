@@ -3590,7 +3590,7 @@ class YTABRExecutor {
 			log("Remaining audio executors: " + _executorsAudio.length);
 		}
 		this.freeAllSegments();
-		console.clear(); //Temp fix for memory leaking
+		//console.clear(); //Temp fix for memory leaking
 	}
 
 	recreateExecutor(newContext){
@@ -3629,7 +3629,7 @@ class YTABRExecutor {
 	}
 
 	executeRequest(url, headers, retryCount, overrideSegment) {
-		console.clear();
+		//console.clear();
 		if(this.childExecutor)
 			return this.childExecutor.executeRequest(url, headers, retryCount, overrideSegment);
 		if(!retryCount)
@@ -3645,6 +3645,7 @@ class YTABRExecutor {
 			time = this.findSegmentTime(overrideSegment - 1);
 			log("UMP [" + this.type + "], overriding timestamp " + oldTime + " => " + time);
 		}
+		console.log("====== UMP EXECUTE REQUEST (" + this.type + " [" + segment + ", " + time + "]) ======");
 
 		this.freeOldSegments(segment);
 		const cached = this.getCachedSegment(segment);
@@ -8456,7 +8457,18 @@ source.testUMPRecovery = async function(){
 	}
 	return;
 };
-source.testUMP = async function(url, startSegment, endSegment, itag, isAudio){
+source.testUMPSessions = async function(url) {
+	let urls = Array.isArray(url) ? url : [url];
+	for(let i = 0; i < 10; i++) {
+		console.log("====== SESSION " + (i + 1) + " START ======");
+		setDevSettings({use_session_client: true, use_session_client_pot: true, allow_ump_backoff_async: true})
+		core.reloadPlugin();
+		const urlToUse = urls[i % urls.length];
+		await source.testUMP(urlToUse, 11, 17, 136, false);
+		console.log("====== SESSION " + (i + 1) + " END ======");
+	}
+}
+source.testUMP = async function(url, startSegment, endSegment, itag, isAudio, cb){
 	USE_ABR_VIDEOS = true;
 	const item = this.getContentDetails(url);
 	console.log(item);
@@ -8469,21 +8481,24 @@ source.testUMP = async function(url, startSegment, endSegment, itag, isAudio){
 		video = item.video.videoSources.find(x=>x.name.startsWith("UMP") && x.container == "video/mp4" && x.height == 720);
 	
 
-	setTimeout(async ()=>{
-		const generated = video.generate();
-		console.log("Generated:", generated);
-		const executor = video.getRequestExecutor();
 
-		if(endSegment && endSegment > 0) {
-			for(let i = startSegment; i < endSegment; i++) {
-				const resp = executor.executeRequest("https://grayjay.app/internal/video?segIndex=" + i, {});
-				resp.buffer.transfer();
-				await delay(2000);
+	return new Promise(async (resolve, reject) => {
+		setTimeout(async ()=>{
+			const generated = await video.generate();
+			console.log("Generated:", generated);
+			const executor = video.getRequestExecutor();
+
+			if(endSegment && endSegment > 0) {
+				for(let i = startSegment; i < endSegment; i++) {
+					const resp = executor.executeRequest("https://grayjay.app/internal/video?segIndex=" + i, {});
+					resp.buffer.transfer();
+					await delay(2000);
+				}
 			}
-		}
-		executor.cleanup();
-	}, 1000);
-	return;
+			executor.cleanup();
+			resolve();
+		}, 1000);
+	});
 };
 source.testIOS = async function(url, itag, isAudio){
 	const item = this.getContentDetails(url);
