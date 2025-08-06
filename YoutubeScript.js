@@ -3667,11 +3667,17 @@ class YTABRExecutor {
 			sessionZm: this.parentSource?.sharedContext?.sessionZm
 		});
 		const postData = initialReq.serializeBinary();
+		const abrUrlToRequest = this.abrUrl + "&rn=" + this.rn;
+		log("UMP [" + this.type + "] requesting url: " + abrUrlToRequest); 
+
 		const initialResp = http.POST(this.abrUrl, postData, {
 			"Origin": "https://www.youtube.com",
 			"Accept": "*/*",
 			"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
 		}, false, true);
+
+		this.rn = (this.rn ?? 0) + 1;
+
 		if(!initialResp.isOk)
 			throw new ScriptException("Failed initial stream request [ " + initialResp.code + "]");
 
@@ -3724,13 +3730,18 @@ class YTABRExecutor {
 
 		this.lastRequest = (new Date()).getTime();
 
+		if(umpResp.redirectUrl) {
+			console.log("====== UMP FOUND REDIRECT URL ======", umpResp.redirectUrl);
+			this.abrUrl = umpResp.redirectUrl;
+		}
+
 		const stream = streamsArr[0];
 		if(!stream) {
 
 			if(umpResp.redirectUrl) {
 				log("UMP Responded with redirect Url: " + umpResp.redirectUrl);
 			}
-			log("UMP no stream, try recovery: \n" +
+			log("====== UMP no stream, try recovery: ====== \n" +
 				" - Had POT: " + !!pot + "\n" +
 				" - POT Worked: " + (this.lastWorkingPot == pot) + "\n" +
 				" - Has Redirect: " + !!umpResp.redirectUrl);
