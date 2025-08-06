@@ -8242,6 +8242,14 @@ class UMPResponse {
 						log("Error:" + opCode44.getBda());
 						console.log("");
 					break;
+					case 47: //Unknown
+						const opCode47 = pb.Opcode47_pb.Opcode47.deserializeBinary(segment);
+						console.log(opCode47);
+						break;
+					case 53: //Unknown
+						const opCode53 = pb.Opcode53_pb.Opcode53.deserializeBinary(segment);
+						console.log(opCode53);
+						break;
 					case 57:
 						const opCode57 = pb.Opcode57_pb.Opcode57.deserializeBinary(segment);
 						console.log(opCode57);
@@ -8253,6 +8261,10 @@ class UMPResponse {
 								value: opCode57.getValue()
 							};
 						}
+						break;
+					case 58: //Unknown
+						const opCode58 = pb.Opcode58_pb.Opcode58.deserializeBinary(segment);
+						console.log(opCode58);
 						break;
 					case 67:
 						const opCode67 = pb.Opcode49_pb.Opcode49.deserializeBinary(segment);
