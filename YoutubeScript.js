@@ -6770,7 +6770,7 @@ function extractVideoLockupModel_Video(videoRenderer, contextData) {
 				const partText = metadataPart.text.content;
 				
 				if(partText) {
-					const matchViews = partText.match(/([0-9]+[A-Z]) views?/);
+					const matchViews = partText.match(/([0-9,.]+[A-Z]) views?/);
 					if(matchViews) {
 						viewCount = extractHumanNumber_Integer(matchViews[1]);
 						continue;
@@ -6793,7 +6793,7 @@ function extractVideoLockupModel_Video(videoRenderer, contextData) {
 					const partText = metadataPart.text.content;
 					
 					if(partText) {
-						const matchViews = partText.match(/([0-9]+[A-Z]) views?/);
+						const matchViews = partText.match(/([0-9,.]+[A-Z]) views?/);
 						if(matchViews) {
 							viewCount = extractHumanNumber_Integer(matchViews[1]);
 							continue;
@@ -7338,6 +7338,7 @@ function extractHumanNumber_Integer(str) {
 			return parseInt(value);
 	}
 }
+source.testA = extractHumanNumber_Integer;
 function extractDate_Timestamp(dateStr) {
 	if(!dateStr)
 		return -1;
