@@ -345,7 +345,55 @@ source.getHome = (initialDataOverride) => {
 	}
 };
 
+const URL_TRENDING_CHANNEL = "https://www.youtube.com/channel/UCF0pVplsI8R5kcAqgtoRqoA";
 source.getTrending = () => {
+	const initialData = requestInitialData(URL_TRENDING_CHANNEL, false, false);
+	if(!initialData)
+	    throw new ScriptException("No channel data found for: " + url);
+
+	const errorAlerts = initialData?.alerts?.filter(x=>x.alertRenderer?.type == "ERROR") ?? [];
+	if(errorAlerts.length > 0){
+		throw new UnavailableException(extractText_String(errorAlerts[0].alertRenderer.text));
+	}
+
+	const channel = extractChannel_PlatformChannel(initialData, "https://www.youtube.com/channel/UCF0pVplsI8R5kcAqgtoRqoA", {
+		id: "UCF0pVplsI8R5kcAqgtoRqoA"
+	});
+	const allowShorts = false;
+	const contextData = {
+		authorLink: new PlatformAuthorLink(new PlatformID(PLATFORM, channel.id.value, config.id, PLATFORM_CLAIMTYPE), escapeUnicode(channel.name), channel.url, channel.thumbnail),
+		allowShorts: allowShorts
+	};
+	const tabs = extractPage_Tabs(initialData, contextData);
+	const tab = tabs.find(x=>x.title == "Now");
+	if(!tab) 
+		return new VideoPager([], false);
+	if(IS_TESTING)
+		console.log("Tab", tab);
+
+	if(!tab.videos?.length && tab.shelves && tab.shelves.length > 0) {
+		let newTab = {
+			videos: []
+		};
+		let bestContin = null;
+		let bestContinCount = 0;
+		for(let subTab of tab.shelves) {
+			if(subTab.videos) {
+				newTab.videos = newTab.videos.concat(subTab.videos);
+				if(bestContinCount < subTab.videos.length) {
+					//TODO: Continuation?
+				}
+			}
+		}
+		log("Channel Result Count: " + tab?.videos?.length)
+		return new RichGridPager(newTab, contextData, false, false);
+	}
+
+	//throw new ScriptException("Could not find tab: " + targetTab);
+	log("Channel Result Count: " + tab?.videos?.length)
+	return new RichGridPager(tab, contextData, false, false);
+	/*
+
     let initialData = requestInitialData(URL_TRENDING, USE_MOBILE_PAGES, false);
     if(IS_TESTING)
         console.log("getTrending initialData", initialData);
@@ -361,6 +409,7 @@ source.getTrending = () => {
 		}
 	}
 	return new RichGridPager(tab, {}, USE_MOBILE_PAGES, false);
+	*/
 };
 
 //Search
@@ -3204,7 +3253,7 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 			if(umpResp.redirectUrl && i < maxRedirect - 1) {
 				bridge.toast("UMP Redirect..");
 				log("UMP Redirect URL:" + umpResp.redirectUrl);
-				abrUrl = decryptUrlN(umpResp.redirectUrl, parentSource.jsUrl);
+				abrUrl = umpResp.redirectUrl;
 				log("UMP Redirect URL (n param decrypted): " + abrUrl);
 				
 				log("UMP Redirecting to:\n" + umpResp.redirectUrl);
@@ -5279,7 +5328,7 @@ function extractSearch_SearchResults(data, contextData) {
  * @param initialData Initial data from a ChannelPage 
  * @returns {PlatformChannel}
  */
-function extractChannel_PlatformChannel(initialData, sourceUrl = null) {
+function extractChannel_PlatformChannel(initialData, sourceUrl = null, contextData = null) {
 	const errorAlerts = initialData?.alerts?.filter(x=>x.alertRenderer?.type == "ERROR") ?? [];
 	if(errorAlerts.length > 0){
 		throw new UnavailableException(extractText_String(errorAlerts[0].alertRenderer.text));
@@ -5331,7 +5380,7 @@ function extractChannel_PlatformChannel(initialData, sourceUrl = null) {
         const bannerTargetWidth = 1080;
         const banner = (banners && banners.length > 0) ? banners.sort((a,b)=>Math.abs(a.width - bannerTargetWidth) - Math.abs(b.width - bannerTargetWidth))[0] : { url: "" };
 
-        const id = initialData?.metadata?.channelMetadataRenderer?.externalId;
+        const id = contextData?.id ?? initialData?.metadata?.channelMetadataRenderer?.externalId;
         if(!id) {
             log("ID not found in new channel viewmodel:" + JSON.stringify(id, null, "   "));
 	        if(bridge.devSubmit) bridge.devSubmit("extractChannel_PlatformChannel - ID Not found in new channel view model", JSON.stringify(initialData));
@@ -5348,16 +5397,17 @@ function extractChannel_PlatformChannel(initialData, sourceUrl = null) {
 
         let subCount = 0;
         const metadataRows = headerRenderer?.content?.pageHeaderViewModel?.metadata?.contentMetadataViewModel?.metadataRows;
-        for(let row of metadataRows) {
-            const subsStr = row.metadataParts.find(x=>x.text?.content?.indexOf("subscribers") > 0)?.text?.content;
-            if(!subsStr)
-                continue;
-            const subsNum = extractHumanNumber_Integer(extractText_String(subsStr));
-            if(!isNaN(subsNum) && subsNum > 0) {
-               subCount = subsNum;
-                break;
-            }
-        }
+		if(metadataRows)
+			for(let row of metadataRows) {
+				const subsStr = row.metadataParts.find(x=>x.text?.content?.indexOf("subscribers") > 0)?.text?.content;
+				if(!subsStr)
+					continue;
+				const subsNum = extractHumanNumber_Integer(extractText_String(subsStr));
+				if(!isNaN(subsNum) && subsNum > 0) {
+				subCount = subsNum;
+					break;
+				}
+			}
 
         return new PlatformChannel({
             id: new PlatformID(PLATFORM, id, config.id, PLATFORM_CLAIMTYPE),

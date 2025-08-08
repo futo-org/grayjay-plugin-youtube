@@ -302,6 +302,13 @@
 			"description": "Enables POT generation for session requests",
 			"type": "Boolean",
 			"default": "true"
+		},
+		{
+			"variable": "fallback_home_trending",
+			"name": "Fallback to Trending if Home unavailable",
+			"description": "Will fallback to Trending if home is unavailable (eg. no login)",
+			"type": "Boolean",
+			"default": "true"
 		}
 	],
 
@@ -334,6 +341,9 @@
 		"271": [
 			"Feature: Shorts feed support",
 			"Feature: Historic/VOD live chat",
+			"Improvement: UMP compatibility changes",
+			"Fix: Home trending fallback fixed and improved",
+			"Fix: Subtitles should work again",
 			"Fix: Remove old trending fallback setting"
 		],
 		"270": [
