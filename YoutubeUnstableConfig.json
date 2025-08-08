@@ -302,6 +302,13 @@
 			"description": "Enables POT generation for session requests",
 			"type": "Boolean",
 			"default": "true"
+		},
+		{
+			"variable": "fallback_home_trending",
+			"name": "Fallback to Trending if Home unavailable",
+			"description": "Will fallback to Trending if home is unavailable (eg. no login)",
+			"type": "Boolean",
+			"default": "true"
 		}
 	],
 

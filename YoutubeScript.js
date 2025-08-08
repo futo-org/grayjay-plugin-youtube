@@ -345,7 +345,55 @@ source.getHome = (initialDataOverride) => {
 	}
 };
 
+const URL_TRENDING_CHANNEL = "https://www.youtube.com/channel/UCF0pVplsI8R5kcAqgtoRqoA";
 source.getTrending = () => {
+	const initialData = requestInitialData(URL_TRENDING_CHANNEL, false, false);
+	if(!initialData)
+	    throw new ScriptException("No channel data found for: " + url);
+
+	const errorAlerts = initialData?.alerts?.filter(x=>x.alertRenderer?.type == "ERROR") ?? [];
+	if(errorAlerts.length > 0){
+		throw new UnavailableException(extractText_String(errorAlerts[0].alertRenderer.text));
+	}
+
+	const channel = extractChannel_PlatformChannel(initialData, "https://www.youtube.com/channel/UCF0pVplsI8R5kcAqgtoRqoA", {
+		id: "UCF0pVplsI8R5kcAqgtoRqoA"
+	});
+	const allowShorts = false;
+	const contextData = {
+		authorLink: new PlatformAuthorLink(new PlatformID(PLATFORM, channel.id.value, config.id, PLATFORM_CLAIMTYPE), escapeUnicode(channel.name), channel.url, channel.thumbnail),
+		allowShorts: allowShorts
+	};
+	const tabs = extractPage_Tabs(initialData, contextData);
+	const tab = tabs.find(x=>x.title == "Now");
+	if(!tab) 
+		return new VideoPager([], false);
+	if(IS_TESTING)
+		console.log("Tab", tab);
+
+	if(!tab.videos?.length && tab.shelves && tab.shelves.length > 0) {
+		let newTab = {
+			videos: []
+		};
+		let bestContin = null;
+		let bestContinCount = 0;
+		for(let subTab of tab.shelves) {
+			if(subTab.videos) {
+				newTab.videos = newTab.videos.concat(subTab.videos);
+				if(bestContinCount < subTab.videos.length) {
+					//TODO: Continuation?
+				}
+			}
+		}
+		log("Channel Result Count: " + tab?.videos?.length)
+		return new RichGridPager(newTab, contextData, false, false);
+	}
+
+	//throw new ScriptException("Could not find tab: " + targetTab);
+	log("Channel Result Count: " + tab?.videos?.length)
+	return new RichGridPager(tab, contextData, false, false);
+	/*
+
     let initialData = requestInitialData(URL_TRENDING, USE_MOBILE_PAGES, false);
     if(IS_TESTING)
         console.log("getTrending initialData", initialData);
@@ -361,6 +409,7 @@ source.getTrending = () => {
 		}
 	}
 	return new RichGridPager(tab, {}, USE_MOBILE_PAGES, false);
+	*/
 };
 
 //Search
@@ -611,7 +660,8 @@ class YTSessionClient {
 		//Video details
 		let contextData = {
 			url: urlFiltered,
-			jsUrl: context.jsUrl
+			jsUrl: context.jsUrl,
+			bgData: context.bgData
 		};
 		const videoDetails = extractVideoPlayerData_VideoDetails(playerData, context.jsUrl, contextData);
 
@@ -798,38 +848,7 @@ function extractVideoPlayerData_VideoDetails(playerData, jsUrl, contextData) {
 						format: "text/vtt",
 
 						getSubtitles() {
-							const subResp = http.GET(x.baseUrl, {});
-							if(!subResp.isOk)
-								return "";
-							const asr = subResp.body;
-							let lines = asr.match(REGEX_ASR);
-							const newSubs = [];
-							let skipped = 0;
-							for(let i = 0; i < lines.length; i++) {
-								const line = lines[i];
-								const lineParsed = /<text .*?start="(.*?)" .*?dur="(.*?)".*?>(.*?)<\/text>/gms.exec(line);
-
-								const start = parseFloat(lineParsed[1]);
-								const dur = parseFloat(lineParsed[2]);
-								let end = start + dur;
-								const text = decodeHtml(lineParsed[3]);
-
-								const nextLine = (i + 1 < lines.length) ? lines[i + 1] : null;
-								if(nextLine) {
-									const lineParsedNext = /<text .*?start="(.*?)" .*?dur="(.*?)".*?>(.*?)<\/text>/gms.exec(nextLine);
-									const startNext = parseFloat(lineParsedNext[1]);
-									const durNext = parseFloat(lineParsedNext[2]);
-									const endNext = startNext + durNext;
-									if(startNext && startNext < end)
-										end = startNext;
-								}
-
-								newSubs.push((i - skipped + 1) + "\n" +
-									toSRTTime(start, true) + " --> " + toSRTTime(end, true) + "\n" +
-									text + "\n");
-							}
-							console.log(newSubs);
-							return "WEBVTT\n\n" + newSubs.join('\n');
+							return getConvertedSubtitles(videoDetails.videoId, x, contextData);
 						}
 					};
 				}
@@ -1084,8 +1103,13 @@ source.getContentDetails = (url, useAuth, simplify, forceUmp, options) => {
 		jsUrl: jsUrl
 	};
 
+	log("getBGDataFromClientConfig");
+	let bgData = getBGDataFromClientConfig(clientConfig, usedLogin);
+
+
 	log("extractVideoPage_VideoDetails (start)");
 	const videoDetails = extractVideoPage_VideoDetails(urlFiltered, initialData, initialPlayerData, {
+		bgData: bgData,
 		pot: options?.pot,
 		httpClient: overrideHttpClient,
 		url: urlFiltered,
@@ -1107,10 +1131,6 @@ source.getContentDetails = (url, useAuth, simplify, forceUmp, options) => {
 		if (!simplify)
 			throw new UnavailableException("No sources found");
 	}
-
-	log("getBGDataFromClientConfig");
-	let bgData = getBGDataFromClientConfig(clientConfig, usedLogin);
-
 
 	//Substitute Dash manifest from Android
 	if (USE_ANDROID_FALLBACK && videoDetails.dash && videoDetails.dash.url) {
@@ -3233,7 +3253,7 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 			if(umpResp.redirectUrl && i < maxRedirect - 1) {
 				bridge.toast("UMP Redirect..");
 				log("UMP Redirect URL:" + umpResp.redirectUrl);
-				abrUrl = decryptUrlN(umpResp.redirectUrl, parentSource.jsUrl);
+				abrUrl = umpResp.redirectUrl;
 				log("UMP Redirect URL (n param decrypted): " + abrUrl);
 				
 				log("UMP Redirecting to:\n" + umpResp.redirectUrl);
@@ -3675,6 +3695,7 @@ class YTABRExecutor {
 			time = this.findSegmentTime(overrideSegment - 1);
 			log("UMP [" + this.type + "], overriding timestamp " + oldTime + " => " + time);
 		}
+		console.log("====== UMP EXECUTE REQUEST (" + this.type + " [" + segment + ", " + time + "]) ======");
 
 		this.freeOldSegments(segment);
 		const cached = this.getCachedSegment(segment);
@@ -3696,11 +3717,17 @@ class YTABRExecutor {
 			sessionZm: this.parentSource?.sharedContext?.sessionZm
 		});
 		const postData = initialReq.serializeBinary();
+		const abrUrlToRequest = this.abrUrl + "&rn=" + this.rn;
+		log("UMP [" + this.type + "] requesting url: " + abrUrlToRequest); 
+
 		const initialResp = http.POST(this.abrUrl, postData, {
 			"Origin": "https://www.youtube.com",
 			"Accept": "*/*",
 			"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
 		}, false, true);
+
+		this.rn = (this.rn ?? 0) + 1;
+
 		if(!initialResp.isOk)
 			throw new ScriptException("Failed initial stream request [ " + initialResp.code + "]");
 
@@ -3753,13 +3780,18 @@ class YTABRExecutor {
 
 		this.lastRequest = (new Date()).getTime();
 
+		if(umpResp.redirectUrl) {
+			console.log("====== UMP FOUND REDIRECT URL ======", umpResp.redirectUrl);
+			this.abrUrl = umpResp.redirectUrl;
+		}
+
 		const stream = streamsArr[0];
 		if(!stream) {
 
 			if(umpResp.redirectUrl) {
 				log("UMP Responded with redirect Url: " + umpResp.redirectUrl);
 			}
-			log("UMP no stream, try recovery: \n" +
+			log("====== UMP no stream, try recovery: ====== \n" +
 				" - Had POT: " + !!pot + "\n" +
 				" - POT Worked: " + (this.lastWorkingPot == pot) + "\n" +
 				" - Has Redirect: " + !!umpResp.redirectUrl);
@@ -5296,7 +5328,7 @@ function extractSearch_SearchResults(data, contextData) {
  * @param initialData Initial data from a ChannelPage 
  * @returns {PlatformChannel}
  */
-function extractChannel_PlatformChannel(initialData, sourceUrl = null) {
+function extractChannel_PlatformChannel(initialData, sourceUrl = null, contextData = null) {
 	const errorAlerts = initialData?.alerts?.filter(x=>x.alertRenderer?.type == "ERROR") ?? [];
 	if(errorAlerts.length > 0){
 		throw new UnavailableException(extractText_String(errorAlerts[0].alertRenderer.text));
@@ -5348,7 +5380,7 @@ function extractChannel_PlatformChannel(initialData, sourceUrl = null) {
         const bannerTargetWidth = 1080;
         const banner = (banners && banners.length > 0) ? banners.sort((a,b)=>Math.abs(a.width - bannerTargetWidth) - Math.abs(b.width - bannerTargetWidth))[0] : { url: "" };
 
-        const id = initialData?.metadata?.channelMetadataRenderer?.externalId;
+        const id = contextData?.id ?? initialData?.metadata?.channelMetadataRenderer?.externalId;
         if(!id) {
             log("ID not found in new channel viewmodel:" + JSON.stringify(id, null, "   "));
 	        if(bridge.devSubmit) bridge.devSubmit("extractChannel_PlatformChannel - ID Not found in new channel view model", JSON.stringify(initialData));
@@ -5365,16 +5397,17 @@ function extractChannel_PlatformChannel(initialData, sourceUrl = null) {
 
         let subCount = 0;
         const metadataRows = headerRenderer?.content?.pageHeaderViewModel?.metadata?.contentMetadataViewModel?.metadataRows;
-        for(let row of metadataRows) {
-            const subsStr = row.metadataParts.find(x=>x.text?.content?.indexOf("subscribers") > 0)?.text?.content;
-            if(!subsStr)
-                continue;
-            const subsNum = extractHumanNumber_Integer(extractText_String(subsStr));
-            if(!isNaN(subsNum) && subsNum > 0) {
-               subCount = subsNum;
-                break;
-            }
-        }
+		if(metadataRows)
+			for(let row of metadataRows) {
+				const subsStr = row.metadataParts.find(x=>x.text?.content?.indexOf("subscribers") > 0)?.text?.content;
+				if(!subsStr)
+					continue;
+				const subsNum = extractHumanNumber_Integer(extractText_String(subsStr));
+				if(!isNaN(subsNum) && subsNum > 0) {
+				subCount = subsNum;
+					break;
+				}
+			}
 
         return new PlatformChannel({
             id: new PlatformID(PLATFORM, id, config.id, PLATFORM_CLAIMTYPE),
@@ -5485,38 +5518,7 @@ function extractVideoPage_VideoDetails(parentUrl, initialData, initialPlayerData
 						format: "text/vtt",
 
 						getSubtitles() {
-							const subResp = http.GET(x.baseUrl, {});
-							if(!subResp.isOk)
-								return "";
-							const asr = subResp.body;
-							let lines = asr.match(REGEX_ASR);
-							const newSubs = [];
-							let skipped = 0;
-							for(let i = 0; i < lines.length; i++) {
-								const line = lines[i];
-								const lineParsed = /<text .*?start="(.*?)" .*?dur="(.*?)".*?>(.*?)<\/text>/gms.exec(line);
-
-								const start = parseFloat(lineParsed[1]);
-								const dur = parseFloat(lineParsed[2]);
-								let end = start + dur;
-								const text = decodeHtml(lineParsed[3]);
-
-								const nextLine = (i + 1 < lines.length) ? lines[i + 1] : null;
-								if(nextLine) {
-									const lineParsedNext = /<text .*?start="(.*?)" .*?dur="(.*?)".*?>(.*?)<\/text>/gms.exec(nextLine);
-									const startNext = parseFloat(lineParsedNext[1]);
-									const durNext = parseFloat(lineParsedNext[2]);
-									const endNext = startNext + durNext;
-									if(startNext && startNext < end)
-										end = startNext;
-								}
-
-								newSubs.push((i - skipped + 1) + "\n" +
-									toSRTTime(start, true) + " --> " + toSRTTime(end, true) + "\n" +
-									text + "\n");
-							}
-							console.log(newSubs);
-							return "WEBVTT\n\n" + newSubs.join('\n');
+							return getConvertedSubtitles(videoDetails.videoId, x, contextData);
 						}
 					};
 				}
@@ -5646,6 +5648,90 @@ function extractVideoPage_VideoDetails(parentUrl, initialData, initialPlayerData
     return result;
 }
 
+function convertSubtitleResponse(subResp) {
+	if (!subResp.isOk)
+		return "";
+	const asr = subResp.body;
+	if(asr.length == 0)
+		throw new ScriptException("Subtitles empty response");
+	let lines = asr.match(REGEX_ASR);
+	const newSubs = [];
+	let skipped = 0;
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i];
+		const lineParsed = /<text .*?start="(.*?)" .*?dur="(.*?)".*?>(.*?)<\/text>/gms.exec(line);
+
+		const start = parseFloat(lineParsed[1]);
+		const dur = parseFloat(lineParsed[2]);
+		let end = start + dur;
+		const text = decodeHtml(lineParsed[3]);
+
+		const nextLine = (i + 1 < lines.length) ? lines[i + 1] : null;
+		if (nextLine) {
+			const lineParsedNext = /<text .*?start="(.*?)" .*?dur="(.*?)".*?>(.*?)<\/text>/gms.exec(nextLine);
+			const startNext = parseFloat(lineParsedNext[1]);
+			const durNext = parseFloat(lineParsedNext[2]);
+			const endNext = startNext + durNext;
+			if (startNext && startNext < end)
+				end = startNext;
+		}
+
+		newSubs.push((i - skipped + 1) + "\n" +
+			toSRTTime(start, true) + " --> " + toSRTTime(end, true) + "\n" +
+			text + "\n");
+	}
+	console.log(newSubs);
+	return "WEBVTT\n\n" + newSubs.join('\n');
+}
+function getConvertedSubtitles(videoId, subRaw, contextData) {
+	const bgData = contextData?.bgData;
+	const pot = contextData.pot;
+	if (pot) {
+		bridge.toast("Subtitles using included POT");
+		const subResp = http.GET(subRaw.baseUrl + "&pot=" + pot, {});
+		return (convertSubtitleResponse(subResp));
+	}
+	else if (canUse("Async") && bgData) {
+		bridge.toast("Subtitles using generated POT");
+		return new Promise((resolve, reject) => {
+			setTimeout(() => {
+				if (!didResolve) {
+					reject("timeout");
+					didResolve = true;
+				}
+			}, 2000)
+			let didResolve = false;
+			tryGetBotguard((bg) => {
+				bg.getTokenOrCreateCustom(videoId, (pot) => {
+					log("Botguard token to use (Subtitles): " + pot);
+					console.log("Botguard Token to use (Subtitles):", pot);
+					bridge.toast("Subtitles got POT");
+
+					const url = subRaw.baseUrl + "&potc=1&pot=" + encodeURIComponent(pot) + "&c=" + bgData.c + "&cver=" + bgData.cver;
+					console.log(url);
+					const subResp = http.GET(url, {});
+
+					if (!didResolve) {
+						didResolve = true;
+						resolve(convertSubtitleResponse(subResp));
+					}
+					else {
+
+					}
+				});
+			})
+		});
+	}
+	else {
+		bridge.toast("Subtitles without POT");
+		log("Subtitles without POT (canUse:" + canUse("Async") + ", bgData: " + JSON.stringify(bgData) + ")")
+		const subResp = http.GET(subRaw.baseUrl, {});
+		return convertSubtitleResponse(subResp);
+	}
+}
+
+
+
 function getBGDataFromClientConfig(clientConfig, usedLogin) {
 
 	let visitorDataType = "Unknown";
@@ -5662,12 +5748,14 @@ function getBGDataFromClientConfig(clientConfig, usedLogin) {
 	const visitorDataLogin = usedLogin ? (clientConfig?.EOM_VISITOR_DATA ?? clientConfig?.VISITOR_DATA) : null;
 	console.log("VisitorData: ", visitorData);
 	log("VisitorDataType: " + visitorDataType);
-
+	console.log("clientconfig:", clientConfig);
 	return { 
 		visitorData: visitorData?.replaceAll("%3D", "="),
 		visitorDataLogin: visitorDataLogin?.replaceAll("%3D", "="),
 		dataSyncId: clientConfig?.DATASYNC_ID, 
-		visitorDataType: visitorDataType
+		visitorDataType: visitorDataType,
+		c: clientConfig?.INNERTUBE_CONTEXT?.client?.clientName,
+		cver: clientConfig?.INNERTUBE_CONTEXT?.client?.clientVersion
 	}
 }
 
@@ -8195,17 +8283,26 @@ class UMPResponse {
 						const opCode35 = pb.Opcode35_pb.Opcode35.deserializeBinary(segment);
 						this.playbackCookie = opCode35.getPlaybackcookie();
 						this.backOffTime = opCode35.getBackofftimems();
-					break;
+						break;
 					case 43://Message
 						const opCode43 = pb.Opcode43_pb.Opcode43.deserializeBinary(segment);
 						this.redirectUrl = opCode43?.getRedirecturl();
 						log("Redirect url found: " + this.redirectUrl);
+						break;
 					case 44: //Unknown
 						const opCode44 = pb.Opcode44_pb.Opcode44.deserializeBinary(segment);
 						console.error("UMP Error", opCode44.getBda());
 						log("Error:" + opCode44.getBda());
 						console.log("");
-					break;
+						break;
+					case 47: //Unknown
+						const opCode47 = pb.Opcode47_pb.Opcode47.deserializeBinary(segment);
+						console.log(opCode47);
+						break;
+					case 53: //Unknown
+						const opCode53 = pb.Opcode53_pb.Opcode53.deserializeBinary(segment);
+						console.log(opCode53);
+						break;
 					case 57:
 						const opCode57 = pb.Opcode57_pb.Opcode57.deserializeBinary(segment);
 						console.log(opCode57);
@@ -8217,6 +8314,10 @@ class UMPResponse {
 								value: opCode57.getValue()
 							};
 						}
+						break;
+					case 58: //Unknown
+						const opCode58 = pb.Opcode58_pb.Opcode58.deserializeBinary(segment);
+						console.log(opCode58);
 						break;
 					case 67:
 						const opCode67 = pb.Opcode49_pb.Opcode49.deserializeBinary(segment);
@@ -8432,7 +8533,18 @@ source.testUMPRecovery = async function(){
 	}
 	return;
 };
-source.testUMP = async function(url, startSegment, endSegment, itag, isAudio){
+source.testUMPSessions = async function(url) {
+	let urls = Array.isArray(url) ? url : [url];
+	for(let i = 0; i < 10; i++) {
+		console.log("====== SESSION " + (i + 1) + " START ======");
+		setDevSettings({use_session_client: true, use_session_client_pot: true, allow_ump_backoff_async: true})
+		core.reloadPlugin();
+		const urlToUse = urls[i % urls.length];
+		await source.testUMP(urlToUse, 11, 17, 136, false);
+		console.log("====== SESSION " + (i + 1) + " END ======");
+	}
+}
+source.testUMP = async function(url, startSegment, endSegment, itag, isAudio, cb){
 	USE_ABR_VIDEOS = true;
 	const item = this.getContentDetails(url);
 	console.log(item);
@@ -8445,22 +8557,33 @@ source.testUMP = async function(url, startSegment, endSegment, itag, isAudio){
 		video = item.video.videoSources.find(x=>x.name.startsWith("UMP") && x.container == "video/mp4" && x.height == 720);
 	
 
-	setTimeout(async ()=>{
-		const generated = video.generate();
-		console.log("Generated:", generated);
-		const executor = video.getRequestExecutor();
 
-		if(endSegment && endSegment > 0) {
-			for(let i = startSegment; i < endSegment; i++) {
-				const resp = executor.executeRequest("https://grayjay.app/internal/video?segIndex=" + i, {});
-				resp.buffer.transfer();
-				await delay(2000);
+	return new Promise(async (resolve, reject) => {
+		setTimeout(async ()=>{
+			const generated = await video.generate();
+			console.log("Generated:", generated);
+			const executor = video.getRequestExecutor();
+
+			if(endSegment && endSegment > 0) {
+				for(let i = startSegment; i < endSegment; i++) {
+					const resp = executor.executeRequest("https://grayjay.app/internal/video?segIndex=" + i, {});
+					resp.buffer.transfer();
+					await delay(2000);
+				}
 			}
-		}
-		executor.cleanup();
-	}, 1000);
-	return;
+			executor.cleanup();
+			resolve();
+		}, 1000);
+	});
 };
+source.testSubtitles = function(url) {
+	let content = source.getContentDetails(url);
+	console.log(content);
+	let subtitle = content.subtitles[0];
+	console.log(subtitle);
+	let subtitleRaw = subtitle.getSubtitles();
+	console.log(subtitleRaw);
+}
 source.testIOS = async function(url, itag, isAudio){
 	const item = this.getContentDetails(url);
 	console.log(item);
@@ -9025,6 +9148,22 @@ class BotGuardGenerator {
 		return this.mint;
 	}
 
+	getTokenOrCreateCustom(customToken, cb) {
+		if(!customToken)
+			throw new ScriptException("No token Id provided for botguard");
+
+		let idToUse = customToken;
+
+		const existing = this.generatedTokens[idToUse];
+		if(!existing) {
+			log("No existing botguard customToken, generating new");
+			this.generateBase64(customToken, customToken, (token)=>{
+				cb(token);
+			});
+		}
+		else //TODO: check expiry?
+			cb(existing.tokenBase64);
+	}
 	getTokenOrCreate(visitorId, dataSyncId, cb, type) {
 		if(!visitorId && !dataSyncId)
 			throw new ScriptException("No visitor or datasync Id provided for botguard");
