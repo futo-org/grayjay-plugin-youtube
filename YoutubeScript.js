@@ -9109,7 +9109,7 @@ class BotGuardGenerator {
 			log("No existing botguard customToken, generating new");
 			this.generateBase64(customToken, customToken, (token)=>{
 				cb(token);
-			}, type);
+			});
 		}
 		else //TODO: check expiry?
 			cb(existing.tokenBase64);
