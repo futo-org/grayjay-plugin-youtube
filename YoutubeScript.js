@@ -3720,7 +3720,7 @@ class YTABRExecutor {
 		const abrUrlToRequest = this.abrUrl + "&rn=" + this.rn;
 		log("UMP [" + this.type + "] requesting url: " + abrUrlToRequest); 
 
-		const initialResp = http.POST(this.abrUrl, postData, {
+		const initialResp = http.POST(abrUrlToRequest, postData, {
 			"Origin": "https://www.youtube.com",
 			"Accept": "*/*",
 			"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
