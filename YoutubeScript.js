@@ -2975,6 +2975,9 @@ class YTABRVideoSource extends DashManifestRawSource {
 			me.indexStart = fileHeader.indexRangeStart;
 			me.indexEnd = fileHeader.indexRangeEnd;
 
+			if(umpResp.redirectUrl)
+				me.abrUrl = umpResp.redirectUrl;
+
 			return dash;
 		}
 
@@ -3252,9 +3255,20 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 		if(!umpResp.streams[0]?.data) {
 			if(umpResp.redirectUrl && i < maxRedirect - 1) {
 				bridge.toast("UMP Redirect..");
-				log("UMP Redirect URL:" + umpResp.redirectUrl);
 				abrUrl = umpResp.redirectUrl;
-				log("UMP Redirect URL (n param decrypted): " + abrUrl);
+				options.rn = (options?.rn ?? 1) + 1;
+				if(abrUrl.indexOf("&cpn=") <= 0) {
+					abrUrl += "&cpn=" + randomString(16);
+				}
+				if(abrUrl.indexOf("&cver=") <= 0) {
+					abrUrl += "&cver=2.20250131.01.00";
+				}
+				if(abrUrl.indexOf("&rn=") <= 0) {
+					abrUrl += "&rn=" + ((options.rn) ? options.rn : "1");
+				}
+				if(abrUrl.indexOf("&alr=") <= 0) {
+					abrUrl += "&alr=yes";
+				}
 				
 				log("UMP Redirecting to:\n" + umpResp.redirectUrl);
 				initialResp = http.POST(abrUrl, postData, {
@@ -3266,7 +3280,7 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 					throw new ScriptException("Failed initial stream request [ " + initialResp.code + "]");
 			
 				const data = initialResp.body;
-				let byteArray = undefined;
+				byteArray = undefined;
 				if(data instanceof ArrayBuffer)
 					byteArray = new Uint8Array(data);
 				else if(typeof data == "string")
@@ -3281,6 +3295,7 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 				throw new ScriptException("No stream data in initial UMP response");
 			}
 		}
+		else break;
 	}
 
 	let streams = [];
