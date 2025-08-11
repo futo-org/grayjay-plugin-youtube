@@ -344,7 +344,8 @@
 			"Improvement: UMP compatibility changes",
 			"Fix: Home trending fallback fixed and improved",
 			"Fix: Subtitles should work again",
-			"Fix: Remove old trending fallback setting"
+			"Fix: Remove old trending fallback setting",
+			"Fix: Possible fix 'YTSessionClient not initialized'"
 		],
 		"270": [
 			"HOTFIX: Fix home page not parsing for some users",

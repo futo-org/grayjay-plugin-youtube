@@ -911,8 +911,9 @@ let sessionClient = undefined;
 source.getContentDetails = (url, useAuth, simplify, forceUmp, options) => {
 	if(FORCE_YTSESSION || (_settings?.use_session_client && canBatchDummy)) {
 		if(!sessionClient) {
-			sessionClient = new YTSessionClient();
-			sessionClient.initialize();	
+			newSessionClient = new YTSessionClient();
+			newSessionClient.initialize();	
+			sessionClient = newSessionClient;
 		}
 		return sessionClient.getContentDetails(url, useAuth, simplify, options);
 	}
