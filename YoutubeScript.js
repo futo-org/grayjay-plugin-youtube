@@ -5234,7 +5234,10 @@ function getClientConfig(html) {
 		}
 	}
 
-	if(!match) throw new ScriptException("Context structure not found");
+	if(!match) {
+	    if(bridge.devSubmit) bridge.devSubmit("getClientConfig - Context structure not found", html);
+		throw new ScriptException("Context structure not found");
+	}
 	return JSON.parse(match[1]);
 }
 //#endregion
