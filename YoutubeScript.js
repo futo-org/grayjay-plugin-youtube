@@ -911,7 +911,7 @@ let sessionClient = undefined;
 source.getContentDetails = (url, useAuth, simplify, forceUmp, options) => {
 	if(FORCE_YTSESSION || (_settings?.use_session_client && canBatchDummy)) {
 		if(!sessionClient) {
-			newSessionClient = new YTSessionClient();
+			let newSessionClient = new YTSessionClient();
 			newSessionClient.initialize();	
 			sessionClient = newSessionClient;
 		}
@@ -4395,6 +4395,7 @@ class ShortsVideoPager extends VideoPager {
 			else {
 				this.nextPage();
 			}
+			this.hasMore = !!this.sequenceId || (this.nextPageData && this.nextPageData.length > 0);
 		}
 		else {
 			const body = {
@@ -4424,10 +4425,13 @@ class ShortsVideoPager extends VideoPager {
 			
 			continuation = json?.continuationEndpoint?.continuationCommand?.token;
 			this.sequenceId = continuation;
+			if(!continuation) {
+				console.log("Shorts no more pages?", json);
+			}
+			this.hasMore = !!continuation || (this.nextPageData && this.nextPageData.length > 0);
 		}
 
 		this.results = videos;
-		this.hasMore = !!continuation || (this.nextPageData && this.nextPageData.length > 0);
 		return this;
 	}
 }
