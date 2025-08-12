@@ -353,7 +353,7 @@ source.getTrending = () => {
 
 	const errorAlerts = initialData?.alerts?.filter(x=>x.alertRenderer?.type == "ERROR") ?? [];
 	if(errorAlerts.length > 0){
-		throw new UnavailableException(extractText_String(errorAlerts[0].alertRenderer.text));
+		throw new UnavailableException("Trending is unavailable.\nSadly login is required for home pages (for now).");//extractText_String(errorAlerts[0].alertRenderer.text));
 	}
 
 	const channel = extractChannel_PlatformChannel(initialData, "https://www.youtube.com/channel/UCF0pVplsI8R5kcAqgtoRqoA", {
