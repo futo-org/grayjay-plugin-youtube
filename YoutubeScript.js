@@ -345,6 +345,35 @@ source.getHome = (initialDataOverride) => {
 	}
 };
 
+//Just a test..
+source.getPolycentricTrending = () =>{
+	const resp = http.GET("");
+
+	console.log(resp.body);
+
+	const urls = resp.body.split("\n")
+		.filter(x=>x.match(/https:\/\/www.youtube.com\/watch\?v=[0-9a-zA-Z]+/))
+		.map(x=>x.match(/https:\/\/www.youtube.com\/watch\?v=[0-9a-zA-Z]+/)[0]);
+	console.log(urls);
+	const vids = [];
+
+	for(let url of urls) {
+		try {
+			const vid = source.getContentDetails(url, false, true, false, {
+				noSources: true
+			});
+
+			vids.push(vid);
+		}catch(ex){
+			console.error("Failed to get video", ex);
+		}
+		}
+	for(let vid of vids) {
+		console.log(vid.name || vid.title);
+	}
+	return new VideoPager(vids, false);
+};
+
 const URL_TRENDING_CHANNEL = "https://www.youtube.com/channel/UCF0pVplsI8R5kcAqgtoRqoA";
 source.getTrending = () => {
 	const initialData = requestInitialData(URL_TRENDING_CHANNEL, false, false);
@@ -585,6 +614,7 @@ class YTSessionClient {
 		if(!this.initialized)
 			throw new ScriptException("YTSessionClient not initialized");
 
+		log("getContentDetails: " + url);
 		if(options?.noSources)
 			log("getContentDetails without sources requested");
 
@@ -668,6 +698,10 @@ class YTSessionClient {
 
 		if(initialData)
 			extractVideoDetailsInitialData_Metadata(initialData, videoDetails);
+
+		if(!videoDetails) {
+			throw new UnavailableException("No video found for [" + videoId + "]");
+		}
 
 		//#region Extract Streams
 		if(!simplify) {
@@ -4378,8 +4412,8 @@ class ShortsVideoPager extends VideoPager {
 		this.context = context;
 		this.sequenceId = sequenceId;
 		this.useAuth = useAuth;
-		this.nextPage(videos);
 		this.nextPageData = [];
+		this.nextPage(videos);
 	}
 
 	nextPage(addVideos) {
@@ -4388,7 +4422,7 @@ class ShortsVideoPager extends VideoPager {
 		let videos = addVideos ?? [];
 		if(this.nextPageData && this.nextPageData.length > 0) {
 			const first = this.nextPageData.shift();		
-			const [video, continuation] = fetchReelItemWatch(this.useAuth, first.videoId, first.playerParams);
+			const [video, continuation] = fetchReelItemWatch(this.useAuth, first.videoId, first.playerParams, first.params);
 			if(video) {
 				videos.push(video);
 			} 
@@ -4403,21 +4437,29 @@ class ShortsVideoPager extends VideoPager {
 				playbackContext: undefined,
 				sequenceParams: this.sequenceId
 			}
-			const resp = http.POST("https://www.youtube.com/youtubei/v1/reel/reel_watch_sequence?prettyPrint=false", JSON.stringify(body), {}, this.useAuth);
+			const headers = this.useAuth ? getAuthContextHeaders(false) : {};
+			if(this.useAuth && this.context.VISITOR_DATA)
+				headers["X-Goog-Visitor-Id"] = this.context.VISITOR_DATA;
+			const resp = http.POST("https://www.youtube.com/youtubei/v1/reel/reel_watch_sequence?prettyPrint=false", JSON.stringify(body), headers, this.useAuth);
 			if(!resp.isOk)
 				throw new ScriptException("Failed to get initial source feed [" + resp.code + "]");
 			const json = JSON.parse(resp.body);
 
 			let nextPageData = [];
+			let logStr = "";
 			for(let command of json.entries) {
 				const reelWatchEndpoint = command?.command?.reelWatchEndpoint;
 				if(reelWatchEndpoint) {
 					const video = extractReelWatchEndpoint_Video(reelWatchEndpoint);
 					if(video) {
-						if(video.name)
+						if(video.name) {
 							videos.push(video);
-						else
+							logStr += "Video: [" + video.id.value + "]" + video.name + "\n";
+						}
+						else {
 							nextPageData.push(reelWatchEndpoint);
+							logStr += "Planned: [" + reelWatchEndpoint.videoId + "]\n";
+						}
 					}
 				}
 			}
@@ -4429,25 +4471,30 @@ class ShortsVideoPager extends VideoPager {
 				console.log("Shorts no more pages?", json);
 			}
 			this.hasMore = !!continuation || (this.nextPageData && this.nextPageData.length > 0);
+			log(logStr);
 		}
 
 		this.results = videos;
 		return this;
 	}
 }
-function fetchReelItemWatch(useAuth, id, playerParams) {
+function fetchReelItemWatch(useAuth, id, playerParams, params) {
 	const context = getClientContext(useAuth);
+	const headers = useAuth ? getAuthContextHeaders(false) : {};
+	if(useAuth && context.VISITOR_DATA)
+		headers["X-Goog-Visitor-Id"] = context.VISITOR_DATA;
+
 	const body = {
 		context: context.INNERTUBE_CONTEXT,
-		disablePlayerResponse: !!(id || playerParams),
-		inputType: "REEL_WATCH_INPUT_TYPE_SEEDLESS",
-		params: "CA8%3D",
+		disablePlayerResponse: !(id || playerParams),
+		inputType: (!id) ? "REEL_WATCH_INPUT_TYPE_SEEDLESS" : undefined,
+		params: params ?? "CA8%3D",
 		playerRequest: (id || playerParams) ? {
 			videoId: id ?? undefined,
-			//params: playerParams ?? undefined
+			params: playerParams ?? undefined
 		} : undefined
 	}
-	const resp = http.POST("https://www.youtube.com/youtubei/v1/reel/reel_item_watch?prettyPrint=false", JSON.stringify(body), {}, useAuth);
+	const resp = http.POST("https://www.youtube.com/youtubei/v1/reel/reel_item_watch?prettyPrint=false", JSON.stringify(body), headers, useAuth);
 	if(!resp.isOk)
 		throw new ScriptException("Failed to get initial source feed [" + resp.code + "]");
 	const json = JSON.parse(resp.body);
@@ -4528,6 +4575,8 @@ function extractReelItemWatch_VideoAndContinuation(json) {
 			extractType: "Short",
 		});
 
+	log("Short extractReelItemWatch: " + video.name, endpointVideo);
+
 	return [video, sequenceContinuation]
 }
 function extractReelWatchEndpoint_Video(endpoint) {
@@ -4535,6 +4584,9 @@ function extractReelWatchEndpoint_Video(endpoint) {
 		return undefined;
 	const id = endpoint.videoId;
 	const url = URL_BASE + "/watch?v=" + id;
+
+	if(IS_TESTING)
+		console.log("Short endpoint", endpoint);
 	
 	const videoDetails = (endpoint?.unserializedPrefetchData?.playerResponse) ? extractVideoPlayerData_VideoDetails(endpoint?.unserializedPrefetchData?.playerResponse, undefined, {
 		noSources: true
@@ -4547,6 +4599,8 @@ function extractReelWatchEndpoint_Video(endpoint) {
 	const duration = videoDetails?.duration;
 	const viewCount = videoDetails?.viewCount;
 
+	if(!id)
+		console.log("No ID on short?", endpoint);
 
 	return new PlatformVideo({
 			id: new PlatformID(PLATFORM, id, config.id),
