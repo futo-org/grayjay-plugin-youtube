@@ -330,7 +330,15 @@
 		},
 		"cookiesToFind": ["SIDCC"],
 		"cookiesExclOthers": false,
-		"loginWarning": "You must select a profile after login for authentication to complete."
+		"loginWarning": "You must select a profile after login for authentication to complete.",
+		"loginWarnings": [
+			{
+				"url": "[a-z]+://www.youtube\\.com\\/channel_switcher.*",
+				"text": "Please select which profile to use",
+				"details": "This affects which profile will be used for recommendations and history",
+				"once": true
+			}
+		]
 	},
 
 	"supportedClaimTypes": [2],
