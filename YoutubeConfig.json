@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 271,
+	"version": 272,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -346,10 +346,21 @@
 
 
 	"changelog": {
+		"272": [
+			"Feature: Shorts feed support",
+			"Feature: Historic/VOD live chat",
+			"Improvement: UMP compatibility changes",
+			"Improvement: Login now gives warning telling you to select a profile after login",
+			"Fix: Home trending fallback fixed and improved",
+			"Fix: Subtitles should work again",
+			"Fix: Remove old trending fallback setting",
+			"Fix: Possible fix 'YTSessionClient not initialized'"
+		],
 		"271": [
 			"Feature: Shorts feed support",
 			"Feature: Historic/VOD live chat",
 			"Improvement: UMP compatibility changes",
+			"Improvement: Login now gives warning telling you to select a profile after login",
 			"Fix: Home trending fallback fixed and improved",
 			"Fix: Subtitles should work again",
 			"Fix: Remove old trending fallback setting",
