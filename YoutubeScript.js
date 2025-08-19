@@ -175,6 +175,8 @@ source.enable = (conf, settings, saveStateStr) => {
 	config = conf ?? {};
 	_settings = settings ?? {};
 
+	console.log("Settings", _settings)
+
 	if(typeof setTimeout !== 'function')
 		throw new ScriptException("Please update Grayjay, missing setTimeout");
 	
@@ -374,7 +376,9 @@ source.getPolycentricTrending = () =>{
 	return new VideoPager(vids, false);
 };
 
-const URL_TRENDING_CHANNEL = "https://www.youtube.com/channel/UCF0pVplsI8R5kcAqgtoRqoA";
+const URL_TRENDING_CHANNEL = "https://www.youtube.com/channel/UCYfdidRxbB8Qhf0Nx7ioOYw;";
+	//"https://www.youtube.com/channel/UCF0pVplsI8R5kcAqgtoRqoA"; //Trending channel
+	//"https://www.youtube.com/channel/UCYfdidRxbB8Qhf0Nx7ioOYw;" //News channel
 source.getTrending = () => {
 	const initialData = requestInitialData(URL_TRENDING_CHANNEL, false, false);
 	if(!initialData)
@@ -394,7 +398,7 @@ source.getTrending = () => {
 		allowShorts: allowShorts
 	};
 	const tabs = extractPage_Tabs(initialData, contextData);
-	const tab = tabs.find(x=>x.title == "Now");
+	const tab = tabs.find(x=>x.title == "Now" || x.title == "Top stories");
 	if(!tab) 
 		return new VideoPager([], false);
 	if(IS_TESTING)
@@ -414,7 +418,9 @@ source.getTrending = () => {
 				}
 			}
 		}
-		log("Channel Result Count: " + tab?.videos?.length)
+		log("Channel Result Count: " + tab?.videos?.length);
+
+		bridge.toast("Showing 'Top Stories', trending is not available.\nLogin for a normal Youtube home page.")
 		return new RichGridPager(newTab, contextData, false, false);
 	}
 
@@ -6623,7 +6629,7 @@ function extractRichShelfRenderer_Shelf(shelfRenderer, contextData) {
 		const item = shelfRenderer.contents[itemi];
 		switchKey(item, {
 			richItemRenderer(renderer) {
-				shelf.videos.push(extractRichItemRenderer_Video(renderer), contextData);
+				shelf.videos.push(extractRichItemRenderer_Video(renderer, contextData));
 			},
 			default(name) {
 				log("Unknown shelf renderer in extractRichShelfRenderer_Shelf: " + name);
@@ -6752,9 +6758,11 @@ function extractVideoRenderer_Video(videoRenderer, contextData) {
 	//	return  null; //Not a normal video
 
 
-
-	const author = (contextData && contextData.authorLink) ?
-		contextData.authorLink : extractVideoRenderer_AuthorLink(videoRenderer);
+	const authorVid = extractVideoRenderer_AuthorLink(videoRenderer);
+	let author = (contextData && contextData.authorLink) ?
+		contextData.authorLink : authorVid;
+	if(authorVid)
+		author = authorVid;
 
 	if(IS_TESTING)
 		console.log(videoRenderer);
