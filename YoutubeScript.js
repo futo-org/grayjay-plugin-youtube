@@ -793,7 +793,7 @@ class YTSessionClient {
 
 		//#region Return YoutubeDislikes
 		if(respDislikes)
-			videoDetails.rating = handleYoutubeDislikes(videoDetails.rating.likes, respDislikes) ?? videoDetails.rating;
+			videoDetails.rating = handleYoutubeDislikes(videoDetails.rating?.likes, respDislikes) ?? videoDetails.rating;
 		//#endregion
 
 		videoDetails.bgData = this.bgData;
@@ -937,7 +937,7 @@ function handleYoutubeDislikes(likes, resp) {
 			const youtubeDislikeInfo = JSON.parse(resp.body);
 			if(IS_TESTING)
 				console.log("Youtube Dislike Info", youtubeDislikeInfo);
-			return new RatingLikesDislikes(likes, youtubeDislikeInfo.dislikes);
+			return new RatingLikesDislikes(likes ?? youtubeDislikeInfo?.likes ?? 0, youtubeDislikeInfo.dislikes);
 		}
 	}
 	catch(ex) {
