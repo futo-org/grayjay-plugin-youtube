@@ -40,7 +40,7 @@ const URL_YOUTUBE_SPONSORBLOCK = "https://sponsor.ajay.app/api/skipSegments?vide
 const URL_YOUTUBE_RSS = "https://www.youtube.com/feeds/videos.xml?channel_id=";
 
 //Newest to oldest
-const CIPHER_TEST_HASHES = ["b7ed0796", "20830619", "4fcd6e4a", "c8dbda2a", "7795af42", "d50f54ef", "e7567ecf", "3bb1f723", "3400486c", "b22ef6e7", "a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
+const CIPHER_TEST_HASHES = ["093288cd", "b7ed0796", "20830619", "4fcd6e4a", "c8dbda2a", "7795af42", "d50f54ef", "e7567ecf", "3bb1f723", "3400486c", "b22ef6e7", "a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
 const CIPHER_TEST_PREFIX = "/s/player/";
 const CIPHER_TEST_SUFFIX = "/player_ias.vflset/en_US/base.js";
 
@@ -582,38 +582,39 @@ class YTSessionClient {
 		const jsUrl = (jsUrlMatch) ? jsUrlMatch[1] : clientConfig.PLAYER_JS_URL;
 		const isNewCipher = prepareCipher(jsUrl);
 
-		if(_settings.use_session_client_pot) {
-				tryGetBotguard((bg)=>{
-					bg.getTokenOrCreate(this.clientConfig.bgData.visitorData, this.clientConfig.bgData.dataSyncId, (pot)=>{
-						const potPart = (pot) ? pot.substring(0, 5) : "";
-						log("Botguard token to use: " + pot);
-						console.log("Botguard Token to use:", pot);
-						if(!!_settings["showVerboseToasts"])
-							bridge.toast("YTSessionClient got pot [" + potPart + "]")
-						this.clientConfig.pot = pot;
-					}, this.clientConfig.bgData.visitorDataType);
-				});
-				if (usedLogin) {
-					tryGetBotguard((bg)=>{
-						bg.getTokenOrCreate(this.clientConfigAuth.bgData.visitorData, this.clientConfigAuth.bgData.dataSyncId, (pot)=>{
-						const potPart = (pot) ? pot.substring(0, 5) : "";
-							log("Botguard token to use: " + pot);
-							console.log("Botguard Token to use:", pot);
-							if(!!_settings["showVerboseToasts"])
-								bridge.toast("YTSessionClient got pot (auth) [" + potPart + "]")
-							this.clientConfigAuth.pot = pot;
-						}, this.clientConfigAuth.bgData.visitorDataType);
-					});
-				}
-		}
-
-		return {
+		let newClientConfig = {
 			initialData: initialData,
 			clientConfig: clientConfig,
 			jsUrl: jsUrl,
 			sts: _sts[jsUrl],
 			bgData: getBGDataFromClientConfig(clientConfig, !!usedLogin)
+		};
+		if(_settings.use_session_client_pot) {
+				tryGetBotguard((bg)=>{
+					bg.getTokenOrCreate(newClientConfig.bgData.visitorData, newClientConfig.bgData.dataSyncId, (pot)=>{
+						const potPart = (pot) ? pot.substring(0, 5) : "";
+						log("Botguard token to use: " + pot);
+						console.log("Botguard Token to use:", pot);
+						if(!!_settings["showVerboseToasts"])
+							bridge.toast("YTSessionClient got pot [" + potPart + "]")
+						newClientConfig.pot = pot;
+					}, newClientConfig.bgData.visitorDataType);
+				});
+				if (usedLogin) {
+					tryGetBotguard((bg)=>{
+						bg.getTokenOrCreate(newClientConfig.bgData.visitorData, newClientConfig.bgData.dataSyncId, (pot)=>{
+						const potPart = (pot) ? pot.substring(0, 5) : "";
+							log("Botguard token to use: " + pot);
+							console.log("Botguard Token to use:", pot);
+							if(!!_settings["showVerboseToasts"])
+								bridge.toast("YTSessionClient got pot (auth) [" + potPart + "]")
+							newClientConfig.pot = pot;
+						}, newClientConfig.bgData.visitorDataType);
+					});
+				}
 		}
+
+		return newClientConfig;
 	}
 
 	getContentDetails(url, useAuth, simplify, forceUmp, options) {
@@ -8031,8 +8032,8 @@ function prepareCipher(jsUrl, codeOverride) {
 		_cipherDecode[jsUrl] = eval(cipherFunctionCode);
 
 		const decryptFunctionCode = getNDecryptorFunctionCode(playerCode, jsUrl, constantArrayName, constantArrayValues);
-
-		console.log("DecryptN Function: " + decryptFunctionCode);
+	
+		console.log("DecryptN Function: ", decryptFunctionCode);
 		_nDecrypt[jsUrl] = eval(decryptFunctionCode);
 
 		const stsMatch = playerCode.match(STS_REGEX);
@@ -8101,7 +8102,8 @@ function getNDecryptorFunctionCode(code, jsUrl, constantArrayName, constantArray
 		const nDecryptFunctionCodeMatches = [
 			escapeRegex(nDecryptFunctionName) + "=function\\(\\w\\)\\{[\\s\\S]*?join\\(\\\"\\\"\\)};",
 			escapeRegex(nDecryptFunctionName) + "=function\\(\\w\\)\\{[\\s\\S]*?join\\.call\\([a-zA-Z$_]+,\\\"\\\"\\)};",
-			new RegExp(escapeRegex(nDecryptFunctionName) + "=function\\(\\w\\)\\{[\\s\\S]*?join\\.call\\(.*?\\).*?};", "s")
+			new RegExp(escapeRegex(nDecryptFunctionName) + "=function\\(\\w\\)\\{[\\s\\S]*?join\\.call\\(.*?\\).*?};", "s"),
+			new RegExp(escapeRegex(nDecryptFunctionName) + "=function\\(\\w\\)\\{[\\s\\S]*?\\[\"join\"\\]\\(\\\"\\\"\\)};", "s"),
 	]
 	let nDecryptFunctionCodeMatch = undefined;
 	for(let functionRegex of nDecryptFunctionCodeMatches) {
@@ -8150,15 +8152,71 @@ function getNDecryptorFunctionCode(code, jsUrl, constantArrayName, constantArray
 			variableChecks.push(variableCheck[1]);
 		}
 	}
+	/*
+	const variableFunctionCheckRegex3 = new RegExp(/[^\({]var ([a-zA-Z0-9$_]+),([a-zA-Z0-9$_,]+);/gs);
+	while((variableCheck = variableFunctionCheckRegex3.exec(code)) != null) {
+		if(variableCheck && variableCheck.length > 1 && variableCheck[1].length < 4) {
+			let variables = [variableCheck[1]].concat(variableCheck[2].split(","));
+			for(let subVar of variables) {
+				if(variableChecks.indexOf(subVar) >= 0)
+					continue;
+				console.log("VariableFuncCheck found in cipher: " + subVar);
+				//prefix += "var " + variableCheck[1] + " = {}; ";
+				variableChecks.push(subVar);
+			}
+		}
+	}
 	if(variableChecks.length > 0)
 		prefix += "var " + variableChecks.map(x=>x + "={}").join(",") + ";\n";
+
+	function findGlobalSubFunction(variable, funcCall) {
+		const regex = new RegExp("[^a-zA-Z0-9_$]" + variable + "\\." + funcCall + "\\s*=\\s*(function\\(.*?\\)\\s*{.*?});", "s");
+		const match = code.match(regex);
+		if(match && match.length > 1) {
+			return match[1];
+		}
+		return undefined;
+	}
+
+	const globalCalls = {}
+	const variableSubFunctionCheckRegex1 = new RegExp(/([a-zA-Z_$0-9][a-zA-Z_$0-9]?)\.([a-zA-Z_$][a-zA-Z_$0-9])?\(/gs);
+	while((variableCheck = variableSubFunctionCheckRegex1.exec(nDecryptFunctionCodeMatch)) != null) {
+		if(variableCheck && variableCheck.length > 1) {
+			let variable = variableCheck[1];
+			let functionCall = variableCheck[2];
+			if(variableChecks.indexOf(variable) < 0)
+				continue;
+			console.log("VariableSubFunctionCheck found in cipher: " + variable + "." + functionCall);
+			if(!globalCalls[variable])
+				globalCalls[variable] = {};
+			const funcObj = globalCalls[variable];
+			if(funcObj[functionCall])
+				continue;
+			funcObj[functionCall] = findGlobalSubFunction(variable, functionCall);
+		}
+	}
+	console.log("Variable subfunction calls found: ", globalCalls);
+	let globalFuncSetters = "";
+	for(let globalVar in globalCalls) {
+		const globalFuncDecls = globalCalls[globalVar];
+		for(let funcDecl in globalFuncDecls) {
+			const funcCode = globalFuncDecls[funcDecl];
+			if(funcCode)
+				globalFuncSetters += globalVar + "." + funcDecl + " = " + globalCalls[globalVar][funcDecl] + "\n";
+		}
+	}
+	if(globalFuncSetters) {
+		console.log("Settings: ", globalFuncSetters);
+		prefix += globalFuncSetters;
+		prefix += "g.Gi=window;\n";
+	}*/
 
 	const globalFuncRegex = new RegExp(/var [A-Za-z0-9_$]+\s*=\s*function\(.*\)\s*{.*};$/gm);
 	let globalFuncCheck = undefined;
 	let globalFuncs = [];
 	let lastGlobalFuncCheckEnd = -1;
 	while((globalFuncCheck = globalFuncRegex.exec(code)) != null) {
-		if(globalFuncCheck && globalFuncCheck.length > 0) {
+		if(globalFuncCheck && globalFuncCheck.length > 0 && globalFuncCheck.index < 500000) {
 			if(globalFuncs.indexOf(globalFuncCheck[0]) >= 0)
 				continue;
 			console.log("GlobalFuncCheck found in cipher: " + globalFuncCheck[0]);

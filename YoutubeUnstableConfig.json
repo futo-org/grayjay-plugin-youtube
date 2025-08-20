@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 274,
+	"version": 275,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -337,6 +337,10 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"275": [
+			"Fix: Cipher fix",
+			"Fix: Race condition related to bgData fixed"
+		],
 		"274": [
 			"HOTFIX: Fix ReturnYoutubeDislikes enabled causing video error",
 			"Feature: Shorts feed support",
