@@ -8051,7 +8051,6 @@ function prepareCipher(jsUrl, codeOverride) {
 		}
 
 		log("CIPHER SOLVED USING LEGACY SOLUTION");
-		log("CIPHER PLAYER TEST: " + JSON.stringify(prepareCipherPlayer(jsUrl, playerCode)));
 
 		return true;//_cipherDecode[jsUrl];
 	}
@@ -8159,7 +8158,6 @@ function getVirtualizedPlayer(jsUrl, playerjs, extractFunctions) {
 			"/*\n")
 		.replace("})(_yt_player)", extraction + "}).call(this, _yt_player)");
 
-		currentJSDOM.window.aCorrect = true;
 	const playerScope = new Function("return (function(){\n\t" + 
 		"let playerScope = {}\n" +
 		playerJsToUse + "\n" +
