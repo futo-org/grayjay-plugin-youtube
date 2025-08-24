@@ -7848,6 +7848,9 @@ var _jsUrlScripts = {
 var _sts = {
 	
 };
+var _jsUrlPlayers = {
+
+};
 const REGEX_CIPHERS = [
 	new RegExp("(?:\\b|[^a-zA-Z0-9$])([a-zA-Z0-9$]{2,})\\s*=\\s*function\\(\\s*a\\s*\\)\\s*\\{\\s*a\\s*=\\s*a\\.split\\(\\s*\"\"\\s*\\)"),
 	new RegExp("\\bm=([a-zA-Z0-9$]{2,})\\(decodeURIComponent\\(h\\.s\\)\\)"),
@@ -7999,6 +8002,7 @@ function prepareCipher(jsUrl, codeOverride) {
 	log("New JS Url found: [" + jsUrl + "], fetching new js (total: " + (Object.keys(_cipherDecode).length + 1) + ")");
 
 	let codeUsed = undefined;
+	let playerCode = undefined;
 	try{
 		const playerCodeResp = http.GET(URL_BASE + jsUrl, {});
 		if(!playerCodeResp.isOk) {
@@ -8006,7 +8010,7 @@ function prepareCipher(jsUrl, codeOverride) {
 			throw new ScriptException("Failed to get player js");
 	    }
 		console.log("Javascript Url: " + URL_BASE + jsUrl);
-		let playerCode = (codeOverride) ? codeOverride : playerCodeResp.body;
+		playerCode = (codeOverride) ? codeOverride : playerCodeResp.body;
 		codeUsed = playerCode;
 
 		_jsUrlScripts[jsUrl] = playerCode;
@@ -8044,15 +8048,38 @@ function prepareCipher(jsUrl, codeOverride) {
 			console.log("sts: " + sts);
 		}
 
+		log("CIPHER SOLVED USING LEGACY SOLUTION");
+
 		return true;//_cipherDecode[jsUrl];
 	}
 	catch(ex) {
 		console.error(ex);
+		if(!!_settings.fallback_full_player && playerCode) {
+			if(prepareCipherPlayer(jsUrl, playerCode))
+				return true;
+		}
 		clearCipher(jsUrl);
         if(bridge.devSubmit) bridge.devSubmit("prepareCipher - Failed to get Cipher due to: Error:" + ex + "\n" + jsUrl, codeUsed ?? "No code fetched");
 		throw new ScriptException("Failed to get Cipher due to: " + ex + "\n" + jsUrl);
 	}
 }
+function prepareCipherPlayer(jsUrl, codeUsed) {
+		try {
+			bridge.toast("Falling back to virtualized player");
+			log("Using Cipher Player!!!");
+			const playerVirt = getVirtualizedPlayer(jsUrl, codeUsed);
+			_cipherDecode[jsUrl] = playerVirt.decryptSig ?? function(){throw "Not implemented (decryptSig) for " + jsUrl; }
+			_nDecrypt[jsUrl] = playerVirt.decryptN ?? function(){throw "Not implemented (decryptN) for " + jsUrl; }
+
+			log("CIPHER SOLVED USING PLAYER SOLUTION");
+			return true;
+		}
+		catch(ex) {
+			log("Player fallback failed: " + ex);
+			return false;
+		}
+}
+
 source.prepareCipher = prepareCipher;
 function clearCipher(jsUrl) {
     if(_cipherDecode[jsUrl])
@@ -8060,6 +8087,194 @@ function clearCipher(jsUrl) {
     if(_nDecrypt[jsUrl])
         _nDecrypt[jsUrl] = undefined;
 }
+function readJSScope(code, indexStart) {
+	if(code[indexStart] != "{")
+		throw "Didn't start with {";
+	let level = 0;
+		console.log("context: " + code.substring(indexStart, indexStart + 100));
+	for(let i = indexStart + 1; i < code.length; i++) {
+		const char = code[i];
+		if(char == "{")
+			level++;
+		else if(char == "}")
+			level--;
+		if(level < 0)
+			return code.substring(indexStart, i + 1);
+	}
+	return undefined;
+}
+function findRecursiveFunctions(globalCode, subCode, funcRegex, exclude) {
+	let recurCallMatch = null;
+	let newFuncs = {};
+	while((recurCallMatch = funcRegex.exec(subCode)) != null) {
+		const recurCallName = recurCallMatch[1];
+		if(newFuncs[recurCallName] || exclude.indexOf(recurCallName) >= 0)
+			continue;
+		const regex = `[^\.](${recurCallName}\\s*=\\s*(function\\([a-zA-Z_$0-9,\\s]*\\)){)(.*?)\\}`;
+		const funcDefMatch = globalCode.match(new RegExp(regex, "s"));
+		if(!funcDefMatch) {
+			console.log("Unable to find recursive func :" + funcDefMatch, regex);
+			continue;
+		}
+		let funcBodyPrefix = funcDefMatch[1];
+		let funcFunctionPrefix = funcDefMatch[2];
+		let scopeStartIndex = funcDefMatch.index + funcBodyPrefix.length;
+		const funcBody = readJSScope(globalCode, scopeStartIndex);
+		if(!funcBody) {
+			console.log("Recursive func [" + recurCallName + "] too complex?")
+			funcDefFunc = undefined;
+			continue;
+		}
+		newFuncs[recurCallName] = funcFunctionPrefix + funcBody;
+	}
+	return newFuncs;
+}
+function getVirtualizedPlayer(jsUrl, playerjs, extractFunctions) {
+	const sigDecryptDescriptor = findSigDecryptorFunction(jsUrl, playerjs);
+	const nDecryptDescriptor = findNDecryptorFunction(jsUrl, playerjs);
+
+	let extraction = "\n";
+	const toExtract = (extractFunctions ?? []).concat([sigDecryptDescriptor.name, nDecryptDescriptor.name])
+	for (let extract of toExtract) {
+		extraction += "playerScope[\"" + extract + "\"] = " + extract + ";\n";
+	}
+	let playerJsToUse = playerjs
+		.replace("var window=this;/*", "var window=this; playerScope = this;/*\n")
+		.replace("})(_yt_player)", extraction + "})(_yt_player)");
+
+	const playerScope = eval("(function(){\n\t" + 
+		"let playerScope = {}\n" +
+		playerJsToUse + "\n" +
+		"return playerScope;" +
+	"})()");
+
+
+	playerScope.decryptSig = function(sig) {
+		const paras = [];
+		for(let i = 0; i < sigDecryptDescriptor.parameters.length; i++) {
+			const paramValue = sigDecryptDescriptor.parameters[i];
+			if(paramValue === DECRYPTOR_INPUT_VARIABLE)
+				paras.push(sig);
+			else
+				paras.push(paramValue);
+
+		}
+		if(IS_TESTING)
+			console.log("decryptSig", sig);
+		return playerScope[sigDecryptDescriptor.name](...paras);
+	}
+	playerScope.decryptN = function(nParam) {
+		const paras = [];
+		for(let i = 0; i < nDecryptDescriptor.parameters.length; i++) {
+			const paramValue = nDecryptDescriptor.parameters[i];
+			if(paramValue === DECRYPTOR_INPUT_VARIABLE)
+				paras.push(nParam);
+			else
+				paras.push(paramValue);
+
+		}
+		if(IS_TESTING)
+			console.log("decryptN", nParam);
+		return playerScope[nDecryptDescriptor.name](...paras);
+	}
+
+	if(IS_TESTING)
+		console.log("Testing decryptN: ", playerScope.decryptN("IMKPt9L6DXEYGGRzJ") == "zL66zSisCR_I4g");
+
+	return playerScope;
+}
+source.getVirtualizedPlayer = function(hash, codeOverride) {
+		const jsUrl = CIPHER_TEST_PREFIX + hash + CIPHER_TEST_SUFFIX;
+		const playerCodeResp = http.GET(URL_BASE + jsUrl, {});
+		if(!playerCodeResp.isOk) {
+	        if(bridge.devSubmit) bridge.devSubmit("prepareCipher - Failed to get player js", jsUrl);
+			throw new ScriptException("Failed to get player js");
+	    }
+		console.log("Javascript Url: " + URL_BASE + jsUrl);
+		let playerCode = (codeOverride) ? codeOverride : playerCodeResp.body;
+
+
+	let constantsMatch = playerCode.match(/var ([a-zA-Z_\$0-9]+)=(["'].+index.m3u8.+["']\.split\(.+\))/);
+	if (!constantsMatch) {
+		constantsMatch = playerCode.match(/var ([a-zA-Z_\$0-9]+)=(\[.*?["']index\.m3u8["'].*?]),/s);
+		if (!constantsMatch || constantsMatch.index > 10000)
+			constantsMatch = null;
+	}
+
+	let constantArrayName = (constantsMatch && constantsMatch.length >= 2) ? constantsMatch[1] : undefined;
+	let constantArrayValues = (constantsMatch && constantsMatch.length >= 2) ? eval(constantsMatch[2]) : undefined;
+
+	if (constantArrayName) {
+		console.log("Detected Array variable: ", constantArrayName, constantArrayValues);
+		if (constantArrayName && constantArrayValues)
+			playerCode = replaceConstantArrayValues(constantArrayName, constantArrayValues, playerCode);
+	}
+
+		return getVirtualizedPlayer(jsUrl, playerCode);
+}
+var sigDecryptDescs = {};
+var nDecryptDescs = {};
+var DECRYPTOR_INPUT_VARIABLE = {};
+function findSigDecryptorFunction(jsUrl, code) {
+	if(sigDecryptDescs[jsUrl])
+		return sigDecryptDescs[jsUrl];
+
+	if(IS_TESTING)
+		console.log("findSigDecryptorFunction", jsUrl)
+
+	//const functionMatch = code.match(/;\s*([a-zA-Z0-9$_]+?)\s*=\s*function\(((\w),(\w),?\w?,?\w?)\)\{[^{]*?{([^{]*?split[^{}]+join[^{}]+)}.*?}/s);
+	/*
+	if(!functionMatch) {
+		if(bridge.devSubmit) bridge.devSubmit("findSigDecryptorFunction - Failed to find sig decryptor (player function): ", "//" + jsUrl + "\n\n" + code);
+		throw new ScriptException("findSigDecryptorFunction - Failed to find sig decryptor (player function): " + jsUrl);
+	}
+	*/
+
+	const callerMatch = /[^a-zA-Z0-9_$]([a-zA-Z$_]+)\(([0-9]+),[^;]*?decodeURI[^;]*?\)/s.exec(code)
+		//"[^a-zA-Z0-9_$]" + functionMatch[1] + "\\([0-9]+,[^;]*?decodeURI[^;]*?\\)");
+	if(!callerMatch) {
+		if(bridge.devSubmit) bridge.devSubmit("findSigDecryptorFunction - Failed to find sig decryptor(player caller): ", "//" + jsUrl + "\n\n" + code);
+		throw new ScriptException("findSigDecryptorFunction - Failed to find sig decryptor(player caller): " + jsUrl);
+	}
+
+	const callerFunction = callerMatch[1];
+	sigDecryptDescs[jsUrl] = {
+		name: callerFunction,
+		parameters: [parseInt(callerMatch[2]), DECRYPTOR_INPUT_VARIABLE]
+	};
+	if(IS_TESTING)
+		console.log(sigDecryptDescs[jsUrl])
+	return sigDecryptDescs[jsUrl];
+}
+function findNDecryptorFunction(jsUrl, code) {
+	if(nDecryptDescs[jsUrl])
+		return nDecryptDescs[jsUrl];
+
+	if(IS_TESTING)
+		console.log("findNDecryptorFunction", jsUrl)
+
+	const functionMatch = /\/file\/index\.m3u8.+?[a-zA-Z0-9$_]=([a-zA-Z0-9$_]+)(?:\[(\d+)])?\(([0-9]+),[a-zA-Z$_0-9]+\)/.exec(code);
+	if(!functionMatch) {
+		if(bridge.devSubmit) bridge.devSubmit("findNDecryptorFunction - Failed to find n decryptor (player function): ", "//" + jsUrl + "\n\n" + code);
+		throw new ScriptException("findNDecryptorFunction - Failed to find n decryptor (player function): " + jsUrl);
+	}
+
+	const callerMatch = (new RegExp("[^a-zA-Z0-9_$]([a-zA-Z0-9_$]+)=function\\([a-zA-Z0-9_$]+\\)\\{\\s*return " + functionMatch[1] + "[^a-zA-Z0-9_$].*?}")).exec(code);
+	if(!callerMatch) {
+		if(bridge.devSubmit) bridge.devSubmit("findNDecryptorFunction - Failed to find n decryptor (player caller): ", "//" + jsUrl + "\n\n" + code);
+		throw new ScriptException("findNDecryptorFunction - Failed to find n decryptor (player caller): " + jsUrl);
+	}
+
+	const callerFunction = callerMatch[1];
+	nDecryptDescs[jsUrl] = {
+		name: callerFunction,
+		parameters: [DECRYPTOR_INPUT_VARIABLE]
+	};
+	if(IS_TESTING)
+		console.log(nDecryptDescs[jsUrl])
+	return nDecryptDescs[jsUrl];
+}
+
 function getNDecryptorFunctionCode(code, jsUrl, constantArrayName, constantArrayValues) {
 	if(_nDecrypt[jsUrl])
 		return _nDecrypt[jsUrl];
@@ -8080,47 +8295,89 @@ function getNDecryptorFunctionCode(code, jsUrl, constantArrayName, constantArray
 		else
 			break;
 	}
+
+	let prefix = "";
+	let prefix2 = "";
+	let nDecryptFunctionCode = undefined;
+	let nDecryptFunctionName = undefined;
+
+	const REGEX_DECRYPT_N_ADVANCED = [
+		/\/file\/index\.m3u8.+?[a-zA-Z0-9$_]=([a-zA-Z0-9$_]+)(?:\[(\d+)])?\(([0-9]+),[a-zA-Z$_0-9]+\)/gm
+	];
+	/*
 	if(!nDecryptFunctionArrNameMatch) {
-        if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (name)", jsUrl + "\n\n" + code);
+		for(let i = 0; i < REGEX_DECRYPT_N_ADVANCED.length; i++) {
+			const match = REGEX_DECRYPT_N_ADVANCED[i].exec(code);
+			if(match) {
+				const nDecryptFuncName = match[1];
+				const nDecryptFuncPara = match[3];
+				const regexFunc = new RegExp(nDecryptFuncName + "=function\\([a-zA-Z0-9_$,]+\\)\\{[\\s\\S]*?};");
+				const funcMatch = code.match(regexFunc);
+				if(funcMatch) {
+					const funcCode = funcMatch[0];
+					console.log("Found advanced NDecrypt function", funcCode);
+					nDecryptFunctionName = "nDecrFunc"
+					nDecryptFunctionCode = funcCode;
+					prefix2 += `function nDecrFunc(s) {
+						${nDecryptFuncName}(8, s);
+					}`;
+
+
+					const recursiveFuncs = findRecursiveFunctions(code, nDecryptFunctionCode, /([a-zA-Z0-9_$]+)\(\d+,\s?[a-zA-Z0-9_$,\s]+\)/g, [nDecryptFuncName]);
+					console.log("Advanced nDecrypt recursive functions", recursiveFuncs);
+					
+					for(recursiveFunc in recursiveFuncs) {
+						if(recursiveFuncs[recursiveFunc])
+							prefix += `var ${recursiveFunc} = ${recursiveFuncs[recursiveFunc]};\n`;
+					}
+				}
+			}
+		}
+	}
+	*/
+	if(!nDecryptFunctionArrNameMatch && !nDecryptFunctionCode) {
+		if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (name)", jsUrl + "\n\n" + code);
 		throw new ScriptException("Failed to find n decryptor (name)\n" + jsUrl);
-    }
-	const nDecryptFunctionArrName = nDecryptFunctionArrNameMatch[1];
-	const nDecryptFunctionArrIndex = parseInt(nDecryptFunctionArrNameMatch[2]);
-	
-	const nDecryptFunctionNameMatch = code.match(escapeRegex(nDecryptFunctionArrName) + "\\s*=\\s*\\[([$a-zA-Z0-9_,\\(,\\)\\.]+?)]");
-	if(!nDecryptFunctionNameMatch) {
-        if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (array)", jsUrl);
-		throw new ScriptException("Failed to find n decryptor (array)\n" + jsUrl);
 	}
-	const nDecryptArray = nDecryptFunctionNameMatch[1].split(",");
-	if(nDecryptArray.length <= nDecryptFunctionArrIndex) {
-        if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (index)", jsUrl);
-		throw new ScriptException("Failed to find n decryptor (index)\n" + jsUrl);
-	}
-	const nDecryptFunctionName = nDecryptArray[nDecryptFunctionArrIndex]
-	
+
+	if(!nDecryptFunctionCode) { //Old impl
+		const nDecryptFunctionArrName = nDecryptFunctionArrNameMatch[1];
+		const nDecryptFunctionArrIndex = parseInt(nDecryptFunctionArrNameMatch[2]);
+		
+		const nDecryptFunctionNameMatch = code.match(escapeRegex(nDecryptFunctionArrName) + "\\s*=\\s*\\[([$a-zA-Z0-9_,\\(,\\)\\.]+?)]");
+		if(!nDecryptFunctionNameMatch) {
+			if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (array)", jsUrl);
+			throw new ScriptException("Failed to find n decryptor (array)\n" + jsUrl);
+		}
+		const nDecryptArray = nDecryptFunctionNameMatch[1].split(",");
+		if(nDecryptArray.length <= nDecryptFunctionArrIndex) {
+			if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (index)", jsUrl);
+			throw new ScriptException("Failed to find n decryptor (index)\n" + jsUrl);
+		}
+		nDecryptFunctionName = nDecryptArray[nDecryptFunctionArrIndex]
+		
 		const nDecryptFunctionCodeMatches = [
-			escapeRegex(nDecryptFunctionName) + "=function\\(\\w\\)\\{[\\s\\S]*?join\\(\\\"\\\"\\)};",
-			escapeRegex(nDecryptFunctionName) + "=function\\(\\w\\)\\{[\\s\\S]*?join\\.call\\([a-zA-Z$_]+,\\\"\\\"\\)};",
-			new RegExp(escapeRegex(nDecryptFunctionName) + "=function\\(\\w\\)\\{[\\s\\S]*?join\\.call\\(.*?\\).*?};", "s"),
-			new RegExp(escapeRegex(nDecryptFunctionName) + "=function\\(\\w\\)\\{[\\s\\S]*?\\[\"join\"\\]\\(\\\"\\\"\\)};", "s"),
-	]
-	let nDecryptFunctionCodeMatch = undefined;
-	for(let functionRegex of nDecryptFunctionCodeMatches) {
-		const match = code.match(functionRegex);
-		if(match && match.length > 0 && (!nDecryptFunctionCodeMatch || nDecryptFunctionCodeMatch.length > match[0].length))
-			nDecryptFunctionCodeMatch = match[0];
+				escapeRegex(nDecryptFunctionName) + "=function\\(\\w\\)\\{[\\s\\S]*?join\\(\\\"\\\"\\)};",
+				escapeRegex(nDecryptFunctionName) + "=function\\(\\w\\)\\{[\\s\\S]*?join\\.call\\([a-zA-Z$_]+,\\\"\\\"\\)};",
+				new RegExp(escapeRegex(nDecryptFunctionName) + "=function\\(\\w\\)\\{[\\s\\S]*?join\\.call\\(.*?\\).*?};", "s"),
+				new RegExp(escapeRegex(nDecryptFunctionName) + "=function\\(\\w\\)\\{[\\s\\S]*?\\[\"join\"\\]\\(\\\"\\\"\\)};", "s"),
+		]
+		for(let functionRegex of nDecryptFunctionCodeMatches) {
+			const match = code.match(functionRegex);
+			if(match && match.length > 0 && (!nDecryptFunctionCode || nDecryptFunctionCode.length > match[0].length)) {
+				nDecryptFunctionCode = match[0];
+			}
+		}
 	}
-	if(!nDecryptFunctionCodeMatch) {
+	if(!nDecryptFunctionCode) {
         if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (code)", jsUrl, code);
 		throw new ScriptException("Failed to find n decryptor (code)\n" + jsUrl);
 	}
 
 	const regex = new RegExp(/typeof ([a-zA-Z0-9$_]+)/gs);
 	const typeChecks = [];
-	let prefix = "";
 	let typeCheck = undefined;
-	while((typeCheck = regex.exec(nDecryptFunctionCodeMatch)) != null) {
+	while((typeCheck = regex.exec(nDecryptFunctionCode)) != null) {
 		if(typeCheck && typeCheck.length > 1) {
 			if(typeChecks.indexOf(typeCheck[1]) >= 0)
 				continue;
@@ -8133,7 +8390,7 @@ function getNDecryptorFunctionCode(code, jsUrl, constantArrayName, constantArray
 	const variableCheckRegex = new RegExp(/;\s*([\w$_]+)\.[\w$_]+=function/gs);
 	let variableChecks = [];
 	let variableCheck = undefined;
-	while((variableCheck = variableCheckRegex.exec(nDecryptFunctionCodeMatch)) != null) {
+	while((variableCheck = variableCheckRegex.exec(nDecryptFunctionCode)) != null) {
 		if(variableCheck && variableCheck.length > 1 && variableCheck[1].length < 4) {
 			if(variableChecks.indexOf(variableCheck[1]) >= 0)
 				continue;
@@ -8143,7 +8400,7 @@ function getNDecryptorFunctionCode(code, jsUrl, constantArrayName, constantArray
 		}
 	}
 	const variableFunctionCheckRegex2 = new RegExp(/;\s*([\w$_]+)=function/gs);
-	while((variableCheck = variableFunctionCheckRegex2.exec(nDecryptFunctionCodeMatch)) != null) {
+	while((variableCheck = variableFunctionCheckRegex2.exec(nDecryptFunctionCode)) != null) {
 		if(variableCheck && variableCheck.length > 1 && variableCheck[1].length < 4) {
 			if(variableChecks.indexOf(variableCheck[1]) >= 0)
 				continue;
@@ -8152,6 +8409,18 @@ function getNDecryptorFunctionCode(code, jsUrl, constantArrayName, constantArray
 			variableChecks.push(variableCheck[1]);
 		}
 	}
+	/*
+	const variableFunctionCheckRegex3 = new RegExp(/[a-zA-Z$_][a-zA-Z$_0-9]+/g);
+	while((variableCheck = variableFunctionCheckRegex3.exec(nDecryptFunctionCode)) != null) {
+		if(variableCheck && variableCheck[0].length == 3) {
+			const variable = variableCheck[0]
+			if(variableChecks.indexOf(variable) >= 0 || variable.length > 3  || variable == "null" || variable == "new" || variable == "if" || variable == "try" || variable == "var")
+				continue;
+			console.log("VariableFuncCheck found in cipher: " + variableCheck[1]);
+			//prefix += "var " + variableCheck[1] + " = {}; ";
+			variableChecks.push(variableCheck[0]);
+		}
+	}*/
 	/*
 	const variableFunctionCheckRegex3 = new RegExp(/[^\({]var ([a-zA-Z0-9$_]+),([a-zA-Z0-9$_,]+);/gs);
 	while((variableCheck = variableFunctionCheckRegex3.exec(code)) != null) {
@@ -8166,8 +8435,6 @@ function getNDecryptorFunctionCode(code, jsUrl, constantArrayName, constantArray
 			}
 		}
 	}
-	if(variableChecks.length > 0)
-		prefix += "var " + variableChecks.map(x=>x + "={}").join(",") + ";\n";
 
 	function findGlobalSubFunction(variable, funcCall) {
 		const regex = new RegExp("[^a-zA-Z0-9_$]" + variable + "\\." + funcCall + "\\s*=\\s*(function\\(.*?\\)\\s*{.*?});", "s");
@@ -8229,13 +8496,17 @@ function getNDecryptorFunctionCode(code, jsUrl, constantArrayName, constantArray
 				break;
 		}
 	}
+	if(variableChecks.length > 0)
+		prefix += "\nvar " + variableChecks.map(x=>x + "={}").join(",") + ";\n";
 	if(globalFuncs.length > 0)
 		prefix += globalFuncs.join("\n") + "\n";
 	
-	return "(function(){" + 
-		prefix + " " +
-		"var " + nDecryptFunctionCodeMatch + "\n" +
-		"return function decryptN(nEncrypted){ return " + nDecryptFunctionName + "(nEncrypted); } \n" +
+	return "(function(){\n\t" + 
+		"console.log('Defining new NDecryptor');\n\t" + 
+		prefix + "\n\t" +
+		prefix2 + "\n" + 
+		"var " + nDecryptFunctionCode + "\n\t" +
+		"return function decryptN(nEncrypted){ return " + nDecryptFunctionName + "(nEncrypted); console.log('nDecrypted') } \n" +
 	"})()";
 }
 source.getNDecryptorFunctionCode = getNDecryptorFunctionCode;
@@ -8263,6 +8534,8 @@ function getCipherFunctionCode(playerCode, jsUrl, constantArrayName, constantArr
 	if(_cipherDecode[jsUrl])
 		return _cipherDecode[jsUrl];
 	let cipherFunctionName = null;
+	let cipherFunctionCode = null;
+	let cipherFunctionHelperObjName = null;
 
 	if(constantArrayName == "check") {
 		const constantsMatch = playerCode.match(/var ([a-zA-Z_\$0-9]+)=(["'].+index.m3u8.+["']\.split\(.+\))/);
@@ -8281,35 +8554,87 @@ function getCipherFunctionCode(playerCode, jsUrl, constantArrayName, constantArr
 		}
 	}
 	if(!cipherFunctionName)	{
-        if(bridge.devSubmit) bridge.devSubmit("getCipherFunctionCode - Failed to find cipher (name)", jsUrl + "\n\n" + playerCode);
-		throw new ScriptException("Failed to find cipher (name)\n" + jsUrl);
-	}
-	const cipherFunctionCodeMatch = playerCode.match("(" + escapeRegex(cipherFunctionName) + "=function\\([a-zA-Z0-9_]+\\)\\{.+?\\})");
-	if(!cipherFunctionCodeMatch) {
-		if(IS_TESTING)
-			console.log("Failed to find cipher function in: ", playerCode);
-        if(bridge.devSubmit) bridge.devSubmit("getCipherFunctionCode - Failed to find cipher (function)", jsUrl);
-		throw new ScriptException("Failed to find cipher (function)\n" + jsUrl);
-	}
-	let cipherFunctionCode = cipherFunctionCodeMatch[1];
+		//Attempting advanced ciphers
+		console.log("Failed to find cipher (name) using conventional ciphers, attempting additional ciphers");
+		log("Failed to find cipher (name) using conventional ciphers, attempting additional ciphers");
+		let regex = /;\s*(([a-zA-Z0-9$_]+?)\s*=\s*function\(((\w),(\w),?\w?,?\w?)\)\{[^{]*?{([^{]*?split[^{}]+join[^{}]+)}.*?})/msg
+		let match = null;
+		while((match = regex.exec(playerCode)) != null) {
+			console.log("Found advance cipher: ", match[0]);
+			const foundFuncName = match[2];
+			const foundFuncCode = match[1];
+			const foundFuncCodeInner = match[6];
+			const args = match[3].split(",");
 
-	const cipherFunctionCodeVar = "var " + cipherFunctionCode;
-	let helperObjNameMatch = cipherFunctionCode.match(";([A-Za-z0-9_\\$]{2,3})\\...\\(");
-	if(!helperObjNameMatch)
-		helperObjNameMatch = cipherFunctionCode.match(";([A-Za-z0-9_\\$]{2,3})\\[[\"'][\\w_$]+[\"']\\]");
-	if(!helperObjNameMatch) {
-		if(IS_TESTING)
-			console.log("Failed to find helper name in: ", playerCode);
-        if(bridge.devSubmit) bridge.devSubmit("getCipherFunctionCode - Failed to find helper (name)", jsUrl);
-		throw new ScriptException("Failed to find helper (name)\n" + jsUrl);
+			const foundHelperMatch = foundFuncCode.match(/([a-zA-Z0-9_$]+)\["\w+"\]\(.*?\);\1\["\w+"\]\(.*?\);\1\["\w+"\]\(.*?\);\1\["\w+"\]\(.*?\);/);
+			if(foundHelperMatch) {
+				cipherFunctionHelperObjName = foundHelperMatch[1];
+				cipherFunctionName = foundFuncName;
+
+				//Rewrite function to simpler one
+				const firstArg = args.shift();
+				const secArg = args.shift();
+				const argLine = [secArg, firstArg].concat(args).join(",");
+
+				const vars = [];
+				let matchVar = null;
+				const regexVars = /var ([a-zA-Z0-9_$]+)=/g;
+				while((matchVar = regexVars.exec(foundFuncCode)) != null)
+					vars.push(matchVar[1]);
+
+				const returnStatement = foundFuncCode.match(/return [^;}]+/)
+				if(!returnStatement) {
+					log("No return statement found? skipping");
+					continue;
+				}
+
+				cipherFunctionCode = foundFuncName + " = function(" + argLine + "){\n\t" + 
+					vars.map(x=>"var " + x + ";").join("\n\t") + "\n\t" +
+					foundFuncCodeInner + "\n\t" +
+					returnStatement[0] + "\n" +
+				"}";
+
+
+				bridge.toast("Using advance obfuscated cipher..");
+				break;
+			}
+		}
+
+		if(!cipherFunctionName) {
+			if(bridge.devSubmit) bridge.devSubmit("getCipherFunctionCode - Failed to find cipher (name)", jsUrl + "\n\n" + playerCode);
+			throw new ScriptException("Failed to find cipher (name)\n" + jsUrl);
+		}
 	}
+	if(!cipherFunctionCode) {
+		const cipherFunctionCodeMatch = playerCode.match("(" + escapeRegex(cipherFunctionName) + "=function\\([a-zA-Z0-9_,]+\\)\\{.+?\\})");
+		if(!cipherFunctionCodeMatch) {
+			if(IS_TESTING)
+				console.log("Failed to find cipher function in: ", playerCode);
+			if(bridge.devSubmit) bridge.devSubmit("getCipherFunctionCode - Failed to find cipher (function)", jsUrl);
+			throw new ScriptException("Failed to find cipher (function)\n" + jsUrl);
+		}
+		cipherFunctionCode = cipherFunctionCodeMatch[1];
+	}
+
+	if(!cipherFunctionHelperObjName) {
+		let helperObjNameMatch = cipherFunctionCode.match(";([A-Za-z0-9_\\$]{2,3})\\...\\(");
+		if(!helperObjNameMatch)
+			helperObjNameMatch = cipherFunctionCode.match(";([A-Za-z0-9_\\$]{2,3})\\[[\"'][\\w_$]+[\"']\\]");
+		if(!helperObjNameMatch) {
+			if(IS_TESTING)
+				console.log("Failed to find helper name in: ", playerCode);
+			if(bridge.devSubmit) bridge.devSubmit("getCipherFunctionCode - Failed to find helper (name)", jsUrl);
+			throw new ScriptException("Failed to find helper (name)\n" + jsUrl);
+		}
+		cipherFunctionHelperObjName = helperObjNameMatch[1];
+	}
+	const cipherFunctionCodeVar = "var " + cipherFunctionCode;
 	if(IS_TESTING)
-		console.log("Cipher Code: ", cipherFunctionCode);
-	const helperObjName = helperObjNameMatch[1];
-	const helperObjMatch = playerCode.match("(var " + escapeRegex(helperObjName) + "=\\{[\\s\\S]*?\\};)");
+		console.log("Cipher Code: ", cipherFunctionCodeVar);
+	const helperObjMatch = playerCode.match("(var " + escapeRegex(cipherFunctionHelperObjName) + "=\\{[\\s\\S]*?\\};)");
 	if(!helperObjMatch) {
 		if(IS_TESTING)
-			console.log("Failed to find helper method [" + helperObjName + "] in: ", playerCode);
+			console.log("Failed to find helper method [" + cipherFunctionHelperObjName + "] in: ", playerCode);
         if(bridge.devSubmit) bridge.devSubmit("getCipherFunctionCode - Failed to find helper (methods)", jsUrl);
 		throw new ScriptException("Failed to extract helper (methods)\n" + jsUrl);
 	}

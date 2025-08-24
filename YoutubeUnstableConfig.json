@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 275,
+	"version": 276,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -309,6 +309,13 @@
 			"description": "Will fallback to Trending if home is unavailable (eg. no login)",
 			"type": "Boolean",
 			"default": "true"
+		},
+		{
+			"variable": "fallback_full_player",
+			"name": "Fallback with Player Script",
+			"description": "Will run the entire player script, may improve compatibility at the cost of performance, and possible tracking",
+			"type": "Boolean",
+			"default": "true"
 		}
 	],
 
@@ -337,6 +344,10 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"276": [
+			"Fix: Cipher fix",
+			"Improvement: New Cipher system, currently only used as fallback"
+		],
 		"275": [
 			"Fix: Cipher fix",
 			"Fix: Race condition related to bgData fixed"
