@@ -292,6 +292,8 @@ source.enable = (conf, settings, saveStateStr) => {
 		innerContextAuth.client.visitorData = undefined;
 	}
 
+	getJSDOM();
+
 	return _clientContextAuth;
 };
 
@@ -8049,17 +8051,24 @@ function prepareCipher(jsUrl, codeOverride) {
 		}
 
 		log("CIPHER SOLVED USING LEGACY SOLUTION");
+		log("CIPHER PLAYER TEST: " + JSON.stringify(prepareCipherPlayer(jsUrl, playerCode)));
 
 		return true;//_cipherDecode[jsUrl];
 	}
 	catch(ex) {
 		console.error(ex);
 		if(!!_settings.fallback_full_player && playerCode) {
-			if(prepareCipherPlayer(jsUrl, playerCode))
-				return true;
+			try {
+				if(prepareCipherPlayer(jsUrl, playerCode))
+					return true;
+			}
+			catch(ex2) {
+        		if(bridge.devSubmit) bridge.devSubmit("prepareCipher - Failed to get Cipher due to: Error (Player):" + ex2 + "\n" + jsUrl + "\n(Original: " + ex + ")", codeUsed ?? "No code fetched");
+				throw new ScriptException("Failed to get Cipher due to: Player:" + ex2 + "\n" + jsUrl);
+			}
 		}
 		clearCipher(jsUrl);
-        if(bridge.devSubmit) bridge.devSubmit("prepareCipher - Failed to get Cipher due to: Error:" + ex + "\n" + jsUrl, codeUsed ?? "No code fetched");
+        if(bridge.devSubmit) bridge.devSubmit("prepareCipher - Failed to get Cipher due to: Error:" + ex + "\n" + jsUrl + "\nFallback: " + (!!_settings.fallback_full_player), codeUsed ?? "No code fetched");
 		throw new ScriptException("Failed to get Cipher due to: " + ex + "\n" + jsUrl);
 	}
 }
@@ -8076,6 +8085,7 @@ function prepareCipherPlayer(jsUrl, codeUsed) {
 		}
 		catch(ex) {
 			log("Player fallback failed: " + ex);
+			throw ex;
 			return false;
 		}
 }
@@ -8139,14 +8149,22 @@ function getVirtualizedPlayer(jsUrl, playerjs, extractFunctions) {
 		extraction += "playerScope[\"" + extract + "\"] = " + extract + ";\n";
 	}
 	let playerJsToUse = playerjs
-		.replace("var window=this;/*", "var window=this; playerScope = this;/*\n")
-		.replace("})(_yt_player)", extraction + "})(_yt_player)");
+		.replace("var window=this;/*", 
+			"console.log('New PlayerJS:" + jsUrl + "');\n" +
+			"var document=this.document;\n" + 
+			"var XMLHttpRequest=this.XMLHttpRequest;\n" + 
+			"var navigator=this.navigator;\n" + 
+			"var window=this;\n" + 
+			"playerScope = this;" +
+			"/*\n")
+		.replace("})(_yt_player)", extraction + "}).call(this, _yt_player)");
 
-	const playerScope = eval("(function(){\n\t" + 
+		currentJSDOM.window.aCorrect = true;
+	const playerScope = new Function("return (function(){\n\t" + 
 		"let playerScope = {}\n" +
 		playerJsToUse + "\n" +
 		"return playerScope;" +
-	"})()");
+	"}).call(this)").call(currentJSDOM.window);
 
 
 	playerScope.decryptSig = function(sig) {
@@ -8180,7 +8198,6 @@ function getVirtualizedPlayer(jsUrl, playerjs, extractFunctions) {
 
 	if(IS_TESTING)
 		console.log("Testing decryptN: ", playerScope.decryptN("IMKPt9L6DXEYGGRzJ") == "zL66zSisCR_I4g");
-
 	return playerScope;
 }
 source.getVirtualizedPlayer = function(hash, codeOverride) {
@@ -9390,16 +9407,21 @@ source.testBotguard = (token) => {
 	})
 }
 
+function getJSDOM() {
+	if(!currentJSDOM) {
+		console.log("No JSDOM yet, initializing");
+		currentJSDOM = new JSDOM();
+		return currentJSDOM;
+	}
+}
+
 var existingBotguard = undefined;
 function tryGetBotguard(cb) {
 	if(existingBotguard) {
 		cb(existingBotguard);
 		return;
 	}
-	if(!currentJSDOM) {
-		console.log("No JSDOM yet, initializing");
-		currentJSDOM = new JSDOM();
-	}
+	getJSDOM();
 	setTimeout(()=>{
 		console.log("No Botguard yet, initializing");
 		const botguard = new BotGuardGenerator(globalThis, (glob)=>{

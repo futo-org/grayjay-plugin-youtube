@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 276,
+	"version": 277,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -344,6 +344,11 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"277": [
+			"HotFix: Exception handling for new cipher system",
+			"Fix: Cipher fix",
+			"Improvement: New Cipher system, currently only used as fallback"
+		],
 		"276": [
 			"Fix: Cipher fix",
 			"Improvement: New Cipher system, currently only used as fallback"
