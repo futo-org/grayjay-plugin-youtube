@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 278,
+	"version": 279,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -353,6 +353,9 @@
 
 
 	"changelog": {
+		"279": [
+			"Improvement: Detect expired cookies"
+		],
 		"278": [
 			"Fix: Cipher fix for new system"
 		],

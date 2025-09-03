@@ -258,10 +258,12 @@ source.enable = (conf, settings, saveStateStr) => {
 
         if(isLoggedIn && !batchResp[1].isOk) throw new ScriptException("Failed to request context enable isLoggedIn && !batchResp[1].isOk");
 
+		
+
         _clientContext = getClientConfig(batchResp[0].body)//requestClientConfig(false);
         if(isLoggedIn) {
             log("Logged in, fetching auth context");
-            _clientContextAuth = getClientConfig(batchResp[1].body)//requestClientConfig(USE_MOBILE_PAGES, true);
+            _clientContextAuth = getClientConfig(batchResp[1].body, true)//requestClientConfig(USE_MOBILE_PAGES, true);
 
             _prefetchHomeAuth = getInitialData(batchResp[1].body, true);
         }
@@ -577,7 +579,7 @@ class YTSessionClient {
 			throw new ScriptException("Failed to initialize YTSessionClient due to [" + respHome.code + "]");
 
 		const homeHtml = respHome.body;
-		const clientConfig = getClientConfig(homeHtml);
+		const clientConfig = getClientConfig(homeHtml, usedLogin);
 		const initialData = getInitialData(homeHtml);
 
 		const jsUrlMatch = homeHtml.match("PLAYER_JS_URL\"\\s?:\\s?\"(.*?)\"");
@@ -1038,7 +1040,7 @@ source.getContentDetails = (url, useAuth, simplify, forceUmp, options) => {
 	let html = resps[0].body;//requestPage(url);
 	let initialData = getInitialData(html);
 	let initialPlayerData = getInitialPlayerData(html);
-	let clientConfig = getClientConfig(html);
+	let clientConfig = getClientConfig(html, useLogin);
 	let usedLogin = useLogin && bridge.isLoggedIn();
 
 
@@ -1057,7 +1059,7 @@ source.getContentDetails = (url, useAuth, simplify, forceUmp, options) => {
 			html = resps[0].body;//requestPage(url);
 			initialData = getInitialData(html);
 			initialPlayerData = getInitialPlayerData(html);
-			clientConfig = getClientConfig(html);
+			clientConfig = getClientConfig(html, true);
 			usedLogin = true && bridge.isLoggedIn();
 
 			if (initialPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED")
@@ -2883,7 +2885,7 @@ source.getUserHistory = function() {
 	}
 	let histPage = requestPage(URL_HISTORY_M, { "User-Agent": USER_AGENT_PHONE }, true);
 	let result = getInitialData(histPage);
-	let config = getClientConfig(histPage);
+	let config = getClientConfig(histPage, true);
 	const contents = result?.contents?.singleColumnBrowseResultsRenderer?.tabs[0]?.tabRenderer?.content?.sectionListRenderer?.contents;
 	if(!contents) {
 		log("No contents found for history");
@@ -5002,6 +5004,8 @@ function requestInitialData(url, useMobile = false, useAuth = false, overrideHtm
 
 		if(overrideHtml)
 			html = overrideHtml;
+		if(useAuth && html.length < 100000 && html.indexOf("accounts/answer/61416") > 0)
+			throw new ScriptLoginRequiredException("Cookies expired, please relog")
 		const initialData = getInitialData(html);
 		return initialData;
 	}
@@ -5016,7 +5020,7 @@ function requestClientConfig(useMobile = false, useAuth = false) {
 
 	const resp = http.GET(!useMobile ? URL_CONTEXT : URL_CONTEXT_M, headers, useAuth);
 	if(!resp.isOk) throw new ScriptException("Failed to request context requestClientConfig");
-	return getClientConfig(resp.body);
+	return getClientConfig(resp.body, useAuth);
 }
 
 function requestIOSStreamingData(videoId, batch, visitorData, useLogin) {
@@ -5292,7 +5296,7 @@ function getInitialPlayerData(html) {
 	}
 	return null;
 }
-function getClientConfig(html) {
+function getClientConfig(html, usedLogin) {
 	const matches = html.matchAll(REGEX_YTCFG);
 	let match = null;
 	for(let m of matches) {
@@ -5302,6 +5306,9 @@ function getClientConfig(html) {
 	}
 
 	if(!match) {
+		if(usedLogin && html.length < 100000 && html.indexOf("accounts/answer/61416") > 0)
+			throw new ScriptLoginRequiredException("Cookies expired, please relog")
+
 	    if(bridge.devSubmit) bridge.devSubmit("getClientConfig - Context structure not found", html);
 		throw new ScriptException("Context structure not found");
 	}
