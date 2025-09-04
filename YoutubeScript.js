@@ -56,13 +56,6 @@ const SEARCH_PLAYLISTS_PARAM = "EgIQAw%3D%3D";
 
 const REGEX_TIMESTAMP = new RegExp("[\\?&]t=[0-9]+s?");
 
-const REGEX_VIDEO_URL_DESKTOP = new RegExp("https://(.*\\.)?youtube\\.com/watch.*?v=(.*)");
-const REGEX_VIDEO_URL_SHARE = new RegExp("https://youtu\\.be/(.*)");
-const REGEX_VIDEO_URL_SHARE_LIVE = new RegExp("https://(.*\\.)?youtube\\.com/live/(.*)");
-const REGEX_VIDEO_URL_SHORT = new RegExp("https://(.*\\.)?youtube\\.com/shorts/(.*)");
-const REGEX_VIDEO_URL_CLIP = new RegExp("https://(.*\\.)?youtube\\.com/clip/(.*)[?]?");
-const REGEX_VIDEO_URL_EMBED = new RegExp("https://(.*\\.)?youtube\\.com/embed/([^?]+)");
-
 const REGEX_VIDEO_CHANNEL_URL = new RegExp("https://(.*\\.)?youtube\\.com/channel/(.*)");
 const REGEX_VIDEO_CHANNEL_URL2 = new RegExp("https://(.*\\.)?youtube\\.com/user/.*");
 const REGEX_VIDEO_CHANNEL_URL3 =  new RegExp("https://(.*\\.)?youtube\\.com/@.*");
@@ -543,8 +536,22 @@ source.getChannelTemplateByClaimMap = () => {
 
 
 //Video
+const REGEX_VIDEO_URL_DESKTOP = new RegExp("https?://(.*\\.)?youtube\\.com/watch.*?v=(.*)");
+const REGEX_VIDEO_URL_DESKTOP_V = new RegExp("https?://(.*\\.)?youtube\\.com/v/(.*)");
+const REGEX_VIDEO_URL_SHARE = new RegExp("https?://youtu\\.be/(.*)");
+const REGEX_VIDEO_URL_SHARE_LIVE = new RegExp("https?://(.*\\.)?youtube\\.com/live/(.*)");
+const REGEX_VIDEO_URL_SHORT = new RegExp("https?://(.*\\.)?youtube\\.com/shorts/(.*)");
+const REGEX_VIDEO_URL_CLIP = new RegExp("https?://(.*\\.)?youtube\\.com/clip/(.*)[?]?");
+const REGEX_VIDEO_URL_EMBED = new RegExp("https?://(.*\\.)?youtube\\.com/embed/([^?]+)");
+
 source.isContentDetailsUrl = (url) => {
-	return REGEX_VIDEO_URL_DESKTOP.test(url) || REGEX_VIDEO_URL_SHARE.test(url) || REGEX_VIDEO_URL_SHARE_LIVE.test(url) || REGEX_VIDEO_URL_SHORT.test(url) || REGEX_VIDEO_URL_CLIP.test(url) || REGEX_VIDEO_URL_EMBED.test(url);
+	return REGEX_VIDEO_URL_DESKTOP.test(url) || 
+		REGEX_VIDEO_URL_DESKTOP_V.test(url) ||
+		REGEX_VIDEO_URL_SHARE.test(url) || 
+		REGEX_VIDEO_URL_SHARE_LIVE.test(url) || 
+		REGEX_VIDEO_URL_SHORT.test(url) || 
+		REGEX_VIDEO_URL_CLIP.test(url) || 
+		REGEX_VIDEO_URL_EMBED.test(url);
 };
 
 class YTSessionClient {
@@ -567,7 +574,7 @@ class YTSessionClient {
 			bridge.toast("Using YTSession Client");
 	}
 
-	getClientInit(client, usedLogin) {
+	getClientInit(client, usedLogin, overrideHtml) {
 		//TODO: Add client-specific requests
 		let headers = {"Accept-Language": "en-US", "Cookie": "PREF=hl=en&gl=US" };
 		const respHome = (usedLogin) ? 
@@ -576,7 +583,9 @@ class YTSessionClient {
 		if(!respHome.isOk)
 			throw new ScriptException("Failed to initialize YTSessionClient due to [" + respHome.code + "]");
 
-		const homeHtml = respHome.body;
+		let homeHtml = respHome.body;
+		if(overrideHtml)
+			homeHtml = overrideHtml;
 		const clientConfig = getClientConfig(homeHtml);
 		const initialData = getInitialData(homeHtml);
 
@@ -837,6 +846,7 @@ class YTSessionClient {
 
 	
 }
+source.YTSessionClient = YTSessionClient;
 function extractVideoPlayerData_VideoDetails(playerData, jsUrl, contextData) {
 	if(!playerData?.videoDetails) return null;
 
@@ -2951,6 +2961,10 @@ function extractVideoIDFromUrl(url) {
 	if(match)
 		return removeQuery(match[2]);
 
+	match = url.match(REGEX_VIDEO_URL_DESKTOP_V);
+	if(match)
+		return removeQuery(match[2]);
+
 	return null;
 }
 function removeQuery(urlPart) {
@@ -4924,7 +4938,8 @@ function requestSearch(query, useAuth = false, params = null) {
 
 	const body = {
 		context: clientContext.INNERTUBE_CONTEXT,
-		query: query
+		query: query,
+		params: "8AEB"
 	};
 	if(params)
 	    body.params = params;
@@ -5307,6 +5322,7 @@ function getClientConfig(html) {
 	}
 	return JSON.parse(match[1]);
 }
+source.getClientConfig = getClientConfig;
 //#endregion
 
 //#region Top-Level Extraction
