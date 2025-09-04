@@ -354,7 +354,10 @@
 
 	"changelog": {
 		"279": [
-			"Improvement: Detect expired cookies"
+			"Improvement: Detect expired cookies",
+			"Improvement: Allow searching for scary topics",
+			"Improvement: Support opening urls with http instead of https schema",
+			"Improvement: Support opening urls with /v/{id} format"
 		],
 		"278": [
 			"Fix: Cipher fix for new system"
