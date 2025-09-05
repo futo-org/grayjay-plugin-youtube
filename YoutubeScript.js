@@ -5945,7 +5945,7 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, clientConfig, pare
 				if (isNaN(duration))
 					return null;
 				const source = new YTABRAudioSource(y.itag, {
-					name: "UMP " + (y.audioTrack?.displayName ? y.audioTrack.displayName : codecs) + ((isAV1) ? " [AV1]" : ""),
+					name: "UMP " + (y.audioTrack?.displayName ? y.audioTrack.displayName : codecs) + ((isAV1) ? " [AV1]" : "") + ((!!y.isDrc) ? " [Normalized]" : ""),
 					url: abrStreamingUrl,
 					width: y.width,
 					height: y.height,
@@ -6036,7 +6036,7 @@ function extractAdaptiveFormats_VideoDescriptor(adaptiveSources, jsUrl, contextD
 							return null;   
 
 					const source = new YTAudioSource({   
-							name: prefix + (y.audioTrack?.displayName ? y.audioTrack.displayName : codecs),   
+							name: prefix + (y.audioTrack?.displayName ? y.audioTrack.displayName : codecs) + ((!!y.isDrc) ? " [Normalized]" : ""),   
 							container: container,   
 							bitrate: y.bitrate,   
 							url: url,   

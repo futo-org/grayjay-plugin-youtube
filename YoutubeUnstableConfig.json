@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 279,
+	"version": 280,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -344,6 +344,9 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"280": [
+			"Featured: Normalized audio labeling"
+		],
 		"279": [
 			"Improvement: Detect expired cookies",
 			"Improvement: Allow searching for scary topics",
