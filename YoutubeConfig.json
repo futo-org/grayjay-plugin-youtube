@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 280,
+	"version": 281,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -39,6 +39,28 @@
 		".googlevideo.com",
 		"jnn-pa.googleapis.com"
 	],
+
+	"testing": {
+		"Test_Cipher": {
+			"hash": "2b83d2e0"
+		},
+		"HomeVideoFlow": {},
+		"GetContentDetails": {
+			"urls": [
+				"https://www.youtube.com/watch?v=S4Qf8o4QSDs"
+			]
+		},
+		"GetChannel": {
+			"urls": [
+				"https://www.youtube.com/channel/UCIBNAd4nO5rk6G8YaEudqNw"
+			]
+		},
+		"GetChannelContents": {
+			"urls": [
+				"https://www.youtube.com/channel/UCIBNAd4nO5rk6G8YaEudqNw"
+			]
+		}
+	},
 
 	"settings": [
 		{
@@ -353,6 +375,11 @@
 
 
 	"changelog": {
+		"281": [
+			"Featured: Normalized audio labeling",
+			"Fix: Cipher fix",
+			"Fix: Fixed no viewcount, date, rating, channel thumbnails, subscriber count on video details using login"
+		],
 		"280": [
 			"Featured: Normalized audio labeling"
 		],

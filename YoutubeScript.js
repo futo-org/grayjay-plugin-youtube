@@ -71,6 +71,7 @@ const REGEX_INITIAL_PLAYER_DATA_FALLBACK = new RegExp("<script.*?var ytInitialPl
 
 const REGEX_HUMAN_NUMBER = new RegExp("([0-9\\.,]*)([a-zA-Z]*)");
 const REGEX_HUMAN_AGO = new RegExp("([0-9]*) ([a-zA-Z]*) ago");
+const REGEX_VIEW_COUNT = new RegExp("([0-9,]+)[A-Z]? views");
 
 const REGEX_DATE_HUMAN = new RegExp("([A-Za-z]*) ([0-9]*), ([1-9][0-9][0-9][0-9])");
 const REGEX_DATE_ISO = new RegExp("([1-9][0-9][0-9][0-9])-([0-9][0-9])-([0-9][0-9])");
@@ -155,6 +156,74 @@ var _setMetadata = false;
 source.enableMetadata = function() {
 	_setMetadata = true;
 }
+
+//#region Tests
+var GrayjayTests = {
+	Example_Test: {
+		name: "Example Test",
+		description: "Some test description",
+		test(testContext) {
+			return new Promise((resolve)=>{
+				log("This is a test log");
+				setTimeout(()=>{
+					log("This is a test log in the middle");
+					setTimeout(()=>{
+						log("This is a test log at the end");
+						resolve(JSON.stringify({"ExampleDate": (new Date()).toDateString(), "TestData": "ashasdhsdahsadh"}, undefined, "   "));
+					}, 2000);
+				}, 3000);
+			});
+		}
+	},
+	Example_Test_Shorthand(testContext) {
+			return new Promise((resolve, reject)=>{
+				log("This is a test log");
+				setTimeout(()=>{
+					log("This is a test log in the middle");
+					setTimeout(()=>{
+						log("This is a test log at the end");
+						reject("This will fail");
+					}, 2000);
+				}, 3000);
+			});
+	},
+	Test_Native(testContext) {
+		let obj = testContext.RunSourceMethod("getContentDetails", [
+			"https://www.youtube.com/watch?v=uXIsTszCjZE"
+		]);
+		log("Got VideoDetails: " + obj.name);
+		return obj;
+	},
+	Test_Ciphers: {
+		name: "Cipher Tests",
+		description: "This will test various different script files against the cipher extraction.",
+		test(testContext) {
+			let testResults = [];
+			for(hash of CIPHER_TEST_HASHES) {
+				const jsUrl = CIPHER_TEST_PREFIX + hash + CIPHER_TEST_SUFFIX;
+				try{
+					if(prepareCipher(jsUrl))
+						testResults.push("CipherTest [" + hash + "]: PASSED");
+					else 
+						testResults.push("CipherTest [" + hash + "]: FAIL");
+				}
+				catch(ex) {
+					testResults.push(["CipherTest [" + hash + "]: FAIL", ex]);
+				}
+				clearCipher(jsUrl);
+			}
+			for(result of testResults) {
+				if(result.constructor === Array)
+					log(result[0] + ", " +  result[1]);
+				else
+					log(result);
+			}
+			return testResults;
+		}
+	}
+}
+
+//#endregion
 
 //#region Source Methods
 source.setSettings = function(settings) {
@@ -1734,97 +1803,153 @@ function getVideoDetailsInitialData(videoId, useLogin, batch) {
 	}
 }
 function extractVideoDetailsInitialData_Metadata(initialData, knownData) {
+
+	if(initialData.contents.twoColumnWatchNextResults) {
+		return extractVideoDetailsInitialData_TwoColumn_Metadata(initialData, knownData);
+	}
+	else if(initialData.contents.singleColumnWatchNextResults) {
+		return extractVideoDetailsInitialData_SingleColumn_Metadata(initialData, knownData);
+	}
+	else
+		return knownData;
+}
+function extractVideoDetailsInitialData_TwoColumn_Metadata(initialData, knownData) {
 	const contents = initialData.contents;
+
+	let video = knownData ?? {};
 	const contentsContainer = contents.twoColumnWatchNextResults?.results?.results ??
 		null;
 	if(!contentsContainer || !contentsContainer.contents) return knownData;
 
-	let video = knownData ?? {};
-
-	for(let i = 0; i < contentsContainer.contents.length; i++) {
+	for (let i = 0; i < contentsContainer.contents.length; i++) {
 		const content = contentsContainer.contents[i];
 		switchKey(content, {
 			videoPrimaryInfoRenderer(renderer) {
 				//if(renderer.title?.runs)
 				//	video.name = extractString_Runs(renderer.title.runs);
-				if(renderer.viewCount?.videoViewCountRenderer?.viewCount?.simpleText)
+				if (renderer.viewCount?.videoViewCountRenderer?.viewCount?.simpleText)
 					video.viewCount = extractFirstNumber_Integer(renderer.viewCount?.videoViewCountRenderer?.viewCount.simpleText)
-				else if(renderer.viewCount?.videoViewCountRenderer?.viewCount?.runs) {
+				else if (renderer.viewCount?.videoViewCountRenderer?.viewCount?.runs) {
 					video.viewCount = parseInt(extractFirstNumber_Integer(extractText_String(renderer.viewCount?.videoViewCountRenderer?.viewCount)));
 				}
-				if(renderer.viewCount?.videoViewCountRenderer?.isLive || renderer.viewCount?.videoViewCountRenderer?.viewCount?.isLive)
+				if (renderer.viewCount?.videoViewCountRenderer?.isLive || renderer.viewCount?.videoViewCountRenderer?.viewCount?.isLive)
 					video.isLive = true;
 				else
 					video.isLive = false;
-				
 
-				if(renderer.videoActions?.menuRenderer?.topLevelButtons)
-					renderer.videoActions.menuRenderer.topLevelButtons.forEach((button)=>{
+
+				if (renderer.videoActions?.menuRenderer?.topLevelButtons)
+					renderer.videoActions.menuRenderer.topLevelButtons.forEach((button) => {
 						switchKey(button, {
 							segmentedLikeDislikeButtonRenderer(renderer) {
 								const likeButtonRenderer = renderer?.likeButton?.toggleButtonRenderer;
-								if(likeButtonRenderer) {
+								if (likeButtonRenderer) {
 									const likeTextData = likeButtonRenderer.defaultText;
-									if(likeTextData){
-										if(likeTextData.accessibility?.accessibilityData?.label)
+									if (likeTextData) {
+										if (likeTextData.accessibility?.accessibilityData?.label)
 											video.rating = new RatingLikes(extractFirstNumber_Integer(likeTextData.accessibility.accessibilityData.label));
-										else if(likeTextData.simpleText)
+										else if (likeTextData.simpleText)
 											video.rating = new RatingLikes(extractHumanNumber_Integer(likeTextData.simpleText));
 
 									}
 								}
 							},
 							segmentedLikeDislikeButtonViewModel(renderer) {
-							    if(IS_TESTING)
-							        console.log("Found new likes model:", renderer);
-							    let likeButtonViewModel = renderer?.likeButtonViewModel;
-							    if(likeButtonViewModel.likeButtonViewModel) //Youtube double nested, not sure if a bug on their end which may be removed
-							        likeButtonViewModel = likeButtonViewModel.likeButtonViewModel;
-							    let toggleButtonViewModel = likeButtonViewModel?.toggleButtonViewModel;
-							    if(toggleButtonViewModel.toggleButtonViewModel) //Youtube double nested, not sure if a bug on their end which may be removed
-							        toggleButtonViewModel = toggleButtonViewModel.toggleButtonViewModel;
+								if (IS_TESTING)
+									console.log("Found new likes model:", renderer);
+								let likeButtonViewModel = renderer?.likeButtonViewModel;
+								if (likeButtonViewModel.likeButtonViewModel) //Youtube double nested, not sure if a bug on their end which may be removed
+									likeButtonViewModel = likeButtonViewModel.likeButtonViewModel;
+								let toggleButtonViewModel = likeButtonViewModel?.toggleButtonViewModel;
+								if (toggleButtonViewModel.toggleButtonViewModel) //Youtube double nested, not sure if a bug on their end which may be removed
+									toggleButtonViewModel = toggleButtonViewModel.toggleButtonViewModel;
 
-							    const buttonViewModel = toggleButtonViewModel?.defaultButtonViewModel?.buttonViewModel;
-							    if(buttonViewModel?.title) {
-							        let num = parseInt(buttonViewModel.title);
-							        if(!isNaN(num))
-							            video.rating = new RatingLikes(num);
-                                    num = extractHumanNumber_Integer(buttonViewModel.title);
-                                    if(!isNaN(num) && num >= 0)
-                                        video.rating = new RatingLikes(num);
-                                    else if(buttonViewModel.title?.toLowerCase() == "like")
-                                        video.rating = new RatingLikes(0);
-                                    else {
-	                                    if(bridge.devSubmit) bridge.devSubmit("extractVideoPage_VideoDetails - Found unknown likes model", JSON.stringify(buttonViewModel));
-                                        throw new ScriptException("Found unknown likes model, please report to dev:\n" + JSON.stringify(buttonViewModel.title));
-                                    }
-							    }
-							    else
-							        log("UNKNOWN LIKES MODEL:\n" + JSON.stringify(renderer, null, "   "));
+								const buttonViewModel = toggleButtonViewModel?.defaultButtonViewModel?.buttonViewModel;
+								if (buttonViewModel?.title) {
+									let num = parseInt(buttonViewModel.title);
+									if (!isNaN(num))
+										video.rating = new RatingLikes(num);
+									num = extractHumanNumber_Integer(buttonViewModel.title);
+									if (!isNaN(num) && num >= 0)
+										video.rating = new RatingLikes(num);
+									else if (buttonViewModel.title?.toLowerCase() == "like")
+										video.rating = new RatingLikes(0);
+									else {
+										if (bridge.devSubmit) bridge.devSubmit("extractVideoPage_VideoDetails - Found unknown likes model", JSON.stringify(buttonViewModel));
+										throw new ScriptException("Found unknown likes model, please report to dev:\n" + JSON.stringify(buttonViewModel.title));
+									}
+								}
+								else
+									log("UNKNOWN LIKES MODEL:\n" + JSON.stringify(renderer, null, "   "));
 							}
 						});
 					});
 
 
-				if(!video.datetime || video.datetime <= 0) {
+				if (!video.datetime || video.datetime <= 0) {
 					let date = 0;
-					
+
 					if (date <= 0 && renderer.relativeDateText?.simpleText)
 						date = extractAgoText_Timestamp(renderer.relativeDateText.simpleText);
-					if(date <= 0 && renderer.dateText?.simpleText)
+					if (date <= 0 && renderer.dateText?.simpleText)
 						date = extractDate_Timestamp(renderer.dateText.simpleText);
 
 					video.datetime = date;
 				}
 			},
 			videoSecondaryInfoRenderer(renderer) {
-				if(renderer.owner.videoOwnerRenderer)
+				if (renderer.owner.videoOwnerRenderer)
 					video.author = extractVideoOwnerRenderer_AuthorLink(renderer.owner.videoOwnerRenderer);
-				if(renderer.description?.runs)
+				if (renderer.description?.runs)
 					video.description = extractRuns_Html(renderer.description.runs);
 			},
 			itemSectionRenderer() {
 				//Comments
+			}
+		});
+	}
+
+	return video;
+}
+function extractVideoDetailsInitialData_SingleColumn_Metadata(initialData, knownData) {
+	const contents = initialData.contents;
+
+	let video = knownData ?? {};
+	const contentsContainer = contents.singleColumnWatchNextResults?.results?.results ??
+		null;
+	if(!contentsContainer || !contentsContainer.contents) return knownData;
+
+	for (let i = 0; i < contentsContainer.contents.length; i++) { //contents
+		const content = contentsContainer.contents[i];
+		switchKey(content, {
+			slimVideoMetadataSectionRenderer(renderer) { //contents[x].slimVideoMetadataSectionRenderer
+				switchKeyCollection(renderer.contents, {
+					slimVideoInformationRenderer(subRenderer) { //contents[x].slimVideoMetadataSectionRenderer.contents[y].slimVideoInformationRenderer
+						if (!video.datetime || video.datetime <= 0) {
+							if (subRenderer.expandedSubtitle ?? subRenderer.collapsedSubtitle)
+								video.datetime = extractAgoText_Timestamp(subRenderer.expandedSubtitle ?? subRenderer.collapsedSubtitle);
+						}
+						if(true || !video.viewCount || video.viewCount <= 0) {
+							if (subRenderer.expandedSubtitle ?? subRenderer.collapsedSubtitle)
+								video.viewCount = extractViewText_ViewCount(subRenderer.expandedSubtitle ?? subRenderer.collapsedSubtitle);
+						}
+					},
+					slimOwnerRenderer(subRenderer) {  //contents[x].slimVideoMetadataSectionRenderer.contents[y].slimOwnerRenderer
+						video.author = extractVideoOwnerRenderer_AuthorLink(subRenderer) ?? video.author;
+					},
+					slimVideoActionBarRenderer(subRenderer) {  //contents[x].slimVideoMetadataSectionRenderer.contents[y].slimVideoActionBarRenderer
+						switchKeyCollection(subRenderer.buttons, {
+							slimMetadataButtonRenderer(subRenderer2) { //contents[x].slimVideoMetadataSectionRenderer.contents[y].slimVideoActionBarRenderer.buttons[z].slimMetadataButtonRenderer
+								if(subRenderer2?.button?.segmentedLikeDislikeButtonViewModel?.likeButtonViewModel?.likeButtonViewModel?.toggleButtonViewModel?.toggleButtonViewModel?.defaultButtonViewModel?.buttonViewModel) {
+									const buttonData = subRenderer2?.button?.segmentedLikeDislikeButtonViewModel?.likeButtonViewModel?.likeButtonViewModel?.toggleButtonViewModel?.toggleButtonViewModel?.defaultButtonViewModel?.buttonViewModel;
+									if(buttonData.title) {
+										video.rating = new RatingLikes(extractHumanNumber_Integer(buttonData.title));
+									}
+								}
+							}
+						});
+					}
+				})
 			}
 		});
 	}
@@ -5908,7 +6033,9 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, clientConfig, pare
 				if (!_settings.allow_av1 && isAV1)
 					return null; //AV01 is unsupported.
 
-				const duration = parseInt(parseInt(y.approxDurationMs) / 1000) ?? 0;
+				let duration = parseInt(parseInt(y.approxDurationMs) / 1000) ?? 0;
+				if(initialPlayerData?.microformat?.playerMicroformatRenderer?.lengthSeconds)
+					duration = parseInt(initialPlayerData?.microformat?.playerMicroformatRenderer?.lengthSeconds);
 				if (isNaN(duration))
 					return null;
 				if(isAV1)
@@ -5941,7 +6068,9 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, clientConfig, pare
 				if (!_settings.allow_av1 && isAV1)
 					return null; //AV01 is unsupported.
 
-				const duration = parseInt(parseInt(y.approxDurationMs) / 1000) ?? 0;
+				let duration = parseInt(parseInt(y.approxDurationMs) / 1000) ?? 0;
+				if(initialPlayerData?.microformat?.playerMicroformatRenderer?.lengthSeconds)
+					duration = parseInt(initialPlayerData?.microformat?.playerMicroformatRenderer?.lengthSeconds);
 				if (isNaN(duration))
 					return null;
 				const source = new YTABRAudioSource(y.itag, {
@@ -6028,7 +6157,8 @@ function extractAdaptiveFormats_VideoDescriptor(adaptiveSources, jsUrl, contextD
 					if(url.indexOf("&cpn=") < 0)   
 							url = url + "&cpn=" + nonce;   
 					   
-					const duration = parseInt(parseInt(y.approxDurationMs) / 1000);   
+					let duration = parseInt(parseInt(y.approxDurationMs) / 1000);
+
 					if(isNaN(duration))   
 							return null;   
 
@@ -6092,6 +6222,8 @@ function extractVideoOwnerRenderer_AuthorLink(renderer) {
 	let subscribers = null;
 	if(renderer.subscriberCountText)
 		subscribers = extractHumanNumber_Integer(extractText_String(renderer.subscriberCountText));
+	else if(renderer.collapsedSubtitle)
+		subscribers = extractHumanNumber_Integer(extractText_String(renderer.collapsedSubtitle));
 
 	return new PlatformAuthorLink(new PlatformID(PLATFORM, id, config.id, PLATFORM_CLAIMTYPE), 
 		extractText_String(renderer.title),
@@ -7350,6 +7482,18 @@ function extractNavigationEndpoint_Url(navEndpoint, baseUrl) {
     return null;
 }
 
+function extractViewText_ViewCount(str) {
+	if(!str)
+		return 0;
+	str = extractText_String(str);
+
+	const match = str.match(REGEX_VIEW_COUNT);
+	if(!match)
+		return 0;
+	
+	return parseInt(extractHumanNumber_Integer(match[0]));
+}
+
 function extractAgoTextRuns_Timestamp(runs) {
 	const runStr = (typeof runs === "string") ? runs : extractRuns_String(runs);
 	return extractAgoText_Timestamp(runStr);
@@ -7357,6 +7501,8 @@ function extractAgoTextRuns_Timestamp(runs) {
 function extractAgoText_Timestamp(str) {
 	if(!str)
 		return 0;
+	str = extractText_String(str);
+
 	const match = str.match(REGEX_HUMAN_AGO);
 	if(!match)
 		return 0;
@@ -7433,7 +7579,7 @@ function extractHumanNumber_Integer(str) {
 	if(!match)
 		return extractFirstNumber_Integer(str);
 
-	const value = parseFloat(match[1]);
+	const value = parseFloat(match[1].replaceAll(",",""));
 	
 	switch(match[2]) {
 		case "T":
@@ -7816,6 +7962,11 @@ function switchKey(obj, handlers) {
 	if(handlers["default"])
 		return handlers["default"](objName);
 	return null;
+}
+function switchKeyCollection(arr, handlers) {
+	for(let item of arr) {
+		switchKey(item, handlers);
+	}
 }
 
 //#endregion
@@ -8345,7 +8496,7 @@ function findNDecryptorFunction(jsUrl, code) {
 	if(!callerMatch) {
 		const foundFunction = findGlobalFunction(code, functionMatch[1]);
 		if(foundFunction) {
-			const arrayAccessors = findAllMatches(foundFunction, /[^.]([a-zA-Z_$]+)\[0\]/g);
+			const arrayAccessors = findAllMatches(foundFunction, /[^.]([a-zA-Z_$0-9]+)\[0\]/g);
 			for(let accessor of arrayAccessors) {
 				const arrayName = accessor[1];
 				const globalArrayValue = findGlobalConstantArrayValue(code, arrayName);
@@ -8963,6 +9114,12 @@ class UMPResponse {
 						const stream21 = this.streams[streamId21];
 						if(stream21) {
 							const partData = binaryReadBytes(segment, {index: 1}, segment.length - 1);
+							const expectedLength = stream21.offset + partData.length;
+							if(stream21.data.length < expectedLength) {
+								const newData = new Uint8Array(new ArrayBuffer(expectedLength), 0, expectedLength)
+								newData.set(stream21.data, 0);
+								stream21.data = newData;
+							}
 							stream21.data.set(partData, stream21.offset);
 							stream21.offset += partData.length;
 						}
