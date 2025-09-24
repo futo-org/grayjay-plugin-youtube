@@ -729,7 +729,7 @@ class YTSessionClient {
 		batch = getPlayerData(videoId, context.sts, useLogin, batch, context.pot);
 
 		//Request: Initial data [1]
-		batch = getVideoDetailsInitialData(videoId, useLogin, batch);
+		batch = getVideoDetailsInitialData(videoId, useLogin, batch); 
 
 		//Request: ReturnYoutubeDislikes [2]
 		if(videoId && _settings["youtubeDislikes"] && !simplify)
@@ -8502,8 +8502,8 @@ function findNDecryptorFunction(jsUrl, code) {
 				const globalArrayValue = findGlobalConstantArrayValue(code, arrayName);
 				if(globalArrayValue) {
 					callerFunction = globalArrayValue;
+					break;
 				}
-				break;
 			}
 			//altFunctionMatchc = /\/file\/index\.m3u8.+?[a-zA-Z0-9$_]=([a-zA-Z0-9$_]+)(?:\[(\d+)])?\(([0-9]+),[a-zA-Z$_0-9]+\)/.exec(code);
 			//callerMatch = (new RegExp("[^a-zA-Z0-9_$]([a-zA-Z0-9_$]+)=function\\([a-zA-Z0-9_$]+\\)\\{\\s*return " + functionMatch[1] + "[^a-zA-Z0-9_$].*?}")).exec(code);

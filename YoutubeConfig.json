@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 281,
+	"version": 282,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -375,6 +375,9 @@
 
 
 	"changelog": {
+		"282": [
+			"Fix: Cipher mistake"
+		],
 		"281": [
 			"Featured: Normalized audio labeling",
 			"Fix: Cipher fix",
