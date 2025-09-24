@@ -1442,6 +1442,38 @@ source.testUMP = function(url) {
 		throw "Not a UMP source?";
 	return src.generate();
 }
+/*
+source.testSignatureCompare({
+	"sig": httpGETBypass(new URL('sig_sig.json', core.Plugin.currentPluginUrl).href, {}, "application/js").body,
+	"playerJSRaw": httpGETBypass(new URL('sig_base.js', core.Plugin.currentPluginUrl).href, {}, "application/js").body,
+	"playerDataRaw": httpGETBypass(new URL('sig_player.json', core.Plugin.currentPluginUrl).href, {}, "application/js").body,
+});
+*/
+source.testSignatureCompare = function(signatureConfig) {
+	const sigTrue = signatureConfig.sig ?? (()=> { throw "No sig provided" })();
+	const playerJSRaw = signatureConfig.playerJSRaw ?? (()=> { throw "No playerJSRaw provided" })();
+	const playerDataRaw = signatureConfig.playerDataRaw ?? (()=> { throw "No playerDataRaw provided" })();
+	const playerData = JSON.parse(playerDataRaw);
+
+	clearCipher("test");
+	prepareCipher("test", playerJSRaw);
+
+	const videoUrl = playerData?.streamingData?.serverAbrStreamingUrl
+	if(!videoUrl)
+		throw "No video data url found";
+
+	const sigOut = {};
+	decryptUrl(videoUrl, "test", true, sigOut);
+	const nOut = {};
+	decryptUrlN(videoUrl, "test", true, nOut);
+
+	const sig = sigOut.sig;
+	const n = nOut.nDecrypted;
+
+	console.log("True Sig:", sigTrue);
+	console.log("Sig Found:", sig);
+	console.log("N Found", n);
+}
 
 function isVerifyAge(initialPlayerData){
 	return (initialPlayerData.playabilityStatus.status == "CONTENT_CHECK_REQUIRED")
@@ -8066,24 +8098,43 @@ source.decryptUrlN = function(url, jsUrl) {
 	return decryptUrlN(url, jsUrl, true);
 }
 
-function decryptUrl(encrypted, jsUrl, doLogging) {
+function decryptUrl(encrypted, jsUrl, doLogging, outObj) {
 	if(!encrypted) return null;
 
 	const query = parseQueryString(encrypted);
 	const baseUrl = query.url;
 	const sigKey = query.sp;
-	const sigValue = decodeCipher(decodeURIComponent(query.s), jsUrl);
+	let decryptedUrl = undefined;
+	let sigValue = undefined;
+	if(query.s || !query.sig)
+	{
+		if(!query.s)
+			log("COULD NOT FIND QUERY.S IN DECRYPT URL");
 
-	let decryptedUrl = decodeURIComponent(baseUrl) + "&" + sigKey + "=" + sigValue;
+		const sigValue = decodeCipher(decodeURIComponent(query.s), jsUrl);
+		decryptedUrl = decodeURIComponent(baseUrl) + "&" + sigKey + "=" + sigValue;
+	}
+	else if(query.sig) {
+		sigValue = query.sig;
+		decryptedUrl = encrypted;
+	}
 
 	if(doLogging) {
 		log("SigKey: " + sigKey);
 		log("SigValue: " + sigValue);
 		log("Decrypted: " + decryptedUrl);
 	}
+	if(outObj)
+	{
+		outObj.sigKey = sigKey;
+		outObj.sig = sigValue;
+		outObj.urlDecrypted = decryptedUrl;
+		outObj.urlEncrypted = baseUrl;
+	}
+
 	return decryptUrlN(decryptedUrl, jsUrl, doLogging);
 }
-function decryptUrlN(url, jsUrl, doLogging) {
+function decryptUrlN(url, jsUrl, doLogging, outObj) {
 	const nParamMatch = REGEX_PARAM_N.exec(url);
 	if(nParamMatch) {
 		const encryptedN = nParamMatch[1];
@@ -8096,7 +8147,16 @@ function decryptUrlN(url, jsUrl, doLogging) {
 			log("Decrypted URL:" + url.replace(encryptedN, decryptedN));
 		}
 
+		const urlBefore = url;
 		url = url.replace(encryptedN, decryptedN);
+
+		if(outObj)
+		{
+			outObj.nEncrypted = encryptedN;
+			outObj.nDecrypted = decryptedN;
+			outObj.urlDecrypted = url;
+			outObj.urlEncrypted = urlBefore;
+		}
 	}
 	else if(doLogging)
 		log("No NParam found in (" + url + ")");
@@ -8179,7 +8239,7 @@ function prepareCipher(jsUrl, codeOverride) {
 	let codeUsed = undefined;
 	let playerCode = undefined;
 	try{
-		const playerCodeResp = http.GET(URL_BASE + jsUrl, {});
+		const playerCodeResp = (!codeOverride) ? http.GET(URL_BASE + jsUrl, {}) : {isOk: true, body: codeOverride};
 		if(!playerCodeResp.isOk) {
 	        if(bridge.devSubmit) bridge.devSubmit("prepareCipher - Failed to get player js", jsUrl);
 			throw new ScriptException("Failed to get player js");
@@ -8401,7 +8461,8 @@ function getVirtualizedPlayer(jsUrl, playerjs, extractFunctions, noDecrypts) {
 	}
 
 	if(IS_TESTING && !noDecrypts) {
-		const jsUrlHash = (/\/s\/player\/([a-zA-Z0-9]+)\//g).exec(jsUrl)[1];
+		const jsUrlHashMatch = (/\/s\/player\/([a-zA-Z0-9]+)\//g).exec(jsUrl);
+		const jsUrlHash = (jsUrlHashMatch) ? jsUrlHashMatch[1] : jsUrl;
 		const test = nParameterTests[jsUrlHash];
 		if(test) {
 			console.log("Testing decryptN:", test);
