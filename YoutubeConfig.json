@@ -338,6 +338,13 @@
 			"description": "Will run the entire player script, may improve compatibility at the cost of performance, and possible tracking",
 			"type": "Boolean",
 			"default": "true"
+		},
+		{
+			"variable": "force_session_client",
+			"name": "Use Youtube Session Client (forced)",
+			"description": "Currently issues exist with the session client and UMP playback, thats why this setting is required to enable it anyway till we fix it",
+			"type": "Boolean",
+			"default": "false"
 		}
 	],
 
@@ -376,7 +383,7 @@
 
 	"changelog": {
 		"283": [
-			"Fix: Signature playback failures"
+			"Fix: Temporarily disable session client to fix UMP"
 		],
 		"282": [
 			"Fix: Cipher mistake"

@@ -120,6 +120,7 @@ var langDisplayRegion = "en-US";
 var langDisplay = "en";
 var langRegion = "US";
 var overrideHttpClient = undefined;
+var overridePOT = undefined; source.setOverridePOT = function(pot) { overridePOT = pot };
 
 var _prefetchHome = null;
 var _prefetchHomeAuth = null;
@@ -1032,7 +1033,7 @@ let FORCE_YTSESSION = false;
 let sessionClient = undefined;
 
 source.getContentDetails = (url, useAuth, simplify, forceUmp, options) => {
-	if(FORCE_YTSESSION || (_settings?.use_session_client && canBatchDummy)) {
+	if(FORCE_YTSESSION || _settings?.force_session_client || (_settings?.use_session_client && canBatchDummy && false)) { //TODO: FIX SESSION CLIENT, OVERRIDING TEMPORARILY WITH FALSE
 		if(!sessionClient) {
 			let newSessionClient = new YTSessionClient();
 			newSessionClient.initialize();	
@@ -3198,6 +3199,8 @@ class YTABRVideoSource extends DashManifestRawSource {
 		}
 
 
+
+
 		let result = generateDash(this, this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag, 0, {
 			playerData: this.options?.playerData
 		});
@@ -3207,7 +3210,7 @@ class YTABRVideoSource extends DashManifestRawSource {
 				const [dash, umpResp, fileHeader] = result;
 				return handleDash(dash, umpResp, fileHeader);
 			}, (rejected)=>{
-				return rejected;
+				throw rejected;
 			});
 			if(result.estDuration)
 				newPromise.estDuration = result.estDuration;
@@ -3329,7 +3332,7 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 			abrUrl += "&cpn=" + randomString(16);
 		}
 		if(abrUrl.indexOf("&cver=") <= 0) {
-			abrUrl += "&cver=2.20250131.01.00";
+			abrUrl += "&cver=2.20250923.08.00";
 		}
 		if(abrUrl.indexOf("&rn=") <= 0) {
 			abrUrl += "&rn=" + ((options.rn) ? options.rn : "1");
@@ -3748,7 +3751,11 @@ class YTABRExecutor {
 				tryGetBotguard((bg)=>{
 					bg.getTokenOrCreate(bgData.visitorData, bgData.dataSyncId, (pot)=>{
 						log("Botguard token to use: " + pot);
-						console.log("Botguard Token to use:", pot);
+						console.log("Botguard Token to use:", {
+							"pot": pot,
+							"visitorData": bgData.visitorData,
+							"dataSyncId": bgData.dataSyncId
+						});
 						this.pot = pot;
 					}, bgData.visitorDataType);
 				});
@@ -3948,6 +3955,8 @@ class YTABRExecutor {
 			sessionZm: this.parentSource?.sharedContext?.sessionZm
 		});
 		const postData = initialReq.serializeBinary();
+		if(!this.rn)
+			this.rn = 1;
 		const abrUrlToRequest = this.abrUrl + "&rn=" + this.rn;
 		log("UMP [" + this.type + "] requesting url: " + abrUrlToRequest); 
 
@@ -4120,7 +4129,7 @@ function getVideoPlaybackRequest(source, ustreamerConfig, playerPosMs, segmentIn
 	
 	const clientInfo = new pb.VideoPlaybackRequest_pb.ClientInfo();
 	clientInfo.setClientname(1);
-	clientInfo.setClientversion("2.20250131.01.00");
+	clientInfo.setClientversion("2.20250923.08.00");
 	clientInfo.setOsname("Windows");
 	clientInfo.setOsversion("10.0");
 
@@ -4149,8 +4158,10 @@ function getVideoPlaybackRequest(source, ustreamerConfig, playerPosMs, segmentIn
 	//SessionInfo
 	const sessionInfo = new pb.VideoPlaybackRequest_pb.SessionInfo();
 	sessionInfo.setClientinfo(clientInfo);
-	if(pot)
+	if(pot) {
+		if(IS_TESTING) console.log("Generating Video Request with POT", pot);
 		sessionInfo.setPot(pot);
+	}
 	if(options?.sessionZm) {
 		const lCa = new pb.VideoPlaybackRequest_pb.lCa();
 		lCa.setType(options.sessionZm.type);
@@ -5967,23 +5978,23 @@ function getConvertedSubtitles(videoId, subRaw, contextData) {
 			}, 2000)
 			let didResolve = false;
 			tryGetBotguard((bg) => {
-				bg.getTokenOrCreateCustom(videoId, (pot) => {
-					log("Botguard token to use (Subtitles): " + pot);
-					console.log("Botguard Token to use (Subtitles):", pot);
-					bridge.toast("Subtitles got POT");
+					bg.getTokenOrCreateCustom(videoId, (pot) => {
+						log("Botguard token to use (Subtitles): " + pot);
+						console.log("Botguard Token to use (Subtitles):", pot);
+						bridge.toast("Subtitles got POT");
 
-					const url = subRaw.baseUrl + "&potc=1&pot=" + encodeURIComponent(pot) + "&c=" + bgData.c + "&cver=" + bgData.cver;
-					console.log(url);
-					const subResp = http.GET(url, {});
+						const url = subRaw.baseUrl + "&potc=1&pot=" + encodeURIComponent(pot) + "&c=" + bgData.c + "&cver=" + bgData.cver;
+						console.log(url);
+						const subResp = http.GET(url, {});
 
-					if (!didResolve) {
-						didResolve = true;
-						resolve(convertSubtitleResponse(subResp));
-					}
-					else {
+						if (!didResolve) {
+							didResolve = true;
+							resolve(convertSubtitleResponse(subResp));
+						}
+						else {
 
-					}
-				});
+						}
+					});
 			})
 		});
 	}
@@ -9868,6 +9879,42 @@ function getExistingBotguard(){
 	return existingBotguard;
 }
 
+function tryGetPOT(bgData, cb, contextStr) {
+	return new Promise((res, rej) =>{
+		try {
+			tryGetBotguard((bg)=>{
+				bg.getTokenOrCreate(bgData.visitorData, bgData.dataSyncId, (pot)=>{
+					log("Botguard token to use: " + pot);
+					console.log("Botguard Token to use:", pot);
+					if(!pot)
+					{
+						rej("No POT Found for " + contextStr);
+						return;
+					}
+					try {
+						const cbResult = cb(pot);
+						if(cbResult && cbResult.then) {
+							cbResult.then(
+								(result)=>{ res(result); }, 
+								(rejected)=>{ rej(rejected); }
+							);
+						}
+						else
+							res(cbResult);
+					}
+					catch(ex) {
+						rej(ex);
+					}
+				}, bgData.visitorDataType);
+			});
+		}
+		catch(ex) {
+			rej(ex);
+		}
+	})
+}
+source.tryGetPOT = tryGetPOT;
+
 //#region BotGuard
 class BotGuardGeneratorInput {
 	constructor(globalObj, globalInitializer, onReady) {
@@ -10091,6 +10138,10 @@ class BotGuardGenerator {
 			throw new ScriptException("No visitor or datasync Id provided for botguard");
 
 		let idToUse = visitorId ?? dataSyncId;
+		if(overridePOT) {
+			cb(token);
+			return;
+		}
 
 		const existing = this.generatedTokens[idToUse];
 		if(!existing) {
