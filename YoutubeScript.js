@@ -699,7 +699,7 @@ class YTSessionClient {
 		return newClientConfig;
 	}
 
-	getContentDetails(url, useAuth, simplify, forceUmp, options) {
+	async getContentDetails(url, useAuth, simplify, forceUmp, options) {
 		if(!this.initialized)
 			throw new ScriptException("YTSessionClient not initialized");
 
@@ -726,8 +726,10 @@ class YTSessionClient {
 		//#region Request Batch
 		let batch = http.batch();
 
+		let videoIdPot = await tryGetPOTCustom(videoId, (pot)=>{return pot});
+
 		//Request: Player data [0]
-		batch = getPlayerData(videoId, context.sts, useLogin, batch, context.pot);
+		batch = getPlayerData(videoId, context.sts, useLogin, batch, videoIdPot);
 
 		//Request: Initial data [1]
 		batch = getVideoDetailsInitialData(videoId, useLogin, batch); 
@@ -780,7 +782,8 @@ class YTSessionClient {
 		let contextData = {
 			url: urlFiltered,
 			jsUrl: context.jsUrl,
-			bgData: context.bgData
+			bgData: context.bgData,
+			videoId: videoId
 		};
 		const videoDetails = extractVideoPlayerData_VideoDetails(playerData, context.jsUrl, contextData);
 
@@ -1033,7 +1036,7 @@ let FORCE_YTSESSION = false;
 let sessionClient = undefined;
 
 source.getContentDetails = (url, useAuth, simplify, forceUmp, options) => {
-	if(FORCE_YTSESSION || _settings?.force_session_client || (_settings?.use_session_client && canBatchDummy && false)) { //TODO: FIX SESSION CLIENT, OVERRIDING TEMPORARILY WITH FALSE
+	if(FORCE_YTSESSION || _settings?.force_session_client || (_settings?.use_session_client && canBatchDummy)) {
 		if(!sessionClient) {
 			let newSessionClient = new YTSessionClient();
 			newSessionClient.initialize();	
@@ -1433,10 +1436,10 @@ source.getContentDetails = (url, useAuth, simplify, forceUmp, options) => {
 	return finalResult;
 };
 
-source.testUMP = function(url) {
+source.testUMP = async function(url) {
 	USE_ABR_VIDEOS = true;
 
-	const video = source.getContentDetails(url);
+	const video = await source.getContentDetails(url);
 
 	const src = video.video.videoSources.find(x=>x.height = 720);
 	if(!src.generate)
@@ -2203,11 +2206,11 @@ class YTVODEventPager extends LiveEventPager {
 	}
 }
 
-source.getPlaybackTracker = function(url, initialPlayerData) {
+source.getPlaybackTracker = async function(url, initialPlayerData) {
 	if(!_settings["youtubeActivity"] || !bridge.isLoggedIn())
 		return null;
 	if(!initialPlayerData) {
-		const video = source.getContentDetails(url, true, true, false, {noSources: true});
+		const video = await source.getContentDetails(url, true, true, false, {noSources: true});
 		initialPlayerData = video.__playerData;
 		if(!initialPlayerData)
 			throw new ScriptException("No playerData for playback tracker");
@@ -3171,6 +3174,7 @@ class YTABRVideoSource extends DashManifestRawSource {
 		this.overrideSource = undefined;
 		this.options = options;
 		this.sharedContext = options?.sharedContext;
+		this.videoId = options?.videoId;
     }
 
 	generate() {
@@ -3200,9 +3204,11 @@ class YTABRVideoSource extends DashManifestRawSource {
 
 
 
-
-		let result = generateDash(this, this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag, 0, {
-			playerData: this.options?.playerData
+		let result = tryGetPOTCustom(this.videoId, (pot)=>{
+			this.pot = pot;
+			return generateDash(this, this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag, 0, {
+				playerData: this.options?.playerData
+			})
 		});
 		
 		if(result && result.then) {
@@ -3226,7 +3232,7 @@ class YTABRVideoSource extends DashManifestRawSource {
 			return this.overrideSource.getRequestExecutor();
 		const req = new YTABRExecutor(this, this.abrUrl, this.sourceObj, this.ustreamerConfig, 
 			this.initialHeader,
-			this.initialUMP, this.bgData);
+			this.initialUMP, this.bgData, this.videoId);
 		log("Request Executor ready for video");
 		return req;
 	}
@@ -3255,6 +3261,7 @@ class YTABRAudioSource extends DashManifestRawAudioSource {
 		this.overrideSource = undefined;
 		this.options = options;
 		this.sharedContext = options?.sharedContext;
+		this.videoId = options?.videoId;
     }
 
 	generate() {
@@ -3283,8 +3290,13 @@ class YTABRAudioSource extends DashManifestRawAudioSource {
 		}
 
 
-		let result = generateDash(this, this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag, 0, {
-			playerData: this.options?.playerData
+
+		let result = tryGetPOTCustom(this.videoId, (pot)=>{
+			this.pot = pot;
+			return generateDash(this, this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag, 0, {
+				playerData: this.options?.playerData,
+				pot: pot
+			})
 		});
 		
 		if(result && result.then) {
@@ -3305,7 +3317,7 @@ class YTABRAudioSource extends DashManifestRawAudioSource {
 			return this.overrideSource.getRequestExecutor();
 		const req = new YTABRExecutor(this, this.abrUrl, this.sourceObj, this.ustreamerConfig,
 			this.initialHeader,
-			this.initialUMP, this.bgData);
+			this.initialUMP, this.bgData, this.videoId);
 		log("Request Executor ready for audio");
 		return req;
 	}
@@ -3721,7 +3733,7 @@ let _executorsVideo = [];
 let _executorsAudio = [];
 let _recoveryCache = {};
 class YTABRExecutor {
-	constructor(parentSource, url, source, ustreamerConfig, header, initialUmp, bgData) {
+	constructor(parentSource, url, source, ustreamerConfig, header, initialUmp, bgData, videoId) {
 		this.parentSource = parentSource;
 		this.executorId = executorCounter++;
 		this.source = source;
@@ -3740,6 +3752,7 @@ class YTABRExecutor {
 		this.bgData = bgData;
 		this.level = 0;
 		this.childExecutor = undefined;
+		this.videoId = videoId;
 		
 		if(bgData) {
 			if(bgData.pot)
@@ -3749,6 +3762,16 @@ class YTABRExecutor {
 					log("Botguard no visitorId or dataSyncId found, not using botguard!");
 				}
 				tryGetBotguard((bg)=>{
+					bg.getTokenOrCreateCustom(this.videoId, (pot)=>{
+						log("Botguard token to use: " + pot);
+						console.log("Botguard Token to use:", {
+							"pot": pot,
+							"visitorData": bgData.visitorData,
+							"dataSyncId": bgData.dataSyncId
+						});
+						this.pot = pot;
+					}, true);
+					/*
 					bg.getTokenOrCreate(bgData.visitorData, bgData.dataSyncId, (pot)=>{
 						log("Botguard token to use: " + pot);
 						console.log("Botguard Token to use:", {
@@ -3758,6 +3781,7 @@ class YTABRExecutor {
 						});
 						this.pot = pot;
 					}, bgData.visitorDataType);
+					*/
 				});
 			}
 		}
@@ -3881,12 +3905,12 @@ class YTABRExecutor {
 		console.clear(); //Temp fix for memory leaking
 	}
 
-	recreateExecutor(newContext){
+	async recreateExecutor(newContext){
 		const parentUrl = this.parentSource.parentUrl;
 		console.warn("Re-fetching [" + parentUrl + "] for executor");
 		if(!parentUrl)
 			throw new ScriptException("Failed to recreate object");
-		const video = source.getContentDetails(parentUrl, this.parentSource.usedLogin, true, true, {
+		const video = await source.getContentDetails(parentUrl, this.parentSource.usedLogin, true, true, {
 			useNewContext: !!newContext
 		});
 
@@ -6095,7 +6119,8 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, clientConfig, pare
 				}, abrStreamingUrl, y, initialPlayerData.playerConfig.mediaCommonConfig.mediaUstreamerRequestConfig.videoPlaybackUstreamerConfig,
 					getBGDataFromClientConfig(clientConfig, usedLogin, contextData?.pot), parentUrl, usedLogin, jsUrl, {
 						playerData:initialPlayerData,
-						sharedContext: sharedContext
+						sharedContext: sharedContext,
+						videoId: contextData?.videoId
 					});
 				result.priority = isAV1;
 				return result;
@@ -6133,7 +6158,8 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, clientConfig, pare
 				}, abrStreamingUrl, y, initialPlayerData.playerConfig.mediaCommonConfig.mediaUstreamerRequestConfig.videoPlaybackUstreamerConfig,
 					getBGDataFromClientConfig(clientConfig, usedLogin, contextData?.pot), parentUrl, usedLogin, jsUrl, {
 						playerData:initialPlayerData,
-						sharedContext: sharedContext
+						sharedContext: sharedContext,
+						videoId: contextData?.videoId
 					});
 
 				return source;
@@ -9227,6 +9253,10 @@ class UMPResponse {
 						const opCode47 = pb.Opcode47_pb.Opcode47.deserializeBinary(segment);
 						console.log(opCode47);
 						break;
+					case 52: //Unknown
+						const opCode52 = pb.Opcode52_pb.Opcode52.deserializeBinary(segment);
+						console.log(opCode52);
+						break;
 					case 53: //Unknown
 						const opCode53 = pb.Opcode53_pb.Opcode53.deserializeBinary(segment);
 						console.log(opCode53);
@@ -9474,7 +9504,7 @@ source.testUMPSessions = async function(url) {
 }
 source.testUMP = async function(url, startSegment, endSegment, itag, isAudio, cb){
 	USE_ABR_VIDEOS = true;
-	const item = this.getContentDetails(url);
+	const item = await source.getContentDetails(url);
 	console.log(item);
 
 	let video = (!isAudio) ? 
@@ -9879,7 +9909,7 @@ function getExistingBotguard(){
 	return existingBotguard;
 }
 
-function tryGetPOT(bgData, cb, contextStr) {
+function tryGetPOT(bgData, cb, contextStr, forceNew) {
 	return new Promise((res, rej) =>{
 		try {
 			tryGetBotguard((bg)=>{
@@ -9905,7 +9935,41 @@ function tryGetPOT(bgData, cb, contextStr) {
 					catch(ex) {
 						rej(ex);
 					}
-				}, bgData.visitorDataType);
+				}, bgData.visitorDataType, forceNew);
+			});
+		}
+		catch(ex) {
+			rej(ex);
+		}
+	})
+}
+function tryGetPOTCustom(customId, cb, contextStr, forceNew) {
+	return new Promise((res, rej) =>{
+		try {
+			tryGetBotguard((bg)=>{
+				bg.getTokenOrCreateCustom(customId, (pot)=>{
+					log("Botguard token to use: " + pot);
+					console.log("Botguard Token to use:", pot);
+					if(!pot)
+					{
+						rej("No POT Found for " + contextStr);
+						return;
+					}
+					try {
+						const cbResult = cb(pot);
+						if(cbResult && cbResult.then) {
+							cbResult.then(
+								(result)=>{ res(result); }, 
+								(rejected)=>{ rej(rejected); }
+							);
+						}
+						else
+							res(cbResult);
+					}
+					catch(ex) {
+						rej(ex);
+					}
+				}, forceNew);
 			});
 		}
 		catch(ex) {
@@ -9914,6 +9978,7 @@ function tryGetPOT(bgData, cb, contextStr) {
 	})
 }
 source.tryGetPOT = tryGetPOT;
+source.tryGetPOTCustom = tryGetPOTCustom;
 
 //#region BotGuard
 class BotGuardGeneratorInput {
@@ -10117,14 +10182,16 @@ class BotGuardGenerator {
 		return this.mint;
 	}
 
-	getTokenOrCreateCustom(customToken, cb) {
+	getTokenOrCreateCustom(customToken, cb, forceNew) {
 		if(!customToken)
 			throw new ScriptException("No token Id provided for botguard");
 
 		let idToUse = customToken;
 
 		const existing = this.generatedTokens[idToUse];
-		if(!existing) {
+		if(!existing || forceNew) {
+			if(existing && forceNew)
+				console.log("Force creating new PO Token");
 			log("No existing botguard customToken, generating new");
 			this.generateBase64(customToken, customToken, (token)=>{
 				cb(token);
@@ -10133,7 +10200,7 @@ class BotGuardGenerator {
 		else //TODO: check expiry?
 			cb(existing.tokenBase64);
 	}
-	getTokenOrCreate(visitorId, dataSyncId, cb, type) {
+	getTokenOrCreate(visitorId, dataSyncId, cb, type, force) {
 		if(!visitorId && !dataSyncId)
 			throw new ScriptException("No visitor or datasync Id provided for botguard");
 
@@ -10144,7 +10211,7 @@ class BotGuardGenerator {
 		}
 
 		const existing = this.generatedTokens[idToUse];
-		if(!existing) {
+		if(!existing || force) {
 			log("No existing botguard token, generating new");
 			this.generateBase64(visitorId, dataSyncId, (token)=>{
 				cb(token);
@@ -10155,11 +10222,16 @@ class BotGuardGenerator {
 	}
 
 	generateBase64(visitorId, dataSyncId, cb, type) {
+		if(!(visitorId ?? dataSyncId))
+			console.log("NO VISITORID OR DATASYNC PROVIDED FOR POT");
 		this.generate(visitorId, dataSyncId, (result) => {
 			const originId = visitorId;
 			let poToken = btoa(String.fromCharCode(...result))
 				.replace(/\+/g, '-')
 				.replace(/\//g, '_');
+
+			console.log("New Generated POT", [visitorId, poToken]);
+			
 			cb(poToken);
 		}, type);
 	}
