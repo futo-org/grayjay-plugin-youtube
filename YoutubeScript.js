@@ -636,14 +636,46 @@ class YTSessionClient {
 		this.initialized = false;
 	}
 
-	initialize() {
+	initialize(cb, potReady) {
 		this.clientConfig = this.getClientInit(this.client);
 		this.clientConfigAuth = this.getClientInit(this.clientAuth, true);
+
+		const config = this.clientConfig;
+		const configAuth = this.clientConfigAuth;
+
 		console.log("YTSessionClient clientConfig", this.clientConfig);
 		console.log("YTSessionClient clientConfigAuth", this.clientConfigAuth);
 		this.initialized = true;
 		if(!!_settings["showVerboseToasts"])
 			bridge.toast("Using YTSession Client");
+
+		if (_settings.use_session_client_pot) {
+			tryGetBotguard((bg) => {
+				bg.getTokenOrCreate(config.bgData.visitorData, config.bgData.dataSyncId, (pot) => {
+					const potPart = (pot) ? pot.substring(0, 5) : "";
+					log("Botguard token for YTSessionClient: " + pot);
+					console.log("Botguard Token for YTSessionClient:", pot);
+					if (!!_settings["showVerboseToasts"])
+						bridge.toast("YTSessionClient got pot [" + potPart + "]")
+					config.pot = pot;
+
+					if(configAuth) {
+						bg.getTokenOrCreate(configAuth.bgData.visitorData, configAuth.bgData.dataSyncId, (pot) => {
+							const potPart = (pot) ? pot.substring(0, 5) : "";
+							log("Botguard token for YTSessionClient: " + pot);
+							console.log("Botguard Token for YTSessionClient:", pot);
+							if (!!_settings["showVerboseToasts"])
+								bridge.toast("YTSessionClient got pot [" + potPart + "]")
+							configAuth.pot = pot;
+							if(potReady)
+								potReady();
+						}, configAuth.bgData.visitorDataType);
+					}
+					else
+						potReady();
+				}, config.bgData.visitorDataType);
+			});
+		}
 	}
 
 	getClientInit(client, usedLogin, overrideHtml) {
@@ -671,6 +703,7 @@ class YTSessionClient {
 			sts: _sts[jsUrl],
 			bgData: getBGDataFromClientConfig(clientConfig, !!usedLogin)
 		};
+		/*
 		if(_settings.use_session_client_pot) {
 				tryGetBotguard((bg)=>{
 					bg.getTokenOrCreate(newClientConfig.bgData.visitorData, newClientConfig.bgData.dataSyncId, (pot)=>{
@@ -695,6 +728,7 @@ class YTSessionClient {
 					});
 				}
 		}
+		*/
 
 		return newClientConfig;
 	}
@@ -3204,11 +3238,16 @@ class YTABRVideoSource extends DashManifestRawSource {
 
 
 
+		let estDuration = undefined;
 		let result = tryGetPOTCustom(this.videoId, (pot)=>{
 			this.pot = pot;
-			return generateDash(this, this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag, 0, {
+			const dashResult = generateDash(this, this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag, 0, {
 				playerData: this.options?.playerData
-			})
+			});
+			if(dashResult.estDuration) {
+				estDuration = dashResult.estDuration;
+			}
+			return dashResult;
 		});
 		
 		if(result && result.then) {
@@ -3220,6 +3259,9 @@ class YTABRVideoSource extends DashManifestRawSource {
 			});
 			if(result.estDuration)
 				newPromise.estDuration = result.estDuration;
+			else if(estDuration) {
+				newPromise.estDuration = result.estDuration;
+			}
 			return newPromise;
 		}
 		else {
@@ -9947,29 +9989,36 @@ function tryGetPOTCustom(customId, cb, contextStr, forceNew) {
 	return new Promise((res, rej) =>{
 		try {
 			tryGetBotguard((bg)=>{
-				bg.getTokenOrCreateCustom(customId, (pot)=>{
-					log("Botguard token to use: " + pot);
-					console.log("Botguard Token to use:", pot);
-					if(!pot)
-					{
-						rej("No POT Found for " + contextStr);
+				try {
+					bg.getTokenOrCreateCustom(customId, (pot)=>{
+						log("Botguard token to use: " + pot);
+						console.log("Botguard Token to use:", pot);
+						rej("test");
 						return;
-					}
-					try {
-						const cbResult = cb(pot);
-						if(cbResult && cbResult.then) {
-							cbResult.then(
-								(result)=>{ res(result); }, 
-								(rejected)=>{ rej(rejected); }
-							);
+						if(!pot)
+						{
+							rej("No POT Found for " + contextStr);
+							return;
 						}
-						else
-							res(cbResult);
-					}
-					catch(ex) {
-						rej(ex);
-					}
-				}, forceNew);
+						try {
+							const cbResult = cb(pot);
+							if(cbResult && cbResult.then) {
+								cbResult.then(
+									(result)=>{ res(result); }, 
+									(rejected)=>{ rej(rejected); }
+								);
+							}
+							else
+								res(cbResult);
+						}
+						catch(ex) {
+							rej(ex);
+						}
+					}, forceNew);
+				}
+				catch(ex) {
+					rej(ex);
+				}
 			});
 		}
 		catch(ex) {
