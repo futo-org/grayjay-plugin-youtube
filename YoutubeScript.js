@@ -636,7 +636,7 @@ class YTSessionClient {
 		this.initialized = false;
 	}
 
-	initialize(cb, potReady) {
+	initialize(potReady) {
 		this.clientConfig = this.getClientInit(this.client);
 		this.clientConfigAuth = this.getClientInit(this.clientAuth, true);
 
@@ -692,6 +692,21 @@ class YTSessionClient {
 		const clientConfig = getClientConfig(homeHtml, usedLogin);
 		const initialData = getInitialData(homeHtml);
 
+		const playerConfig = {};
+		const clientWatchConfig = clientConfig.WEB_PLAYER_CONTEXT_CONFIGS?.WEB_PLAYER_CONTEXT_CONFIG_ID_KEVLAR_WATCH;
+		if(clientWatchConfig) {
+			if(clientWatchConfig.serializedExperimentFlags) {
+				const queryParams = parseQueryString(clientWatchConfig.serializedExperimentFlags);
+				playerConfig.useVideoIdPot = queryParams.html5_generate_content_po_token == "true";
+				playerConfig.useSessionPot = queryParams.html5_generate_session_po_token == "true";
+			}
+		}
+		else
+			playerConfig.useVideoIdPot = true; //Default to true for now?
+
+		//Temporarily always use videoId
+		//playerConfig.useVideoIdPot = true;
+
 		const jsUrlMatch = homeHtml.match("PLAYER_JS_URL\"\\s?:\\s?\"(.*?)\"");
 		const jsUrl = (jsUrlMatch) ? jsUrlMatch[1] : clientConfig.PLAYER_JS_URL;
 		const isNewCipher = prepareCipher(jsUrl);
@@ -701,6 +716,7 @@ class YTSessionClient {
 			clientConfig: clientConfig,
 			jsUrl: jsUrl,
 			sts: _sts[jsUrl],
+			playerConfig: playerConfig,
 			bgData: getBGDataFromClientConfig(clientConfig, !!usedLogin)
 		};
 		/*
@@ -760,10 +776,14 @@ class YTSessionClient {
 		//#region Request Batch
 		let batch = http.batch();
 
-		let videoIdPot = await tryGetPOTCustom(videoId, (pot)=>{return pot});
+		let potToUse = (context.playerConfig.useVideoIdPot) ? 
+			await tryGetPOTCustom(videoId, (pot)=>{return pot}) :
+			await tryGetPOT(context.bgData, (pot)=>{return pot});
+		if(context.playerConfig.useVideoIdPot) log("POT Type Used (player): Video"); else log("POT Type Used (player): Session");
+
 
 		//Request: Player data [0]
-		batch = getPlayerData(videoId, context.sts, useLogin, batch, videoIdPot);
+		batch = getPlayerData(videoId, context.sts, useLogin, batch, potToUse);
 
 		//Request: Initial data [1]
 		batch = getVideoDetailsInitialData(videoId, useLogin, batch); 
@@ -817,7 +837,8 @@ class YTSessionClient {
 			url: urlFiltered,
 			jsUrl: context.jsUrl,
 			bgData: context.bgData,
-			videoId: videoId
+			videoId: videoId,
+			playerConfig: context.playerConfig
 		};
 		const videoDetails = extractVideoPlayerData_VideoDetails(playerData, context.jsUrl, contextData);
 
@@ -1072,9 +1093,18 @@ let sessionClient = undefined;
 source.getContentDetails = (url, useAuth, simplify, forceUmp, options) => {
 	if(FORCE_YTSESSION || _settings?.force_session_client || (_settings?.use_session_client && canBatchDummy)) {
 		if(!sessionClient) {
-			let newSessionClient = new YTSessionClient();
-			newSessionClient.initialize();	
-			sessionClient = newSessionClient;
+			return new Promise((resolve, reject)=>{
+				try {
+					let newSessionClient = new YTSessionClient();
+					newSessionClient.initialize(()=>{
+						resolve(sessionClient.getContentDetails(url, useAuth, simplify, options));
+					});
+					sessionClient = newSessionClient;
+				}
+				catch(ex) {
+					reject(ex);
+				}
+			});
 		}
 		return sessionClient.getContentDetails(url, useAuth, simplify, options);
 	}
@@ -3239,16 +3269,23 @@ class YTABRVideoSource extends DashManifestRawSource {
 
 
 		let estDuration = undefined;
+		let result = generateDash(this, this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag, 0, {
+			playerData: this.options?.playerData,
+			playerConfig: this.options?.playerConfig
+		});
+		/*
 		let result = tryGetPOTCustom(this.videoId, (pot)=>{
 			this.pot = pot;
 			const dashResult = generateDash(this, this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag, 0, {
-				playerData: this.options?.playerData
+				playerData: this.options?.playerData,
+				playerConfig: this.options?.playerConfig
 			});
 			if(dashResult.estDuration) {
 				estDuration = dashResult.estDuration;
 			}
 			return dashResult;
 		});
+		*/
 		
 		if(result && result.then) {
 			const newPromise = result.then((result)=>{
@@ -3274,7 +3311,8 @@ class YTABRVideoSource extends DashManifestRawSource {
 			return this.overrideSource.getRequestExecutor();
 		const req = new YTABRExecutor(this, this.abrUrl, this.sourceObj, this.ustreamerConfig, 
 			this.initialHeader,
-			this.initialUMP, this.bgData, this.videoId);
+			this.initialUMP, this.bgData, this.videoId,
+			this.options?.playerConfig);
 		log("Request Executor ready for video");
 		return req;
 	}
@@ -3331,14 +3369,9 @@ class YTABRAudioSource extends DashManifestRawAudioSource {
 			return dash;
 		}
 
-
-
-		let result = tryGetPOTCustom(this.videoId, (pot)=>{
-			this.pot = pot;
-			return generateDash(this, this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag, 0, {
-				playerData: this.options?.playerData,
-				pot: pot
-			})
+		let result = generateDash(this, this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag, 0, {
+			playerData: this.options?.playerData,
+			playerConfig: this.options?.playerConfig
 		});
 		
 		if(result && result.then) {
@@ -3359,7 +3392,8 @@ class YTABRAudioSource extends DashManifestRawAudioSource {
 			return this.overrideSource.getRequestExecutor();
 		const req = new YTABRExecutor(this, this.abrUrl, this.sourceObj, this.ustreamerConfig,
 			this.initialHeader,
-			this.initialUMP, this.bgData, this.videoId);
+			this.initialUMP, this.bgData, this.videoId,
+			this.options?.playerConfig);
 		log("Request Executor ready for audio");
 		return req;
 	}
@@ -3775,7 +3809,7 @@ let _executorsVideo = [];
 let _executorsAudio = [];
 let _recoveryCache = {};
 class YTABRExecutor {
-	constructor(parentSource, url, source, ustreamerConfig, header, initialUmp, bgData, videoId) {
+	constructor(parentSource, url, source, ustreamerConfig, header, initialUmp, bgData, videoId, playerConfig) {
 		this.parentSource = parentSource;
 		this.executorId = executorCounter++;
 		this.source = source;
@@ -3795,6 +3829,7 @@ class YTABRExecutor {
 		this.level = 0;
 		this.childExecutor = undefined;
 		this.videoId = videoId;
+		this.playerConfig = playerConfig;
 		
 		if(bgData) {
 			if(bgData.pot)
@@ -3804,26 +3839,31 @@ class YTABRExecutor {
 					log("Botguard no visitorId or dataSyncId found, not using botguard!");
 				}
 				tryGetBotguard((bg)=>{
-					bg.getTokenOrCreateCustom(this.videoId, (pot)=>{
-						log("Botguard token to use: " + pot);
-						console.log("Botguard Token to use:", {
-							"pot": pot,
-							"visitorData": bgData.visitorData,
-							"dataSyncId": bgData.dataSyncId
-						});
-						this.pot = pot;
-					}, true);
-					/*
-					bg.getTokenOrCreate(bgData.visitorData, bgData.dataSyncId, (pot)=>{
-						log("Botguard token to use: " + pot);
-						console.log("Botguard Token to use:", {
-							"pot": pot,
-							"visitorData": bgData.visitorData,
-							"dataSyncId": bgData.dataSyncId
-						});
-						this.pot = pot;
-					}, bgData.visitorDataType);
-					*/
+					log("PlayerConfig: " + JSON.stringify(this.playerConfig));
+					if(this.playerConfig?.useVideoIdPot) {
+						log("POT Type Used: Video");
+						bg.getTokenOrCreateCustom(this.videoId, (pot)=>{
+							log("Botguard token to use: " + pot);
+							console.log("Botguard Token to use:", {
+								"pot": pot,
+								"visitorData": bgData.visitorData,
+								"dataSyncId": bgData.dataSyncId
+							});
+							this.pot = pot;
+						}, true);
+					}
+					else {
+						log("POT Type Used: Session");
+						bg.getTokenOrCreate(bgData.visitorData, bgData.dataSyncId, (pot)=>{
+							log("Botguard token to use: " + pot);
+							console.log("Botguard Token to use:", {
+								"pot": pot,
+								"visitorData": bgData.visitorData,
+								"dataSyncId": bgData.dataSyncId
+							});
+							this.pot = pot;
+						}, bgData.visitorDataType);
+					}
 				});
 			}
 		}
@@ -6162,7 +6202,8 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, clientConfig, pare
 					getBGDataFromClientConfig(clientConfig, usedLogin, contextData?.pot), parentUrl, usedLogin, jsUrl, {
 						playerData:initialPlayerData,
 						sharedContext: sharedContext,
-						videoId: contextData?.videoId
+						videoId: contextData?.videoId,
+						playerConfig: contextData?.playerConfig
 					});
 				result.priority = isAV1;
 				return result;
@@ -6201,7 +6242,8 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, clientConfig, pare
 					getBGDataFromClientConfig(clientConfig, usedLogin, contextData?.pot), parentUrl, usedLogin, jsUrl, {
 						playerData:initialPlayerData,
 						sharedContext: sharedContext,
-						videoId: contextData?.videoId
+						videoId: contextData?.videoId,
+						playerConfig: contextData?.playerConfig
 					});
 
 				return source;
@@ -9993,8 +10035,8 @@ function tryGetPOTCustom(customId, cb, contextStr, forceNew) {
 					bg.getTokenOrCreateCustom(customId, (pot)=>{
 						log("Botguard token to use: " + pot);
 						console.log("Botguard Token to use:", pot);
-						rej("test");
-						return;
+						//rej("test");
+						//return;
 						if(!pot)
 						{
 							rej("No POT Found for " + contextStr);
