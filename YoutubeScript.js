@@ -969,11 +969,9 @@ class YTSessionClient {
 			}
 		}
 
+		log("getContentDetails Succeeded");
 		return videoDetails;
 	}
-
-
-	
 }
 source.YTSessionClient = YTSessionClient;
 function extractVideoPlayerData_VideoDetails(playerData, jsUrl, contextData) {
@@ -1096,8 +1094,13 @@ source.getContentDetails = (url, useAuth, simplify, forceUmp, options) => {
 			return new Promise((resolve, reject)=>{
 				try {
 					let newSessionClient = new YTSessionClient();
-					newSessionClient.initialize(()=>{
-						resolve(sessionClient.getContentDetails(url, useAuth, simplify, options));
+					newSessionClient.initialize(async ()=>{
+						try {
+							resolve(await sessionClient.getContentDetails(url, useAuth, simplify, options));
+						}
+						catch(ex) {
+							reject(ex);
+						}
 					});
 					sessionClient = newSessionClient;
 				}
@@ -2270,14 +2273,33 @@ class YTVODEventPager extends LiveEventPager {
 	}
 }
 
-source.getPlaybackTracker = async function(url, initialPlayerData) {
+source.getPlaybackTracker = function(url, initialPlayerData) {
 	if(!_settings["youtubeActivity"] || !bridge.isLoggedIn())
 		return null;
 	if(!initialPlayerData) {
-		const video = await source.getContentDetails(url, true, true, false, {noSources: true});
-		initialPlayerData = video.__playerData;
-		if(!initialPlayerData)
-			throw new ScriptException("No playerData for playback tracker");
+		return new Promise((resolve, reject) => {
+			try {
+				const videoPromise = source.getContentDetails(url, true, true, false, {noSources: true});
+				function handleVideo(video) {
+					initialPlayerData = video.__playerData;
+					if(!initialPlayerData)
+						throw new ScriptException("No playerData for playback tracker");
+					return new YoutubePlaybackTracker(initialPlayerData);
+				}
+				if(videoPromise.then) {
+					videoPromise.then((x=>{
+						resolve(handleVideo(x));
+					}, (rejected)=> {
+						reject(rejected);
+					}))
+				}
+				else
+					resolve(handleVideo(videoPromise));
+			}
+			catch(ex) {
+				reject(ex);
+			}
+		});
 	}
 	return new YoutubePlaybackTracker(initialPlayerData);
 }
