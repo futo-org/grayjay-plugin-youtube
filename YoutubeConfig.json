@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 284,
+	"version": 285,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -375,6 +375,11 @@
 
 
 	"changelog": {
+		"285": [
+			"HOTFIX: Fix playback tracker",
+			"Fix: Cipher fix",
+			"Fix: UMP Fixed (More testing required)"
+		],
 		"284": [
 			"Fix: Cipher fix",
 			"Fix: UMP Fixed (More testing required)"

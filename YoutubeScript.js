@@ -234,9 +234,22 @@ source.reEnable = (conf, settings) => {
 	return source.enable(conf ?? config, settings ?? _settings);
 };
 
+var isOutdatedVersion = false;
+function testOutdatedVersion(showToast) {
+	if(bridge.buildPlatform == "android" && bridge.buildVersion < 284)
+		isOutdatedVersion = true;
+	else if(bridge.buildPlatform == "desktop" && (bridge.buildVersion < 10 || bridge.buildVersion == 282))
+		isOutdatedVersion = true;
+
+	if(isOutdatedVersion && showToast)
+		bridge.toast("Grayjay update required for proper Youtube functioning");
+}
+
 source.enable = (conf, settings, saveStateStr) => {
 	config = conf ?? {};
 	_settings = settings ?? {};
+
+	testOutdatedVersion(!saveStateStr);
 
 	console.log("Settings", _settings)
 
@@ -1089,31 +1102,34 @@ let FORCE_YTSESSION = false;
 let sessionClient = undefined;
 
 source.getContentDetails = (url, useAuth, simplify, forceUmp, options) => {
-	if(FORCE_YTSESSION || _settings?.force_session_client || (_settings?.use_session_client && canBatchDummy)) {
-		if(!sessionClient) {
-			return new Promise((resolve, reject)=>{
-				try {
-					let newSessionClient = new YTSessionClient();
-					newSessionClient.initialize(async ()=>{
-						try {
-							resolve(await sessionClient.getContentDetails(url, useAuth, simplify, options));
-						}
-						catch(ex) {
-							reject(ex);
-						}
-					});
-					sessionClient = newSessionClient;
-				}
-				catch(ex) {
-					reject(ex);
-				}
-			});
+	if(!isOutdatedVersion) {
+		if(FORCE_YTSESSION || _settings?.force_session_client || (_settings?.use_session_client && canBatchDummy)) {
+			if(!sessionClient) {
+				return new Promise((resolve, reject)=>{
+					try {
+						let newSessionClient = new YTSessionClient();
+						newSessionClient.initialize(async ()=>{
+							try {
+								resolve(await sessionClient.getContentDetails(url, useAuth, simplify, options));
+							}
+							catch(ex) {
+								reject(ex);
+							}
+						});
+						sessionClient = newSessionClient;
+					}
+					catch(ex) {
+						reject(ex);
+					}
+				});
+			}
+			return sessionClient.getContentDetails(url, useAuth, simplify, options);
 		}
-		return sessionClient.getContentDetails(url, useAuth, simplify, options);
+		else if(!canBatchDummy && _settings?.use_session_client) {
+			bridge.toast("YTSession client not supported, using old logic");
+		}
 	}
-	else if(!canBatchDummy && _settings?.use_session_client) {
-		bridge.toast("YTSession client not supported, using old logic");
-	}
+	else bridge.toast("Using outdated logic, Grayjay update required");
 
 	useAuth = !!_settings?.authDetails || !!useAuth;
 	console.clear(); //Temp fix for memory leaking
@@ -2273,33 +2289,33 @@ class YTVODEventPager extends LiveEventPager {
 	}
 }
 
-source.getPlaybackTracker = function(url, initialPlayerData) {
-	if(!_settings["youtubeActivity"] || !bridge.isLoggedIn())
+source.getPlaybackTracker = function (url, initialPlayerData) {
+	if (!_settings["youtubeActivity"] || !bridge.isLoggedIn())
 		return null;
-	if(!initialPlayerData) {
-		return new Promise((resolve, reject) => {
-			try {
-				const videoPromise = source.getContentDetails(url, true, true, false, {noSources: true});
-				function handleVideo(video) {
-					initialPlayerData = video.__playerData;
-					if(!initialPlayerData)
-						throw new ScriptException("No playerData for playback tracker");
-					return new YoutubePlaybackTracker(initialPlayerData);
-				}
-				if(videoPromise.then) {
-					videoPromise.then((x=>{
+	if (!initialPlayerData) {
+		const videoPromise = source.getContentDetails(url, true, true, false, { noSources: true });
+		function handleVideo(video) {
+			initialPlayerData = video.__playerData;
+			if (!initialPlayerData)
+				throw new ScriptException("No playerData for playback tracker");
+			return new YoutubePlaybackTracker(initialPlayerData);
+		}
+		if (videoPromise.then) {
+			return new Promise((resolve, reject)=>{
+				videoPromise.then((x) => {
+					try {
 						resolve(handleVideo(x));
-					}, (rejected)=> {
-						reject(rejected);
-					}))
-				}
-				else
-					resolve(handleVideo(videoPromise));
-			}
-			catch(ex) {
-				reject(ex);
-			}
-		});
+					}
+					catch(ex) {
+						reject(ex)
+					}
+				}, (rejected) => {
+					reject(rejected);
+				});
+			});
+		}
+		else
+			return handleVideo(videoPromise);
 	}
 	return new YoutubePlaybackTracker(initialPlayerData);
 }
