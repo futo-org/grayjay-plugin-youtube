@@ -345,6 +345,7 @@
 	
 	"changelog": {
 		"284": [
+			"Fix: Cipher fix",
 			"Fix: UMP Fixed (More testing required)"
 		],
 		"283": [

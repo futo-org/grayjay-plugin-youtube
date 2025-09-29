@@ -40,7 +40,7 @@ const URL_YOUTUBE_SPONSORBLOCK = "https://sponsor.ajay.app/api/skipSegments?vide
 const URL_YOUTUBE_RSS = "https://www.youtube.com/feeds/videos.xml?channel_id=";
 
 //Newest to oldest
-const CIPHER_TEST_HASHES = ["093288cd", "b7ed0796", "20830619", "4fcd6e4a", "c8dbda2a", "7795af42", "d50f54ef", "e7567ecf", "3bb1f723", "3400486c", "b22ef6e7", "a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
+const CIPHER_TEST_HASHES = ["475ca5fd", "093288cd", "b7ed0796", "20830619", "4fcd6e4a", "c8dbda2a", "7795af42", "d50f54ef", "e7567ecf", "3bb1f723", "3400486c", "b22ef6e7", "a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
 const CIPHER_TEST_PREFIX = "/s/player/";
 const CIPHER_TEST_SUFFIX = "/player_ias.vflset/en_US/base.js";
 
@@ -8703,6 +8703,8 @@ function findNDecryptorFunction(jsUrl, code) {
 			const arrayAccessors = findAllMatches(foundFunction, /[^.]([a-zA-Z_$0-9]+)\[0\]/g);
 			for(let accessor of arrayAccessors) {
 				const arrayName = accessor[1];
+				if(arrayName.length < 2)
+					continue;
 				const globalArrayValue = findGlobalConstantArrayValue(code, arrayName);
 				if(globalArrayValue) {
 					callerFunction = globalArrayValue;
