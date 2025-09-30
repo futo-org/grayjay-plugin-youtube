@@ -8488,7 +8488,7 @@ function prepareCipher(jsUrl, codeOverride) {
 			_sts[jsUrl] = sts;
 			console.log("sts: " + sts);
 			if(!sts || isNaN(sts))
-				throw "Failed to extract sts";
+				throw new ScriptException("Failed to extract sts");
 		}
 
 		log("CIPHER SOLVED USING LEGACY SOLUTION");
@@ -8527,7 +8527,7 @@ function prepareCipherPlayer(jsUrl, codeUsed) {
 				_sts[jsUrl] = sts;
 				console.log("sts: " + sts);
 				if(!sts || isNaN(sts))
-					throw "Failed to extract sts";
+					throw new ScriptException("Failed to extract sts");
 			}
 
 			log("CIPHER SOLVED USING PLAYER SOLUTION");
@@ -10098,7 +10098,8 @@ function getInitialPOTVideo() {
 function getInitialPOT(j, clientState) {
   const ts = Math.floor(Date.now() / 1000) >>> 0;
   const r = new Uint8Array(2);
-  crypto.getRandomValues(r);
+  	r[0] = Math.floor(Math.random() * 256);
+	r[1] = Math.floor(Math.random() * 256);
   const body = [
     r[0], r[1],
     j & 0xff,
