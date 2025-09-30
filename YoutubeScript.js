@@ -121,6 +121,7 @@ var langDisplay = "en";
 var langRegion = "US";
 var overrideHttpClient = undefined;
 var overridePOT = undefined; source.setOverridePOT = function(pot) { overridePOT = pot };
+var overridePlayer = undefined; source.setOverridePlayer = function(pot) { overridePlayer = pot };
 
 var _prefetchHome = null;
 var _prefetchHomeAuth = null;
@@ -707,22 +708,35 @@ class YTSessionClient {
 
 		const playerConfig = {};
 		const clientWatchConfig = clientConfig.WEB_PLAYER_CONTEXT_CONFIGS?.WEB_PLAYER_CONTEXT_CONFIG_ID_KEVLAR_WATCH;
-		if(clientWatchConfig) {
-			if(clientWatchConfig.serializedExperimentFlags) {
-				const queryParams = parseQueryString(clientWatchConfig.serializedExperimentFlags);
-				playerConfig.useVideoIdPot = queryParams.html5_generate_content_po_token == "true";
-				playerConfig.useSessionPot = queryParams.html5_generate_session_po_token == "true";
+		if(!!_settings.use_variable_pot) {
+			if(clientWatchConfig) {
+				if(clientWatchConfig.serializedExperimentFlags) {
+					const queryParams = parseQueryString(clientWatchConfig.serializedExperimentFlags);
+					playerConfig.useVideoIdPot = queryParams.html5_generate_content_po_token == "true";
+					playerConfig.useSessionPot = queryParams.html5_generate_session_po_token == "true";
+
+					if(IS_TESTING) {
+						if(!playerConfig.useVideoIdPot) {
+							alert("Using session")
+							//alert("NO VIDEO ID POT, TRYING ANYWAY");
+							//playerConfig.useVideoIdPot = true;
+						}
+						else alert("Using VideoID");
+					}
+				}
 			}
+			else
+				playerConfig.useVideoIdPot = true; //Default to true for now?
 		}
 		else
-			playerConfig.useVideoIdPot = true; //Default to true for now?
-
-		//Temporarily always use videoId
-		//playerConfig.useVideoIdPot = true;
+			playerConfig.useVideoIdPot = true;
 
 		const jsUrlMatch = homeHtml.match("PLAYER_JS_URL\"\\s?:\\s?\"(.*?)\"");
 		const jsUrl = (jsUrlMatch) ? jsUrlMatch[1] : clientConfig.PLAYER_JS_URL;
 		const isNewCipher = prepareCipher(jsUrl);
+
+		if(!_sts[jsUrl] || isNaN(_sts[jsUrl]))
+			throw "Failed to extract sts";
 
 		let newClientConfig = {
 			initialData: initialData,
@@ -730,8 +744,11 @@ class YTSessionClient {
 			jsUrl: jsUrl,
 			sts: _sts[jsUrl],
 			playerConfig: playerConfig,
-			bgData: getBGDataFromClientConfig(clientConfig, !!usedLogin)
+			bgData: getBGDataFromClientConfig(clientConfig, !!usedLogin),
+			//experiments: clientWatchConfig?.serializedExperimentFlags
 		};
+		if(IS_TESTING)
+			console.log("ClientConfig (login:" + usedLogin + "): ", newClientConfig);
 		/*
 		if(_settings.use_session_client_pot) {
 				tryGetBotguard((bg)=>{
@@ -789,8 +806,8 @@ class YTSessionClient {
 		//#region Request Batch
 		let batch = http.batch();
 
-		let potToUse = (context.playerConfig.useVideoIdPot) ? 
-			await tryGetPOTCustom(videoId, (pot)=>{return pot}) :
+		let potToUse = (!context.playerConfig.useVideoIdPot) ? 
+			await tryGetPOTCustom(videoId, (pot)=>{return pot}, true) :
 			await tryGetPOT(context.bgData, (pot)=>{return pot});
 		if(context.playerConfig.useVideoIdPot) log("POT Type Used (player): Video"); else log("POT Type Used (player): Session");
 
@@ -1132,7 +1149,8 @@ source.getContentDetails = (url, useAuth, simplify, forceUmp, options) => {
 	else bridge.toast("Using outdated logic, Grayjay update required");
 
 	useAuth = !!_settings?.authDetails || !!useAuth;
-	console.clear(); //Temp fix for memory leaking
+	if(!IS_TESTING)
+		console.clear(); //Temp fix for memory leaking
 
 	if (options?.noSources) {
 		console.log("getContentDetails without sources requested");
@@ -1597,12 +1615,11 @@ function getPlayerData(videoId, sts, useLogin = true, batch, pot = undefined) {
 	const body = {
 		contentCheckOk: true,
 		context: context.INNERTUBE_CONTEXT,
-		params: "QAA%3D",
 		playbackContext: {
 			contentPlaybackContext: {
 				autoCaptionsDefaultOne: false,
 				autonavState: "STATE_OFF",
-				currentUrl: "/watch?v=" + videoId + "&pp=QAA%3D&rco=1",
+				currentUrl: "/watch?v=" + videoId,
 				html5Preference: "HTML5_PREF_WANTS",
 				lactMilliseconds: "-1",
 				referer: "https://www.youtube.com/watch?v=" + videoId,
@@ -1612,16 +1629,25 @@ function getPlayerData(videoId, sts, useLogin = true, batch, pot = undefined) {
 				watchAmbientModeContext: {hasShownAmbientMode: true, watchAmbientModeEnabled: true}
 			}
 		},
-		racyCheckOk: true,
+		racyCheckOk: false,
+		contentCheckOk: false,
 		serviceIntegrityDimensions: (pot) ? {
 			poToken: pot
 		} : undefined,
 		videoId: videoId
 	};
+	const bodyToUse = body; //overridePlayer ?? body;
+	if(overridePlayer) {
+		//bodyToUse.playbackContext.contentPlaybackContext.signatureTimestamp = overridePlayer.playbackContext.contentPlaybackContext.signatureTimestamp
+		//bodyToUse.context = body.context;
+		//bodyToUse.serviceIntegrityDimensions.poToken = pot;
+		//bodyToUse.playbackContext.contentPlaybackContext.signatureTimestamp = body.playbackContext.contentPlaybackContext.signatureTimestamp;
+	}
+	console.log("PlayerData request: ", body);
 	if(batch)
-		return batch.POST("https://www.youtube.com/youtubei/v1/player?prettyPrint=false", JSON.stringify(body), authHeaders, useLogin);
+		return batch.POST("https://www.youtube.com/youtubei/v1/player?prettyPrint=false", JSON.stringify(bodyToUse), authHeaders, useLogin);
 	else {
-		const newResp = http.POST("https://www.youtube.com/youtubei/v1/player?prettyPrint=false", JSON.stringify(body), authHeaders, useLogin);
+		const newResp = http.POST("https://www.youtube.com/youtubei/v1/player?prettyPrint=false", JSON.stringify(bodyToUse), authHeaders, useLogin);
 		if(!newResp.isOk) {
 			console.log(newResp.body);
 			throw new ScriptException("Failed to fetch player data");
@@ -2397,7 +2423,7 @@ class YoutubePlaybackTracker extends PlaybackTracker {
 		q["cbr"] = "Chrome"; //Browser
 		q["cbrver"] = "114.0.0.0"; //Browser version
 		q["c"] = "WEB"; //Client Type
-		q["cver"] = "2.20230427.04.00"; //Client version
+		q["cver"] = "2.20250927.00.01"; //Client version
 		q["cplayer"] = "UNIPLAYER"; //Player Name
 		q["cos"] = "Windows"; //OS
 		q["cosver"] = "10"; //OS
@@ -3305,11 +3331,22 @@ class YTABRVideoSource extends DashManifestRawSource {
 		}
 
 
+		
+
+		/*
+		let potToUse = (this.options?.playerConfig.useVideoIdPot) ? 
+			await tryGetPOTCustom(this.videoId, (pot)=>{return pot}) :
+			await tryGetPOT(this.bgData, (pot)=>{return pot});
+		if(potToUse)
+			this.pot = potToUse;
+		*/
 
 		let estDuration = undefined;
+		
 		let result = generateDash(this, this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag, 0, {
 			playerData: this.options?.playerData,
-			playerConfig: this.options?.playerConfig
+			playerConfig: this.options?.playerConfig,
+			pot: !this.pot ? getInitialPOTVideo() : undefined
 		});
 		/*
 		let result = tryGetPOTCustom(this.videoId, (pot)=>{
@@ -3322,8 +3359,9 @@ class YTABRVideoSource extends DashManifestRawSource {
 				estDuration = dashResult.estDuration;
 			}
 			return dashResult;
-		});
+		}, true);
 		*/
+		
 		
 		if(result && result.then) {
 			const newPromise = result.then((result)=>{
@@ -3389,9 +3427,6 @@ class YTABRAudioSource extends DashManifestRawAudioSource {
 			return this.lastDash;
 		log("Generating ABR Audio Dash");
 		getMediaReusableAudioBuffers()?.freeAll();
-		//let [dash, umpResp, fileHeader] = generateDash(this, this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag, 0, {
-		//	playerData: this.options?.playerData
-		//});
 
 		const me = this;
 		function handleDash(dash, umpResp, fileHeader) {
@@ -3407,9 +3442,18 @@ class YTABRAudioSource extends DashManifestRawAudioSource {
 			return dash;
 		}
 
+		/*
+		let potToUse = (this.options?.playerConfig.useVideoIdPot) ? 
+			await tryGetPOTCustom(this.videoId, (pot)=>{return pot}) :
+			await tryGetPOT(this.bgData, (pot)=>{return pot});
+		if(potToUse)
+			this.pot = potToUse;
+		*/
+
 		let result = generateDash(this, this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag, 0, {
 			playerData: this.options?.playerData,
-			playerConfig: this.options?.playerConfig
+			playerConfig: this.options?.playerConfig,
+			pot: !this.pot ? getInitialPOTVideo() : undefined
 		});
 		
 		if(result && result.then) {
@@ -3442,6 +3486,7 @@ let backOffSourceTime = 0;
 
 function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, retries, options) {
 	options = options ?? {};
+
 	if(!retries)
 		retries = 0;
 	const currentDashReloads = getDashReloads();
@@ -3458,7 +3503,7 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 			abrUrl += "&cpn=" + randomString(16);
 		}
 		if(abrUrl.indexOf("&cver=") <= 0) {
-			abrUrl += "&cver=2.20250923.08.00";
+			abrUrl += "&cver=2.20250927.00.01";
 		}
 		if(abrUrl.indexOf("&rn=") <= 0) {
 			abrUrl += "&rn=" + ((options.rn) ? options.rn : "1");
@@ -3472,7 +3517,7 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 
 	if(!options?.sessionZm && parentSource?.sharedContext?.sessionZm)
 		log("Using shared sessionZm");
-	const initialReq = getVideoPlaybackRequest(sourceObj, ustreamerConfig, 0, 0, lastRequest, lastAction, now, undefined, parentSource.pot,  {
+	const initialReq = getVideoPlaybackRequest(sourceObj, ustreamerConfig, 0, 0, lastRequest, lastAction, now, undefined, options?.pot ?? parentSource.pot,  {
 		sessionZm: options?.sessionZm ?? parentSource?.sharedContext?.sessionZm
 	});
 	const postData = initialReq.serializeBinary();
@@ -3606,7 +3651,7 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 					abrUrl += "&cpn=" + randomString(16);
 				}
 				if(abrUrl.indexOf("&cver=") <= 0) {
-					abrUrl += "&cver=2.20250131.01.00";
+					abrUrl += "&cver=2.20250927.00.01";
 				}
 				if(abrUrl.indexOf("&rn=") <= 0) {
 					abrUrl += "&rn=" + ((options.rn) ? options.rn : "1");
@@ -3900,7 +3945,7 @@ class YTABRExecutor {
 								"dataSyncId": bgData.dataSyncId
 							});
 							this.pot = pot;
-						}, bgData.visitorDataType);
+						}, bgData.visitorDataType, true);
 					}
 				});
 			}
@@ -4022,7 +4067,8 @@ class YTABRExecutor {
 			log("Remaining audio executors: " + _executorsAudio.length);
 		}
 		this.freeAllSegments();
-		console.clear(); //Temp fix for memory leaking
+		if(!IS_TESTING)
+			console.clear(); //Temp fix for memory leaking
 	}
 
 	async recreateExecutor(newContext){
@@ -4061,7 +4107,8 @@ class YTABRExecutor {
 	}
 
 	executeRequest(url, headers, retryCount, overrideSegment) {
-		console.clear();
+		if(!IS_TESTING)
+			console.clear();
 		if(this.childExecutor)
 			return this.childExecutor.executeRequest(url, headers, retryCount, overrideSegment);
 		if(!retryCount)
@@ -4090,7 +4137,7 @@ class YTABRExecutor {
 				log("UMP [" + this.type + "] Cached segment " + segment + " was undefined, refetching");
 		}
 
-		const pot = this.pot;
+		const pot = overridePOT ?? this.pot ?? getInitialPOTVideo();
 		log("UMP [" + this.type + "] requesting segment: " + segment + ", time: " + time + ", itag: " + this.itag + (pot ? (", pot:" + pot.substring(0, 5) + "..") : ""));
 		if(overrideSegment)
 			log("UMP [" + this.type + "] requesting with overrided segment: " + overrideSegment)
@@ -6166,9 +6213,9 @@ function getBGDataFromClientConfig(clientConfig, usedLogin) {
 
 	const visitorData = usedLogin ? null : (clientConfig?.EOM_VISITOR_DATA ?? clientConfig?.VISITOR_DATA);
 	const visitorDataLogin = usedLogin ? (clientConfig?.EOM_VISITOR_DATA ?? clientConfig?.VISITOR_DATA) : null;
-	console.log("VisitorData: ", visitorData);
-	log("VisitorDataType: " + visitorDataType);
-	console.log("clientconfig:", clientConfig);
+	//console.log("VisitorData: ", visitorData);
+	//log("VisitorDataType: " + visitorDataType);
+	//console.log("clientconfig:", clientConfig);
 	return { 
 		visitorData: visitorData?.replaceAll("%3D", "="),
 		visitorDataLogin: visitorDataLogin?.replaceAll("%3D", "="),
@@ -8440,6 +8487,8 @@ function prepareCipher(jsUrl, codeOverride) {
 			const sts = stsMatch[1];
 			_sts[jsUrl] = sts;
 			console.log("sts: " + sts);
+			if(!sts || isNaN(sts))
+				throw "Failed to extract sts";
 		}
 
 		log("CIPHER SOLVED USING LEGACY SOLUTION");
@@ -8470,6 +8519,16 @@ function prepareCipherPlayer(jsUrl, codeUsed) {
 			const playerVirt = getVirtualizedPlayer(jsUrl, codeUsed);
 			_cipherDecode[jsUrl] = playerVirt.decryptSig ?? function(){throw "Not implemented (decryptSig) for " + jsUrl; }
 			_nDecrypt[jsUrl] = playerVirt.decryptN ?? function(){throw "Not implemented (decryptN) for " + jsUrl; }
+
+			const stsMatch = codeUsed.match(STS_REGEX);
+			console.log("stsMatch: " + stsMatch);
+			if (stsMatch !== null && stsMatch.length > 1) {
+				const sts = stsMatch[1];
+				_sts[jsUrl] = sts;
+				console.log("sts: " + sts);
+				if(!sts || isNaN(sts))
+					throw "Failed to extract sts";
+			}
 
 			log("CIPHER SOLVED USING PLAYER SOLUTION");
 			return true;
@@ -10033,6 +10092,38 @@ function getExistingBotguard(){
 	return existingBotguard;
 }
 
+function getInitialPOTVideo() {
+	return getInitialPOT(1, 1);
+}
+function getInitialPOT(j, clientState) {
+  const ts = Math.floor(Date.now() / 1000) >>> 0;
+  const r = new Uint8Array(2);
+  crypto.getRandomValues(r);
+  const body = [
+    r[0], r[1],
+    j & 0xff,
+    clientState & 0xff,
+    (ts >>> 24) & 0xff,
+    (ts >>> 16) & 0xff,
+    (ts >>> 8) & 0xff,
+    ts & 0xff
+  ];
+
+  const out = new Uint8Array(2 + body.length);
+  out[0] = 0x22;
+  out[1] = body.length;
+  out.set(body, 2);
+
+  const b = out.subarray(2);
+  for (let y = 2; y < b.length; y++) {
+    b[y] ^= b[y % 2];
+  }
+
+  let s = '';
+  for (let i = 0; i < out.length; i++) s += String.fromCharCode(out[i]);
+  return btoa(s);
+}
+
 function tryGetPOT(bgData, cb, contextStr, forceNew) {
 	return new Promise((res, rej) =>{
 		try {
@@ -10318,6 +10409,10 @@ class BotGuardGenerator {
 			throw new ScriptException("No token Id provided for botguard");
 
 		let idToUse = customToken;
+		if(overridePOT) {
+			cb(overridePOT);
+			return;
+		}
 
 		const existing = this.generatedTokens[idToUse];
 		if(!existing || forceNew) {
@@ -10337,7 +10432,7 @@ class BotGuardGenerator {
 
 		let idToUse = visitorId ?? dataSyncId;
 		if(overridePOT) {
-			cb(token);
+			cb(overridePOT);
 			return;
 		}
 
@@ -10361,7 +10456,7 @@ class BotGuardGenerator {
 				.replace(/\+/g, '-')
 				.replace(/\//g, '_');
 
-			console.log("New Generated POT", [visitorId, poToken]);
+			console.log("New Generated POT", [visitorId ?? dataSyncId, poToken]);
 			
 			cb(poToken);
 		}, type);

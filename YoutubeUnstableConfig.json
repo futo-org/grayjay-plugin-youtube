@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 285,
+	"version": 286,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -316,6 +316,13 @@
 			"description": "Will run the entire player script, may improve compatibility at the cost of performance, and possible tracking",
 			"type": "Boolean",
 			"default": "true"
+		},
+		{
+			"variable": "use_variable_pot",
+			"name": "Use Variable POT",
+			"description": "Try to detect if a session or video pot is required, from our experience this can backfire.",
+			"type": "Boolean",
+			"default": "false"
 		}
 	],
 
@@ -344,6 +351,9 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"286": [
+			"Fix: UMP Fix"
+		],
 		"285": [
 			"HOTFIX: Fix playback tracker",
 			"Fix: Cipher fix",
