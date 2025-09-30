@@ -6447,8 +6447,14 @@ function toSRTTime(sec, withDot) {
 }
 
 function extractVideoOwnerRenderer_AuthorLink(renderer) {
-	const id = renderer?.navigationEndpoint?.browseEndpoint?.browseId;
-    const url = (!id) ? extractRuns_Url(renderer.title.runs) : URL_BASE + "/channel/" + id;
+	const multiAuthorId = renderer?.navigationEndpoint?.showDialogCommand?.panelLoadingStrategy?.inlineContent?.dialogViewModel?.customContent?.listViewModel?.listItems[0]?.listItemViewModel?.title?.commandRuns[0]?.onTap?.innertubeCommand?.browseEndpoint?.browseId;
+	const isMultiAuthor = !!multiAuthorId;
+	const id = isMultiAuthor ? multiAuthorId : renderer?.navigationEndpoint?.browseEndpoint?.browseId;
+	let title = extractText_String(renderer.title);
+	if(!title)
+		title = extractText_String(renderer.attributedTitle);
+
+    const url = (!id) ? extractRuns_Url(renderer.title?.runs) : URL_BASE + "/channel/" + id;
 
     const hasMembership = !!(renderer?.membershipButton?.buttonRenderer)
     let membershipUrl = (hasMembership) ? url + "/join" : null;
@@ -6456,6 +6462,8 @@ function extractVideoOwnerRenderer_AuthorLink(renderer) {
 	let bestThumbnail = null;
 	if(renderer.thumbnail?.thumbnails)
 		bestThumbnail = renderer.thumbnail.thumbnails[renderer.thumbnail.thumbnails.length - 1].url;
+	if(!bestThumbnail)
+		bestThumbnail = renderer?.avatarStack?.avatarStackViewModel?.avatars[0]?.avatarViewModel?.image?.sources[0]?.url
 
 	let subscribers = null;
 	if(renderer.subscriberCountText)
@@ -6464,7 +6472,7 @@ function extractVideoOwnerRenderer_AuthorLink(renderer) {
 		subscribers = extractHumanNumber_Integer(extractText_String(renderer.collapsedSubtitle));
 
 	return new PlatformAuthorLink(new PlatformID(PLATFORM, id, config.id, PLATFORM_CLAIMTYPE), 
-		extractText_String(renderer.title),
+		title,
 		url,
 		bestThumbnail,
 		subscribers, membershipUrl);
@@ -7698,6 +7706,8 @@ function extractRuns_Html(runs) {
 	return str;
 }
 function extractRuns_Url(runs) {
+	if(!runs)
+		return undefined;
 	for(let runi = 0; runi < runs.length; runi++) {
 		const run = runs[runi];
 

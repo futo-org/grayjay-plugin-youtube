@@ -352,7 +352,8 @@
 	
 	"changelog": {
 		"286": [
-			"Fix: UMP Fix"
+			"Fix: UMP Fix",
+			"Fix: Multi-author videos"
 		],
 		"285": [
 			"HOTFIX: Fix playback tracker",
