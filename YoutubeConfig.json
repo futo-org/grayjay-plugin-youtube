@@ -333,13 +333,6 @@
 			"default": "true"
 		},
 		{
-			"variable": "fallback_full_player",
-			"name": "Fallback with Player Script",
-			"description": "Will run the entire player script, may improve compatibility at the cost of performance, and possible tracking",
-			"type": "Boolean",
-			"default": "true"
-		},
-		{
 			"variable": "use_variable_pot",
 			"name": "Use Variable POT",
 			"description": "Try to detect if a session or video pot is required, from our experience this can backfire.",
@@ -382,6 +375,10 @@
 
 
 	"changelog": {
+		"287": [
+			"Improvement: No longer allow notify about fallback to virtualized player, and remove option to disable (almost always required)",
+			"Fix: Subtitles for users that use login for details"
+		],
 		"286": [
 			"Fix: UMP Fix",
 			"Fix: Multi-author videos"

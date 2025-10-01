@@ -1051,6 +1051,9 @@ function extractVideoPlayerData_VideoDetails(playerData, jsUrl, contextData) {
 				if(kind)
 					kind = kind[1];
 
+				if(x.baseUrl && x.baseUrl.startsWith("/api/"))
+					x.baseUrl = URL_BASE + x.baseUrl;
+
 				if(!kind || kind == "asr") {
 					return {
 						name: extractText_String(x.name),
@@ -2318,32 +2321,40 @@ class YTVODEventPager extends LiveEventPager {
 source.getPlaybackTracker = function (url, initialPlayerData) {
 	if (!_settings["youtubeActivity"] || !bridge.isLoggedIn())
 		return null;
-	if (!initialPlayerData) {
-		const videoPromise = source.getContentDetails(url, true, true, false, { noSources: true });
-		function handleVideo(video) {
-			initialPlayerData = video.__playerData;
-			if (!initialPlayerData)
-				throw new ScriptException("No playerData for playback tracker");
-			return new YoutubePlaybackTracker(initialPlayerData);
-		}
-		if (videoPromise.then) {
-			return new Promise((resolve, reject)=>{
-				videoPromise.then((x) => {
-					try {
-						resolve(handleVideo(x));
-					}
-					catch(ex) {
-						reject(ex)
-					}
-				}, (rejected) => {
-					reject(rejected);
+	try {
+		if (!initialPlayerData) {
+			const videoPromise = source.getContentDetails(url, true, true, false, { noSources: true });
+			function handleVideo(video) {
+				initialPlayerData = video.__playerData;
+				if (!initialPlayerData)
+					throw new ScriptException("No playerData for playback tracker");
+				return new YoutubePlaybackTracker(initialPlayerData);
+			}
+			if (videoPromise.then) {
+				return new Promise((resolve, reject)=>{
+					videoPromise.then((x) => {
+						try {
+							resolve(handleVideo(x));
+						}
+						catch(ex) {
+							reject(ex)
+						}
+					}, (rejected) => {
+						bridge.toast("Failed to obtain PlaybackTracker\n" + ((rejected?.msg) ? rejected.msg : rejected));
+						resolve(null);
+						//reject(rejected);
+					});
 				});
-			});
+			}
+			else
+				return handleVideo(videoPromise);
 		}
-		else
-			return handleVideo(videoPromise);
+		return new YoutubePlaybackTracker(initialPlayerData);
 	}
-	return new YoutubePlaybackTracker(initialPlayerData);
+	catch(ex) {
+		bridge.toast("Failed to obtain PlaybackTracker\n" + ((ex?.msg) ? ex.msg : ex));
+		return null;
+	}
 }
 class YoutubePlaybackTracker extends PlaybackTracker {
 	constructor(playerData) {
@@ -5978,6 +5989,9 @@ function extractVideoPage_VideoDetails(parentUrl, initialData, initialPlayerData
 				if(kind)
 					kind = kind[1];
 
+				if(x.baseUrl && x.baseUrl.startsWith("/api/"))
+					x.baseUrl = URL_BASE + x.baseUrl;
+
 				if(!kind || kind == "asr") {
 					return {
 						name: extractText_String(x.name),
@@ -6155,6 +6169,8 @@ function getConvertedSubtitles(videoId, subRaw, contextData) {
 	const pot = contextData.pot;
 	if (pot) {
 		bridge.toast("Subtitles using included POT");
+		if(subRaw.baseUrl && subRaw.baseUrl.startsWith("/api/"))
+			subRaw.baseUrl = URL_BASE + subRaw.baseUrl;
 		const subResp = http.GET(subRaw.baseUrl + "&pot=" + pot, {});
 		return (convertSubtitleResponse(subResp));
 	}
@@ -6174,6 +6190,8 @@ function getConvertedSubtitles(videoId, subRaw, contextData) {
 						console.log("Botguard Token to use (Subtitles):", pot);
 						bridge.toast("Subtitles got POT");
 
+						if(subRaw.baseUrl && subRaw.baseUrl.startsWith("/api/"))
+							subRaw.baseUrl = URL_BASE + subRaw.baseUrl;
 						const url = subRaw.baseUrl + "&potc=1&pot=" + encodeURIComponent(pot) + "&c=" + bgData.c + "&cver=" + bgData.cver;
 						console.log(url);
 						const subResp = http.GET(url, {});
@@ -8464,6 +8482,9 @@ function prepareCipher(jsUrl, codeOverride) {
 		playerCode = (codeOverride) ? codeOverride : playerCodeResp.body;
 		codeUsed = playerCode;
 
+		if(!playerCode || !playerCode.length || playerCode.length < 100)
+			throw new ScriptException("No player code found?\n" + jsUrl);
+
 		_jsUrlScripts[jsUrl] = playerCode;
 
 		let constantsMatch = playerCode.match(/var ([a-zA-Z_\$0-9]+)=(["'].+index.m3u8.+["']\.split\(.+\))/);
@@ -8507,7 +8528,7 @@ function prepareCipher(jsUrl, codeOverride) {
 	}
 	catch(ex) {
 		console.error(ex);
-		if(!!_settings.fallback_full_player && playerCode) {
+		if(playerCode) { //!!_settings.fallback_full_player && 
 			try {
 				if(prepareCipherPlayer(jsUrl, playerCode))
 					return true;
@@ -8518,7 +8539,7 @@ function prepareCipher(jsUrl, codeOverride) {
 			}
 		}
 		clearCipher(jsUrl);
-        if(bridge.devSubmit) bridge.devSubmit("prepareCipher - Failed to get Cipher due to: Error:" + ex + "\n" + jsUrl + "\nFallback: " + (!!_settings.fallback_full_player), codeUsed ?? "No code fetched");
+        if(bridge.devSubmit) bridge.devSubmit("prepareCipher - Failed to get Cipher due to: Error:" + ex + "\n" + jsUrl, codeUsed ?? "No code fetched");
 		throw new ScriptException("Failed to get Cipher due to: " + ex + "\n" + jsUrl);
 	}
 }
@@ -9727,8 +9748,8 @@ source.testUMP = async function(url, startSegment, endSegment, itag, isAudio, cb
 		}, 1000);
 	});
 };
-source.testSubtitles = function(url) {
-	let content = source.getContentDetails(url);
+source.testSubtitles = async function(url) {
+	let content = await source.getContentDetails(url);
 	console.log(content);
 	let subtitle = content.subtitles[0];
 	console.log(subtitle);
