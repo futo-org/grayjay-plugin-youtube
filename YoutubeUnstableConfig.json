@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 286,
+	"version": 287,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -347,7 +347,10 @@
 		"287": [
 			"Improvement: No longer allow notify about fallback to virtualized player, and remove option to disable (almost always required)",
 			"Improvement: PlaybackTracker failures are now handled less obstructively (no huge dialog)",
-			"Fix: Subtitles for users that use login for details"
+			"Fix: Subtitles for users that use login for details",
+			"Fix: Cipher fix (x.reverse not defined)",
+			"Fix: Cipher fix (player caller)",
+			"Fix: Import subscriptions not showing all if account has memberships subscriptions"
 		],
 		"286": [
 			"Fix: UMP Fix",

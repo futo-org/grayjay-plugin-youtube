@@ -2321,8 +2321,10 @@ class YTVODEventPager extends LiveEventPager {
 source.getPlaybackTracker = function (url, initialPlayerData) {
 	if (!_settings["youtubeActivity"] || !bridge.isLoggedIn())
 		return null;
+	log("Playback Tracker requested");
 	try {
 		if (!initialPlayerData) {
+			log("Playback tracker re-fetching details");
 			const videoPromise = source.getContentDetails(url, true, true, false, { noSources: true });
 			function handleVideo(video) {
 				initialPlayerData = video.__playerData;
@@ -2337,7 +2339,9 @@ source.getPlaybackTracker = function (url, initialPlayerData) {
 							resolve(handleVideo(x));
 						}
 						catch(ex) {
-							reject(ex)
+							bridge.toast("Failed to obtain PlaybackTracker\n" + ((rejected?.msg) ? rejected.msg : rejected));
+							resolve(null);
+							//reject(ex)
 						}
 					}, (rejected) => {
 						bridge.toast("Failed to obtain PlaybackTracker\n" + ((rejected?.msg) ? rejected.msg : rejected));
@@ -3121,22 +3125,28 @@ source.getUserSubscriptions = function() {
 			let subMenu = sectionListRenderer?.subMenu;
 			if(sectionListRenderer?.targetId == "browse-feedFEchannels") {
 				const sectionContents = sectionListRenderer?.contents;
-				const itemContents = sectionContents ? 
-					(
-						sectionContents[0].itemSectionRenderer?.contents ??
-						sectionContents[0]?.shelfRenderer?.content?.verticalListRenderer?.items
-					) : null;
-				if(itemContents && itemContents[0].channelListItemRenderer) {
-					let subs = [];
-					for(let item of itemContents) {
-						switchKey(item, {
-							channelListItemRenderer(itemRenderer) {
-								const authorUrl = extractNavigationEndpoint_Url(itemRenderer.navigationEndpoint);
-								if(authorUrl)
-									subs.push(authorUrl);
+				let subs = [];
+				if(sectionContents) {
+					for(let i = 0; i < sectionContents.length; i++) {
+						const itemContents = sectionContents ? 
+							(
+								sectionContents[i].itemSectionRenderer?.contents ??
+								sectionContents[i]?.shelfRenderer?.content?.verticalListRenderer?.items
+							) : null;
+						if(itemContents && itemContents[i].channelListItemRenderer) {
+							for(let item of itemContents) {
+								switchKey(item, {
+									channelListItemRenderer(itemRenderer) {
+										const authorUrl = extractNavigationEndpoint_Url(itemRenderer.navigationEndpoint);
+										if(authorUrl)
+											subs.push(authorUrl);
+									}
+								});
 							}
-						});
+						}
 					}
+				}
+				if(subs.length > 0) {
 					return subs;
 				}
 			}
@@ -8403,9 +8413,9 @@ function decodeCipher(cipher, jsUrl) {
 		return _cipherDecode[jsUrl](cipher);
 	}
 	catch(ex) {
-		log("decodeCipher failed: " + ex);
-	    if(bridge.devSubmit) bridge.devSubmit("decodeCipher - failed due to: " + ex, jsUrl + "\n\n" + _jsUrlScripts[jsUrl]);
-		throw ex;
+		log("decryptSig failed: " + ex);
+	    if(bridge.devSubmit) bridge.devSubmit("decryptSig - failed due to: " + ex, "//" + jsUrl + "\n\n" + _jsUrlScripts[jsUrl]);
+		throw new ScriptException("decryptSig - failed due to: " + ex + "\n" + jsUrl);
 	}
 }
 function decryptN(encryptedN, jsUrl) {
@@ -8416,8 +8426,8 @@ function decryptN(encryptedN, jsUrl) {
 	}
 	catch(ex) {
 		log("decryptN failed: " + ex);
-	    if(bridge.devSubmit) bridge.devSubmit("decryptN - failed due to: " + ex, jsUrl + "\n\n" + _jsUrlScripts[jsUrl]);
-		throw ex;
+	    if(bridge.devSubmit) bridge.devSubmit("decryptN - failed due to: " + ex, "//" + jsUrl + "\n\n" + _jsUrlScripts[jsUrl]);
+		throw new ScriptException("decryptN - failed due to: " + ex + "\n" + jsUrl);
 	}
 }
 function testCipher(hash, codeOverride) {
@@ -8527,7 +8537,6 @@ function prepareCipher(jsUrl, codeOverride) {
 		return true;//_cipherDecode[jsUrl];
 	}
 	catch(ex) {
-		console.error(ex);
 		if(playerCode) { //!!_settings.fallback_full_player && 
 			try {
 				if(prepareCipherPlayer(jsUrl, playerCode))
@@ -8538,6 +8547,8 @@ function prepareCipher(jsUrl, codeOverride) {
 				throw new ScriptException("Failed to get Cipher due to: Player:" + ex2 + "\n" + jsUrl);
 			}
 		}
+		else
+			console.error(ex);
 		clearCipher(jsUrl);
         if(bridge.devSubmit) bridge.devSubmit("prepareCipher - Failed to get Cipher due to: Error:" + ex + "\n" + jsUrl, codeUsed ?? "No code fetched");
 		throw new ScriptException("Failed to get Cipher due to: " + ex + "\n" + jsUrl);
@@ -8545,7 +8556,7 @@ function prepareCipher(jsUrl, codeOverride) {
 }
 function prepareCipherPlayer(jsUrl, codeUsed) {
 		try {
-			bridge.toast("Falling back to virtualized player");
+			//bridge.toast("Falling back to virtualized player");
 			log("Using Cipher Player!!!");
 			const playerVirt = getVirtualizedPlayer(jsUrl, codeUsed);
 			_cipherDecode[jsUrl] = playerVirt.decryptSig ?? function(){throw "Not implemented (decryptSig) for " + jsUrl; }
@@ -8577,6 +8588,10 @@ function clearCipher(jsUrl) {
         _cipherDecode[jsUrl] = undefined;
     if(_nDecrypt[jsUrl])
         _nDecrypt[jsUrl] = undefined;
+	if (sigDecryptDescs[jsUrl])
+		sigDecryptDescs[jsUrl] = undefined;
+    if (nDecryptDescs[jsUrl])
+        nDecryptDescs[jsUrl] = undefined;
 }
 function readJSScope(code, indexStart) {
 	if(code[indexStart] != "{")
@@ -8798,10 +8813,10 @@ function findNDecryptorFunction(jsUrl, code) {
 		throw new ScriptException("findNDecryptorFunction - Failed to find n decryptor (player function): " + jsUrl);
 	}
 
-	let callerMatch = (new RegExp("[^a-zA-Z0-9_$]([a-zA-Z0-9_$]+)=function\\([a-zA-Z0-9_$]+\\)\\{\\s*return " + functionMatch[1] + "[^a-zA-Z0-9_$].*?}")).exec(code);
+	let callerMatch = undefined; /*(new RegExp("[^a-zA-Z0-9_$]([a-zA-Z0-9_$]+)=function\\([a-zA-Z0-9_$]+\\)\\{\\s*return " + functionMatch[1] + "[^a-zA-Z0-9_$].*?}")).exec(code);
 	if(callerMatch) {
 		callerFunction = callerMatch[1];
-	}
+	}*/
 	
 	if(!callerMatch) {
 		const foundFunction = findGlobalFunction(code, functionMatch[1]);
@@ -8836,7 +8851,7 @@ function findNDecryptorFunction(jsUrl, code) {
 	return nDecryptDescs[jsUrl];
 }
 function findGlobalConstantArrayValue(code, arrayName) {
-	const regex = new RegExp(`var ${arrayName}=\\[([a-zA-Z_$0-9]+)\\]`);
+	const regex = new RegExp(`[^a-zA-Z0-9_$]${arrayName}=\\[([a-zA-Z_$0-9]{2,3})\\]`);
 	const match = regex.exec(code);
 	if(match)
 		return match[1];
@@ -9029,7 +9044,7 @@ function getNDecryptorFunctionCode(code, jsUrl, constantArrayName, constantArray
 	}
 	*/
 	if(!nDecryptFunctionArrNameMatch && !nDecryptFunctionCode) {
-		if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (name)", jsUrl + "\n\n" + code);
+		if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (name)", "//" + jsUrl + "\n\n" + code);
 		throw new ScriptException("Failed to find n decryptor (name)\n" + jsUrl);
 	}
 
@@ -9294,7 +9309,7 @@ function getCipherFunctionCode(playerCode, jsUrl, constantArrayName, constantArr
 		}
 
 		if(!cipherFunctionName) {
-			if(bridge.devSubmit) bridge.devSubmit("getCipherFunctionCode - Failed to find cipher (name)", jsUrl + "\n\n" + playerCode);
+			if(bridge.devSubmit) bridge.devSubmit("getCipherFunctionCode - Failed to find cipher (name)", "//" + jsUrl + "\n\n" + playerCode);
 			throw new ScriptException("Failed to find cipher (name)\n" + jsUrl);
 		}
 	}
