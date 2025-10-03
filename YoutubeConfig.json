@@ -376,6 +376,7 @@
 
 	"changelog": {
 		"288": [
+			"Improvement: Automatic login fallback support for membership content",
 			"Fix: Cipher Fix"
 		],
 		"287": [

@@ -850,7 +850,7 @@ class YTSessionClient {
 			if(!!_settings?.allowLoginFallback && bridge.isLoggedIn()) {
 				context = this.clientConfigAuth;
 				bridge.toast("Using login fallback to resolve:\n" + playerData?.playabilityStatus?.reason);
-				const newPlayerData = getControversialPlayerData(videoId, context.sts, true, context.pot);
+				const newPlayerData = getControversialPlayerData(videoId, context.sts, true, potToUse);
 				if (newPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED")
 					throw new ScriptLoginRequiredException("Login required (fallback)\nReason: " + newPlayerData?.playabilityStatus?.reason);
 
@@ -859,6 +859,22 @@ class YTSessionClient {
 			}
 			else
 				throw new ScriptLoginRequiredException("Login required (No fallback)\nReason: " + playerData?.playabilityStatus?.reason);
+		}
+
+		if(playerData.playabilityStatus?.status == "UNPLAYABLE") {
+			const reason = (playerData?.playabilityStatus?.reason) ? ("\n" + playerData?.playabilityStatus?.reason) : "";
+			if(reason && reason.toLowerCase().indexOf("member-only content") && !useLogin && bridge.isLoggedIn() && !!_settings?.allowLoginFallback) {
+				//Login fallback for membership contentcontext = this.clientConfigAuth;
+				bridge.toast("Using login fallback to resolve:\n" + playerData?.playabilityStatus?.reason);
+				const newPlayerData = getControversialPlayerData(videoId, context.sts, true, potToUse);
+				if (newPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED" || newPlayerData.playabilityStatus?.status == "UNPLAYABLE")
+					throw new UnavailableException("Video unplayable (fallback)\nReason: " + newPlayerData?.playabilityStatus?.reason);
+
+				playerData = newPlayerData;
+				useLogin = true;
+			}
+			else
+				throw new UnavailableException("Video unplayable" + reason);
 		}
 		//#endregion
 
@@ -1263,8 +1279,9 @@ source.getContentDetails = (url, useAuth, simplify, forceUmp, options) => {
 	//log("Experiment Flags: " + JSON.stringify(clientConfig.EXPERIMENT_FLAGS));
 	//console.log("Experiments", clientConfig.FEXP_EXPERIMENTS);
 
-	if (initialPlayerData?.playabilityStatus?.status == "UNPLAYABLE")
+	if (initialPlayerData?.playabilityStatus?.status == "UNPLAYABLE") {
 		throw new UnavailableException("Video unplayable");
+	}
 
 	const jsUrlMatch = html.match("PLAYER_JS_URL\"\\s?:\\s?\"(.*?)\"");
 	const jsUrl = (jsUrlMatch) ? jsUrlMatch[1] : clientContext.PLAYER_JS_URL;
