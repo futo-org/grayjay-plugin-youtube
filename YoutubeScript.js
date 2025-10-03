@@ -40,7 +40,7 @@ const URL_YOUTUBE_SPONSORBLOCK = "https://sponsor.ajay.app/api/skipSegments?vide
 const URL_YOUTUBE_RSS = "https://www.youtube.com/feeds/videos.xml?channel_id=";
 
 //Newest to oldest
-const CIPHER_TEST_HASHES = ["475ca5fd", "093288cd", "b7ed0796", "20830619", "4fcd6e4a", "c8dbda2a", "7795af42", "d50f54ef", "e7567ecf", "3bb1f723", "3400486c", "b22ef6e7", "a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
+const CIPHER_TEST_HASHES = ["29a37ef6", "81567a87", "475ca5fd", "093288cd", "b7ed0796", "20830619", "4fcd6e4a", "c8dbda2a", "7795af42", "d50f54ef", "e7567ecf", "3bb1f723", "3400486c", "b22ef6e7", "a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
 const CIPHER_TEST_PREFIX = "/s/player/";
 const CIPHER_TEST_SUFFIX = "/player_ias.vflset/en_US/base.js";
 
@@ -8609,7 +8609,7 @@ function readJSScope(code, indexStart) {
 	return undefined;
 }
 function findGlobalFunction(globalCode, name) {
-		const regex = `[^\.](${name}\\s*=\\s*(function\\([a-zA-Z_$0-9,\\s]*\\)){)(.*?)\\}`;
+		const regex = `[^\.][^a-zA-Z0-9_$](${name}\\s*=\\s*(function\\([a-zA-Z_$0-9,\\s]*\\)){)(.*?)\\}`;
 		const funcDefMatch = globalCode.match(new RegExp(regex, "s"));
 		if(!funcDefMatch) {
 			console.log("Unable to find recursive func :" + funcDefMatch, regex);
@@ -8617,7 +8617,7 @@ function findGlobalFunction(globalCode, name) {
 		}
 		let funcBodyPrefix = funcDefMatch[1];
 		let funcFunctionPrefix = funcDefMatch[2];
-		let scopeStartIndex = funcDefMatch.index + funcBodyPrefix.length;
+		let scopeStartIndex = funcDefMatch.index + funcBodyPrefix.length + 1;
 		const funcBody = readJSScope(globalCode, scopeStartIndex);
 		if(!funcBody) {
 			console.log("Recursive func [" + name + "] too complex?")
@@ -8851,7 +8851,7 @@ function findNDecryptorFunction(jsUrl, code) {
 	return nDecryptDescs[jsUrl];
 }
 function findGlobalConstantArrayValue(code, arrayName) {
-	const regex = new RegExp(`[^a-zA-Z0-9_$]${arrayName}=\\[([a-zA-Z_$0-9]{2,3})\\]`);
+	const regex = new RegExp(`[^a-zA-Z0-9_$]${arrayName.replace("$", "\\$")}=\\[([a-zA-Z_$0-9]{2,3})\\]`);
 	const match = regex.exec(code);
 	if(match)
 		return match[1];
