@@ -643,7 +643,7 @@ source.isContentDetailsUrl = (url) => {
 function ensureSts(sts, jsUrl, codeUsed, location = undefined) {
 	if(!sts || isNaN(sts)) {
 		if(bridge.devSubmit) bridge.devSubmit(`prepareCipher - Failed to extract sts (${location})\n` + jsUrl, codeUsed ?? "No code fetched");
-		throw new ScriptException(`Failed to extract sts (${location})`);
+		throw new ScriptException(`Failed to extract sts (${location}): ${jsUrl}`);
 	}
 }
 
