@@ -8560,6 +8560,7 @@ function prepareCipher(jsUrl, codeOverride) {
 					return true;
 			}
 			catch(ex2) {
+				clearCipher(jsUrl);
         		if(bridge.devSubmit) bridge.devSubmit("prepareCipher - Failed to get Cipher due to: Error (Player):" + ex2 + "\n" + jsUrl + "\n(Original: " + ex + ")", codeUsed ?? "No code fetched");
 				throw new ScriptException("Failed to get Cipher due to: Player:" + ex2 + "\n" + jsUrl);
 			}
@@ -9061,7 +9062,7 @@ function getNDecryptorFunctionCode(code, jsUrl, constantArrayName, constantArray
 	}
 	*/
 	if(!nDecryptFunctionArrNameMatch && !nDecryptFunctionCode) {
-		if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (name)", "//" + jsUrl + "\n\n" + code);
+		//if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (name)", "//" + jsUrl + "\n\n" + code);
 		throw new ScriptException("Failed to find n decryptor (name)\n" + jsUrl);
 	}
 
@@ -9071,12 +9072,12 @@ function getNDecryptorFunctionCode(code, jsUrl, constantArrayName, constantArray
 		
 		const nDecryptFunctionNameMatch = code.match(escapeRegex(nDecryptFunctionArrName) + "\\s*=\\s*\\[([$a-zA-Z0-9_,\\(,\\)\\.]+?)]");
 		if(!nDecryptFunctionNameMatch) {
-			if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (array)", jsUrl);
+			//if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (array)", jsUrl);
 			throw new ScriptException("Failed to find n decryptor (array)\n" + jsUrl);
 		}
 		const nDecryptArray = nDecryptFunctionNameMatch[1].split(",");
 		if(nDecryptArray.length <= nDecryptFunctionArrIndex) {
-			if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (index)", jsUrl);
+			//if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (index)", jsUrl);
 			throw new ScriptException("Failed to find n decryptor (index)\n" + jsUrl);
 		}
 		nDecryptFunctionName = nDecryptArray[nDecryptFunctionArrIndex]
@@ -9095,7 +9096,7 @@ function getNDecryptorFunctionCode(code, jsUrl, constantArrayName, constantArray
 		}
 	}
 	if(!nDecryptFunctionCode) {
-        if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (code)", jsUrl, code);
+        //if(bridge.devSubmit) bridge.devSubmit("getNDecryptorFunctionCode - Failed to find n decryptor (code)", jsUrl, code);
 		throw new ScriptException("Failed to find n decryptor (code)\n" + jsUrl);
 	}
 
@@ -9326,7 +9327,7 @@ function getCipherFunctionCode(playerCode, jsUrl, constantArrayName, constantArr
 		}
 
 		if(!cipherFunctionName) {
-			if(bridge.devSubmit) bridge.devSubmit("getCipherFunctionCode - Failed to find cipher (name)", "//" + jsUrl + "\n\n" + playerCode);
+			//if(bridge.devSubmit) bridge.devSubmit("getCipherFunctionCode - Failed to find cipher (name)", "//" + jsUrl + "\n\n" + playerCode);
 			throw new ScriptException("Failed to find cipher (name)\n" + jsUrl);
 		}
 	}
@@ -9335,7 +9336,7 @@ function getCipherFunctionCode(playerCode, jsUrl, constantArrayName, constantArr
 		if(!cipherFunctionCodeMatch) {
 			if(IS_TESTING)
 				console.log("Failed to find cipher function in: ", playerCode);
-			if(bridge.devSubmit) bridge.devSubmit("getCipherFunctionCode - Failed to find cipher (function)", jsUrl);
+			//if(bridge.devSubmit) bridge.devSubmit("getCipherFunctionCode - Failed to find cipher (function)", jsUrl);
 			throw new ScriptException("Failed to find cipher (function)\n" + jsUrl);
 		}
 		cipherFunctionCode = cipherFunctionCodeMatch[1];
@@ -9348,7 +9349,7 @@ function getCipherFunctionCode(playerCode, jsUrl, constantArrayName, constantArr
 		if(!helperObjNameMatch) {
 			if(IS_TESTING)
 				console.log("Failed to find helper name in: ", playerCode);
-			if(bridge.devSubmit) bridge.devSubmit("getCipherFunctionCode - Failed to find helper (name)", jsUrl);
+			//if(bridge.devSubmit) bridge.devSubmit("getCipherFunctionCode - Failed to find helper (name)", jsUrl);
 			throw new ScriptException("Failed to find helper (name)\n" + jsUrl);
 		}
 		cipherFunctionHelperObjName = helperObjNameMatch[1];
@@ -9360,7 +9361,7 @@ function getCipherFunctionCode(playerCode, jsUrl, constantArrayName, constantArr
 	if(!helperObjMatch) {
 		if(IS_TESTING)
 			console.log("Failed to find helper method [" + cipherFunctionHelperObjName + "] in: ", playerCode);
-        if(bridge.devSubmit) bridge.devSubmit("getCipherFunctionCode - Failed to find helper (methods)", jsUrl);
+        //if(bridge.devSubmit) bridge.devSubmit("getCipherFunctionCode - Failed to find helper (methods)", jsUrl);
 		throw new ScriptException("Failed to extract helper (methods)\n" + jsUrl);
 	}
 	const helperObj = helperObjMatch[1];
