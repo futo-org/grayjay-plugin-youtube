@@ -640,9 +640,9 @@ source.isContentDetailsUrl = (url) => {
 		REGEX_VIDEO_URL_EMBED.test(url);
 };
 
-function ensureSts(sts, jsUrl, codeUsed, location = undefined) {
+function ensureSts(sts, jsUrl, location = undefined) {
 	if(!sts || isNaN(sts)) {
-		if(bridge.devSubmit) bridge.devSubmit(`prepareCipher - Failed to extract sts (${location})\n` + jsUrl, codeUsed ?? "No code fetched");
+		//if(bridge.devSubmit) bridge.devSubmit(`prepareCipher - Failed to extract sts (${location})\n` + jsUrl, codeUsed ?? "No code fetched");
 		throw new ScriptException(`Failed to extract sts (${location}): ${jsUrl}`);
 	}
 }
@@ -741,7 +741,7 @@ class YTSessionClient {
 		const jsUrlMatch = homeHtml.match("PLAYER_JS_URL\"\\s?:\\s?\"(.*?)\"");
 		const jsUrl = (jsUrlMatch) ? jsUrlMatch[1] : clientConfig.PLAYER_JS_URL;
 		const isNewCipher = prepareCipher(jsUrl);
-		ensureSts(_sts[jsUrl], jsUrl, undefined, "getClientInit");
+		ensureSts(_sts[jsUrl], jsUrl, "getClientInit");
 
 		let newClientConfig = {
 			initialData: initialData,
@@ -8549,11 +8549,11 @@ function prepareCipher(jsUrl, codeOverride) {
 		console.log("stsMatch: " + stsMatch);
 		if (stsMatch !== null && stsMatch.length > 1) {
 			const sts = stsMatch[1];
-			ensureSts(sts, jsUrl, codeUsed, "Legacy solution with match");
+			ensureSts(sts, jsUrl, "Legacy solution with match");
 			_sts[jsUrl] = sts;
 			console.log("sts: " + sts);
 		} else {
-			ensureSts(undefined, jsUrl, codeUsed, "Legacy solution without match");
+			ensureSts(undefined, jsUrl, "Legacy solution without match");
 		}
 
 		log("CIPHER SOLVED USING LEGACY SOLUTION");
@@ -8592,12 +8592,12 @@ function prepareCipherPlayer(jsUrl, codeUsed) {
 			console.log("stsMatch: " + stsMatch);
 			if (stsMatch !== null && stsMatch.length > 1) {
 				const sts = stsMatch[1];
-				ensureSts(sts, jsUrl, codeUsed, "Legacy solution with match");
+				ensureSts(sts, jsUrl, "Legacy solution with match");
 
 				_sts[jsUrl] = sts;
 				console.log("sts: " + sts);
 			} else {
-				ensureSts(undefined, jsUrl, codeUsed, "Player solution without match");
+				ensureSts(undefined, jsUrl, "Player solution without match");
 			}
 
 			log("CIPHER SOLVED USING PLAYER SOLUTION");
