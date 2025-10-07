@@ -40,7 +40,7 @@ const URL_YOUTUBE_SPONSORBLOCK = "https://sponsor.ajay.app/api/skipSegments?vide
 const URL_YOUTUBE_RSS = "https://www.youtube.com/feeds/videos.xml?channel_id=";
 
 //Newest to oldest
-const CIPHER_TEST_HASHES = ["29a37ef6", "81567a87", "475ca5fd", "093288cd", "b7ed0796", "20830619", "4fcd6e4a", "c8dbda2a", "7795af42", "d50f54ef", "e7567ecf", "3bb1f723", "3400486c", "b22ef6e7", "a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
+const CIPHER_TEST_HASHES = ["6956a038", "17ad44a3", "29a37ef6", "81567a87", "475ca5fd", "093288cd", "b7ed0796", "20830619", "4fcd6e4a", "c8dbda2a", "7795af42", "d50f54ef", "e7567ecf", "3bb1f723", "3400486c", "b22ef6e7", "a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
 const CIPHER_TEST_PREFIX = "/s/player/";
 const CIPHER_TEST_SUFFIX = "/player_ias.vflset/en_US/base.js";
 
@@ -8467,6 +8467,7 @@ function testCipher(hash, codeOverride) {
 		};
 	}
 	catch(ex) {
+		clearCipher(jsUrl);
 		return {
 			success: false,
 			exception: ex
@@ -8808,7 +8809,7 @@ function findSigDecryptorFunction(jsUrl, code) {
 	}
 	*/
 
-	const callerMatch = /[^a-zA-Z0-9_$]([a-zA-Z$_]+)\(([0-9]+),[^;]*?decodeURI[^;]*?\)/s.exec(code)
+	const callerMatch = /[^a-zA-Z0-9_$]([a-zA-Z$_]+)\(([0-9]+),[^)]\)[;,][a-zA-Z$_]=decodeURI/s.exec(code)
 		//"[^a-zA-Z0-9_$]" + functionMatch[1] + "\\([0-9]+,[^;]*?decodeURI[^;]*?\\)");
 	if(!callerMatch) {
 		if(bridge.devSubmit) bridge.devSubmit("findSigDecryptorFunction - Failed to find sig decryptor(player caller): ", "//" + jsUrl + "\n\n" + code);
