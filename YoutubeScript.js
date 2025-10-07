@@ -8810,7 +8810,10 @@ function findSigDecryptorFunction(jsUrl, code) {
 	}
 	*/
 
-	const callerMatch = /[^a-zA-Z0-9_$]([a-zA-Z$_]+)\(([0-9]+),[^)]\)[;,][a-zA-Z$_]=decodeURI/s.exec(code)
+	let callerMatch = /[^a-zA-Z0-9_$]([a-zA-Z$_0-9]+)\(([0-9]+),[a-zA-Z0-9$_=,) ]*(?:;|\),)[a-zA-Z0-9$_ ]*=decodeURIComponent/s.exec(code)
+	const callerMatch2 = /[^a-zA-Z0-9_$]([a-zA-Z$_]+)\(([0-9]+),[^;]*?decodeURI[^;]*?\)/s.exec(code);
+	//if(!callerMatch && callerMatch2)
+	//	callerMatch = callerMatch2;
 		//"[^a-zA-Z0-9_$]" + functionMatch[1] + "\\([0-9]+,[^;]*?decodeURI[^;]*?\\)");
 	if(!callerMatch) {
 		if(bridge.devSubmit) bridge.devSubmit("findSigDecryptorFunction - Failed to find sig decryptor(player caller): ", "//" + jsUrl + "\n\n" + code);

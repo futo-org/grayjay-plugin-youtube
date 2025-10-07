@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 289,
+	"version": 290,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -375,6 +375,9 @@
 
 
 	"changelog": {
+		"290": [
+			"Fix: Cipher Fix"
+		],
 		"289": [
 			"Fix: Cipher Fix",
 			"Improvement: Better STS error handling"
