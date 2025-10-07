@@ -640,6 +640,13 @@ source.isContentDetailsUrl = (url) => {
 		REGEX_VIDEO_URL_EMBED.test(url);
 };
 
+function ensureSts(sts, jsUrl, codeUsed, location = undefined) {
+	if(!sts || isNaN(sts)) {
+		if(bridge.devSubmit) bridge.devSubmit(`prepareCipher - Failed to extract sts (${location})\n` + jsUrl, codeUsed ?? "No code fetched");
+		throw new ScriptException(`Failed to extract sts (${location})`);
+	}
+}
+
 class YTSessionClient {
 
 	constructor() {
@@ -734,9 +741,7 @@ class YTSessionClient {
 		const jsUrlMatch = homeHtml.match("PLAYER_JS_URL\"\\s?:\\s?\"(.*?)\"");
 		const jsUrl = (jsUrlMatch) ? jsUrlMatch[1] : clientConfig.PLAYER_JS_URL;
 		const isNewCipher = prepareCipher(jsUrl);
-
-		if(!_sts[jsUrl] || isNaN(_sts[jsUrl]))
-			throw "Failed to extract sts";
+		ensureSts(_sts[jsUrl], jsUrl, undefined, "getClientInit");
 
 		let newClientConfig = {
 			initialData: initialData,
@@ -8543,10 +8548,11 @@ function prepareCipher(jsUrl, codeOverride) {
 		console.log("stsMatch: " + stsMatch);
 		if (stsMatch !== null && stsMatch.length > 1) {
 			const sts = stsMatch[1];
+			ensureSts(sts, jsUrl, codeUsed, "Legacy solution with match");
 			_sts[jsUrl] = sts;
 			console.log("sts: " + sts);
-			if(!sts || isNaN(sts))
-				throw new ScriptException("Failed to extract sts");
+		} else {
+			ensureSts(undefined, jsUrl, codeUsed, "Legacy solution without match");
 		}
 
 		log("CIPHER SOLVED USING LEGACY SOLUTION");
@@ -8556,8 +8562,9 @@ function prepareCipher(jsUrl, codeOverride) {
 	catch(ex) {
 		if(playerCode) { //!!_settings.fallback_full_player && 
 			try {
-				if(prepareCipherPlayer(jsUrl, playerCode))
+				if(prepareCipherPlayer(jsUrl, playerCode)) {
 					return true;
+				}
 			}
 			catch(ex2) {
         		if(bridge.devSubmit) bridge.devSubmit("prepareCipher - Failed to get Cipher due to: Error (Player):" + ex2 + "\n" + jsUrl + "\n(Original: " + ex + ")", codeUsed ?? "No code fetched");
@@ -8583,10 +8590,12 @@ function prepareCipherPlayer(jsUrl, codeUsed) {
 			console.log("stsMatch: " + stsMatch);
 			if (stsMatch !== null && stsMatch.length > 1) {
 				const sts = stsMatch[1];
+				ensureSts(sts, jsUrl, codeUsed, "Legacy solution with match");
+
 				_sts[jsUrl] = sts;
 				console.log("sts: " + sts);
-				if(!sts || isNaN(sts))
-					throw new ScriptException("Failed to extract sts");
+			} else {
+				ensureSts(undefined, jsUrl, codeUsed, "Player solution without match");
 			}
 
 			log("CIPHER SOLVED USING PLAYER SOLUTION");
