@@ -102,7 +102,7 @@ const USER_AGENT_TVHTML5_EMBED = "Mozilla/5.0 (CrKey armv7l 1.5.16041) AppleWebK
 
 const USE_MOBILE_PAGES = true;
 const USE_ANDROID_FALLBACK = false;
-const USE_IOS_LIVE_FALLBACK = true;
+const USE_IOS_LIVE_FALLBACK = false;
 const USE_IOS_VIDEOS_FALLBACK = true;
 const USE_TV_VIDEOS_FALLBACK = false;
 
@@ -972,7 +972,8 @@ class YTSessionClient {
 				}
 				else {
 					//TODO: Non-iOS live streams
-					throw new ScriptException("No handling for live videos without iOS implemented");
+					if(!videoDetails.live)
+						throw new ScriptException("No handling for live videos without iOS implemented");
 				}
 
 				
