@@ -40,7 +40,7 @@ const URL_YOUTUBE_SPONSORBLOCK = "https://sponsor.ajay.app/api/skipSegments?vide
 const URL_YOUTUBE_RSS = "https://www.youtube.com/feeds/videos.xml?channel_id=";
 
 //Newest to oldest
-const CIPHER_TEST_HASHES = ["6956a038", "17ad44a3", "29a37ef6", "81567a87", "475ca5fd", "093288cd", "b7ed0796", "20830619", "4fcd6e4a", "c8dbda2a", "7795af42", "d50f54ef", "e7567ecf", "3bb1f723", "3400486c", "b22ef6e7", "a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
+const CIPHER_TEST_HASHES = ["bcd893b3", "6956a038", "17ad44a3", "29a37ef6", "81567a87", "475ca5fd", "093288cd", "b7ed0796", "20830619", "4fcd6e4a", "c8dbda2a", "7795af42", "d50f54ef", "e7567ecf", "3bb1f723", "3400486c", "b22ef6e7", "a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
 const CIPHER_TEST_PREFIX = "/s/player/";
 const CIPHER_TEST_SUFFIX = "/player_ias.vflset/en_US/base.js";
 
@@ -10792,16 +10792,934 @@ TextDecoder.prototype.decode = function (octets) {
   return string
 };
 
+//#region Intl
+var Intl = (() => {
+    const _objectHas = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+    const _isNumber = (x) => typeof x === 'number' && Number.isFinite(x);
+    const _pad2 = (n) => String(n).padStart(2, '0');
+    const _sign = (n) => (n < 0 ? -1 : (n > 0 ? 1 : 0));
+    const _clamp = (n, lo, hi) => Math.min(Math.max(n, lo), hi);
 
+    const DEFAULT_LOCALE = 'en-US';
+    const DEFAULT_NUMBERING = 'latn';
+    const DEFAULT_CALENDAR = 'gregory';
 
+    const CURRENCY_SYMBOLS = {
+    USD:'$', EUR:'€', GBP:'£', JPY:'¥', CNY:'¥', AUD:'A$', CAD:'C$', CHF:'CHF',
+    HKD:'HK$', NZD:'NZ$', SEK:'kr', KRW:'₩', SGD:'S$', NOK:'kr', MXN:'MX$', INR:'₹',
+    RUB:'₽', ZAR:'R', TRY:'₺', BRL:'R$', TWD:'NT$', DKK:'kr', PLN:'zł', THB:'฿',
+    IDR:'Rp', MYR:'RM', PHP:'₱', HUF:'Ft', CZK:'Kč', ILS:'₪', SAR:'﷼', AED:'د.إ',
+    RON:'lei'
+    };
+    const CURRENCY_NAMES_EN = {
+    USD:'US Dollar', EUR:'Euro', GBP:'British Pound', JPY:'Japanese Yen', CNY:'Chinese Yuan',
+    AUD:'Australian Dollar', CAD:'Canadian Dollar', CHF:'Swiss Franc', HKD:'Hong Kong Dollar',
+    NZD:'New Zealand Dollar', SEK:'Swedish Krona', KRW:'South Korean Won', SGD:'Singapore Dollar',
+    NOK:'Norwegian Krone', MXN:'Mexican Peso', INR:'Indian Rupee', RUB:'Russian Ruble',
+    ZAR:'South African Rand', TRY:'Turkish Lira', BRL:'Brazilian Real', TWD:'New Taiwan Dollar',
+    DKK:'Danish Krone', PLN:'Polish Zloty', THB:'Thai Baht', IDR:'Indonesian Rupiah',
+    MYR:'Malaysian Ringgit', PHP:'Philippine Peso', HUF:'Hungarian Forint', CZK:'Czech Koruna',
+    ILS:'Israeli New Shekel', SAR:'Saudi Riyal', AED:'UAE Dirham', RON:'Romanian Leu'
+    };
 
+    const UNITS_EN = [
+    // length/area/volume/mass
+    'meter','kilometer','centimeter','millimeter','mile','yard','foot','inch',
+    'square-meter','square-kilometer','square-mile','hectare','acre',
+    'liter','milliliter','gallon','quart','pint',
+    'gram','kilogram','milligram','pound','ounce',
+    // speed/pressure/temperature/energy/power
+    'meter-per-second','kilometer-per-hour','mile-per-hour',
+    'pascal','hectopascal','bar',
+    'celsius','fahrenheit','kelvin',
+    'joule','kilojoule','calorie','kilocalorie',
+    'watt','kilowatt','megawatt',
+    // digital
+    'bit','kilobit','megabit','gigabit','terabit',
+    'byte','kilobyte','megabyte','gigabyte','terabyte',
+    // duration
+    'second','minute','hour','day','week','month','year'
+    ];
 
+    const CALENDARS = ['gregory']; // pragmatic
+    const NUMBERING_SYSTEMS = ['latn'];
+    const COLLATIONS = ['default']; // pragmatic
+    const TIMEZONES = ['UTC']; // we don’t embed the IANA tzdb
 
+    function _isPlainObject(x){ return x && typeof x === 'object' && Object.getPrototypeOf(x) === Object.prototype; }
 
+    // Basic BCP 47 canonicalization: lower language, title-case script, upper region,
+    // preserve extensions; de-duplicate. No deprecated-subtag mapping (size trade-off).
+    function canonicalizeLanguageTag(tag) {
+    if (typeof tag !== 'string') throw new TypeError('Invalid language tag');
+    const parts = tag.trim().replace(/_/g, '-').split('-');
+    if (!parts[0]) throw new RangeError('Invalid language tag');
 
+    let language = parts[0].toLowerCase();
+    let script = null, region = null, rest = [];
+    let i = 1;
+    if (parts[i] && /^[A-Za-z]{4}$/.test(parts[i])) {
+        script = parts[i][0].toUpperCase() + parts[i].slice(1).toLowerCase();
+        i++;
+    }
+    if (parts[i] && /^[A-Za-z]{2}$/.test(parts[i])) {
+        region = parts[i].toUpperCase();
+        i++;
+    } else if (parts[i] && /^\d{3}$/.test(parts[i])) {
+        region = parts[i];
+        i++;
+    }
+    for (; i < parts.length; i++) rest.push(parts[i]);
 
+    let base = language;
+    if (script) base += '-' + script;
+    if (region) base += '-' + region;
 
+    // Keep extensions and private-use
+    const canonical = [base, ...rest].filter(Boolean).join('-');
 
+    // Reject obviously broken tags
+    if (!/^[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|\d{3}))?(-.+)?$/.test(canonical)) {
+        throw new RangeError('Invalid language tag: ' + tag);
+    }
+    return canonical;
+    }
+
+    function getCanonicalLocales(locales) {
+    if (locales == null) return [];
+    const list = Array.isArray(locales) ? locales : [locales];
+    const seen = new Set();
+    const out = [];
+    for (const loc of list) {
+        const canon = canonicalizeLanguageTag(String(loc));
+        if (!seen.has(canon)) {
+        seen.add(canon);
+        out.push(canon);
+        }
+    }
+    return out;
+    }
+
+    function _bestAvailableLocale(requested) {
+    const list = getCanonicalLocales(requested && requested.length ? requested : DEFAULT_LOCALE);
+    // We only “fully” support en and en-*. Fallback chain: exact -> language only -> en-US.
+    for (const tag of list) {
+        if (/^en(-|$)/i.test(tag)) return tag;
+    }
+    return DEFAULT_LOCALE;
+    }
+
+    function _resolvedHourCycle(opts, locale) {
+    if (opts && _objectHas(opts, 'hour12')) return opts.hour12 ? 'h12' : 'h23';
+    if (opts && opts.hourCycle) return opts.hourCycle;
+    // en-US prefers 12h, en-GB prefers 24h; we coarse-guess:
+    return /^(en-GB|en-IE|en-AU|en-NZ|en-IN|en-SG)$/i.test(locale) ? 'h23' : 'h12';
+    }
+
+    function _formatTZOffset(minutes) {
+    const sign = minutes <= 0 ? '+' : '-';
+    const abs = Math.abs(minutes);
+    const hh = _pad2(Math.floor(abs / 60));
+    const mm = _pad2(abs % 60);
+    return `GMT${sign}${hh}:${mm}`;
+    }
+
+    function _getDateParts(d, tz) {
+    if (tz === 'UTC') {
+        return {
+        year: d.getUTCFullYear(),
+        month: d.getUTCMonth() + 1,
+        day: d.getUTCDate(),
+        hour: d.getUTCHours(),
+        minute: d.getUTCMinutes(),
+        second: d.getUTCSeconds(),
+        ms: d.getUTCMilliseconds(),
+        weekday: d.getUTCDay(), // 0=Sun
+        tzOffsetMin: 0
+        };
+    } else {
+        return {
+        year: d.getFullYear(),
+        month: d.getMonth() + 1,
+        day: d.getDate(),
+        hour: d.getHours(),
+        minute: d.getMinutes(),
+        second: d.getSeconds(),
+        ms: d.getMilliseconds(),
+        weekday: d.getDay(),
+        tzOffsetMin: -d.getTimezoneOffset()
+        };
+    }
+    }
+
+    const EN_WEEKDAY = {
+    long: ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],
+    short: ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
+    narrow: ['S','M','T','W','T','F','S']
+    };
+    const EN_MONTH = {
+    long: ['January','February','March','April','May','June','July','August','September','October','November','December'],
+    short: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+    narrow: ['J','F','M','A','M','J','J','A','S','O','N','D']
+    };
+
+    function _groupInt(str, sep) {
+    // group every 3 digits left of decimal
+    return str.replace(/\B(?=(\d{3})+(?!\d))/g, sep);
+    }
+
+    function _compactEN(n, digits) {
+    const abs = Math.abs(n);
+    const map = [
+        { v: 1e12, s: 'T' },
+        { v: 1e9,  s: 'B' },
+        { v: 1e6,  s: 'M' },
+        { v: 1e3,  s: 'K' }
+    ];
+    for (const {v,s} of map) {
+        if (abs >= v) {
+        const value = (n / v).toFixed(digits);
+        return value.replace(/\.0+$/,'') + s;
+        }
+    }
+    return String(n);
+    }
+
+    function _asNumber(x) {
+    const n = Number(x);
+    if (!Number.isFinite(n)) throw new RangeError('Invalid number');
+    return n;
+    }
+
+    // ------------------------------ Locale ------------------------------
+
+    class PolyfillLocale {
+    constructor(tag, options = {}) {
+        const [ first ] = getCanonicalLocales(tag || DEFAULT_LOCALE);
+        const canonical = first || DEFAULT_LOCALE;
+        const m = canonical.match(/^([a-z]{2,3})(?:-([A-Z][a-z]{3}))?(?:-([A-Z]{2}|\d{3}))?/);
+        const language = m ? m[1] : 'en';
+        const script = m && m[2] ? m[2] : undefined;
+        const region = m && m[3] ? m[3] : undefined;
+
+        this.baseName = canonical;
+        this.language = language;
+        this.script = script;
+        this.region = region;
+
+        // Options
+        this.calendar = options.calendar || undefined;
+        this.caseFirst = options.caseFirst || undefined;
+        this.collation = options.collation || undefined;
+        this.hourCycle = options.hourCycle || undefined;
+        this.numberingSystem = options.numberingSystem || undefined;
+        this.numeric = options.numeric || undefined;
+    }
+    toString() { return this.baseName; }
+    get maximized() { return this; }
+    get minimized() { return this; }
+    }
+
+    // ------------------------------ Collator ------------------------------
+
+    class PolyfillCollator {
+    constructor(locales, options = {}) {
+        const locale = _bestAvailableLocale(locales);
+        this._locale = locale;
+        this._options = {
+        usage: options.usage || 'sort',
+        sensitivity: options.sensitivity || 'variant', // base|accent|case|variant
+        ignorePunctuation: !!options.ignorePunctuation,
+        numeric: !!options.numeric,
+        caseFirst: options.caseFirst || 'false',
+        collation: options.collation || 'default'
+        };
+    }
+    compare(a, b) {
+        a = String(a); b = String(b);
+
+        const opts = this._options;
+        const stripP = (s) => opts.ignorePunctuation ? s.replace(/[^\p{L}\p{N}\s]+/g, '') : s;
+
+        let A = stripP(a), B = stripP(b);
+
+        const base = (s) => s.normalize('NFD').replace(/\p{M}/g, '');
+        const caseless = (s) => s.toLowerCase();
+        if (opts.sensitivity === 'base') { A = base(A); B = base(B); A = caseless(A); B = caseless(B); }
+        else if (opts.sensitivity === 'accent') { A = base(A); B = base(B); }
+        else if (opts.sensitivity === 'case') { A = caseless(A); B = caseless(B); }
+
+        if (opts.numeric) {
+        // Natural sort: split into digit and non-digit chunks
+        const chunk = (s) => s.match(/\d+|\D+/g) || [];
+        const aa = chunk(A), bb = chunk(B);
+        const len = Math.min(aa.length, bb.length);
+        for (let i=0;i<len;i++){
+            const x = aa[i], y = bb[i];
+            if (/\d/.test(x) && /\d/.test(y)) {
+            const nx = BigInt(x.replace(/^0+/, '') || '0');
+            const ny = BigInt(y.replace(/^0+/, '') || '0');
+            if (nx !== ny) return nx < ny ? -1 : 1;
+            } else if (x !== y) {
+            return x < y ? -1 : 1;
+            }
+        }
+        if (aa.length !== bb.length) return aa.length - bb.length;
+        return 0;
+        } else {
+        if (A < B) return -1;
+        if (A > B) return 1;
+        return 0;
+        }
+    }
+    resolvedOptions() {
+        return {
+        locale: this._locale,
+        usage: this._options.usage,
+        sensitivity: this._options.sensitivity,
+        ignorePunctuation: this._options.ignorePunctuation,
+        numeric: this._options.numeric,
+        collation: this._options.collation,
+        caseFirst: this._options.caseFirst
+        };
+    }
+    }
+
+    // ------------------------------ NumberFormat ------------------------------
+
+    class PolyfillNumberFormat {
+    constructor(locales, options = {}) {
+        const locale = _bestAvailableLocale(locales);
+        const style = options.style || 'decimal'; // decimal, percent, currency, unit
+        const currency = options.currency ? options.currency.toUpperCase() : undefined;
+        if (style === 'currency' && !currency) throw new TypeError('currency is required for currency style');
+
+        const minimumFractionDigits = _objectHas(options,'minimumFractionDigits') ? options.minimumFractionDigits : undefined;
+        const maximumFractionDigits = _objectHas(options,'maximumFractionDigits') ? options.maximumFractionDigits : undefined;
+
+        const notation = options.notation || 'standard'; // standard, scientific, engineering, compact
+        const signDisplay = options.signDisplay || 'auto'; // auto, never, always, exceptZero
+        const currencyDisplay = options.currencyDisplay || 'symbol'; // code, symbol, narrowSymbol, name
+        const unit = options.unit;
+        const unitDisplay = options.unitDisplay || 'short'; // long, short, narrow
+        const useGrouping = _objectHas(options,'useGrouping') ? !!options.useGrouping : true;
+
+        this._locale = locale;
+        this._style = style;
+        this._currency = currency;
+        this._notation = notation;
+        this._signDisplay = signDisplay;
+        this._currencyDisplay = currencyDisplay;
+        this._unit = unit;
+        this._unitDisplay = unitDisplay;
+        this._useGrouping = useGrouping;
+
+        const defaultFrac = style === 'currency' ? 2 : 0;
+        const maxDefault = style === 'currency' ? 2 : 3;
+        this._minFD = minimumFractionDigits ?? defaultFrac;
+        this._maxFD = maximumFractionDigits ?? maxDefault;
+
+        this._groupSep = ','; // en
+        this._decSep = '.';
+    }
+
+    formatToParts(x) {
+        const n = _asNumber(x);
+        const { sign, str, unit } = this._formatCore(n);
+        const parts = [];
+        if (sign) parts.push({ type:'minusSign', value: '-' });
+        for (const ch of str) {
+        if (ch === this._groupSep) parts.push({ type:'group', value: ch });
+        else if (ch === this._decSep) parts.push({ type:'decimal', value: ch });
+        else if (/\d/.test(ch)) parts.push({ type:'integer', value: ch }); // not precise separation of integer/fractional digits; fine for compact code
+        else parts.push({ type:'literal', value: ch });
+        }
+        if (unit) parts.push({ type: this._style === 'currency' ? 'currency' : 'unit', value: unit });
+        return parts;
+    }
+
+	static supportedLocalesOf() {
+		return ['en'];
+	}
+
+    format(x) {
+        const n = _asNumber(x);
+        const { sign, str, unit } = this._formatCore(n);
+        return (sign ? '-' : '') + str + (unit ? unit : '');
+    }
+
+    _formatCore(n) {
+        // Sign display
+        const sgn = _sign(n);
+        const showSign =
+        this._signDisplay === 'always' ? (sgn >= 0 ? '+' : '-') :
+        this._signDisplay === 'never' ? '' :
+        this._signDisplay === 'exceptZero' ? (sgn === 0 ? '' : (sgn < 0 ? '-' : '+')) :
+        (sgn < 0 ? '-' : '');
+        const negative = sgn < 0;
+        let abs = Math.abs(n);
+
+        let suffix = '';
+        let str;
+        if (this._style === 'percent') {
+        abs *= 100;
+        }
+
+        if (this._notation === 'compact') {
+        str = _compactEN(abs, this._maxFD);
+        } else if (this._notation === 'scientific') {
+        str = abs.toExponential(this._maxFD);
+        } else {
+        str = abs.toFixed(_clamp(this._maxFD, 0, 20));
+        if (this._minFD != null && this._minFD !== this._maxFD) {
+            const [int, frac=''] = str.split('.');
+            const needed = Math.max(this._minFD - frac.length, 0);
+            str = int + (this._minFD > 0 || frac ? this._decSep : '') + (frac + '0'.repeat(needed)).slice(0, Math.max(frac.length, this._minFD));
+        } else if (this._maxFD >= 0) {
+            const [int, frac] = str.split('.');
+            str = int + (this._maxFD > 0 ? this._decSep + (frac || '').slice(0, this._maxFD) : '');
+        }
+        }
+
+        // grouping
+        if (this._useGrouping) {
+        const [int, frac] = str.split('.');
+        str = _groupInt(int, this._groupSep) + (frac != null && frac.length ? this._decSep + frac : '');
+        }
+
+        if (this._style === 'currency') {
+        const code = this._currency;
+        let signSym = '';
+        if (this._currencyDisplay === 'code') signSym = ` ${code}`;
+        else if (this._currencyDisplay === 'name') signSym = ` ${CURRENCY_NAMES_EN[code] || code}`;
+        else if (this._currencyDisplay === 'narrowSymbol') signSym = CURRENCY_SYMBOLS[code] || code; // same as symbol here
+        else signSym = CURRENCY_SYMBOLS[code] || code;
+        // en-US pattern: symbol before number
+        suffix = (this._currencyDisplay === 'code' || this._currencyDisplay === 'name') ? signSym : '';
+        if (this._currencyDisplay === 'code' || this._currencyDisplay === 'name') {
+            // trailing
+        } else {
+            str = signSym + str;
+        }
+        } else if (this._style === 'unit' && this._unit) {
+        const unit = this._unit;
+        const disp = this._unitDisplay;
+        const sep = disp === 'narrow' ? '' : ' ';
+        const unitStr = disp === 'long'
+            ? ` ${unit.replace(/-/g, ' ')}`
+            : sep + unit.replace(/-/g, (disp === 'narrow' ? '' : ' '));
+        suffix = unitStr;
+        } else if (this._style === 'percent') {
+        suffix = '%';
+        }
+
+        const signPrefix = (showSign === '+' ? '+' : (negative ? '-' : ''));
+        const full = (signPrefix ? signPrefix : '') + str;
+        return { sign: signPrefix === '-', str: full.replace(/^[+-]/,''), unit: suffix };
+    }
+
+    resolvedOptions() {
+        return {
+        locale: this._locale,
+        numberingSystem: DEFAULT_NUMBERING,
+        style: this._style,
+        currency: this._currency,
+        currencyDisplay: this._currencyDisplay,
+        unit: this._unit,
+        unitDisplay: this._unitDisplay,
+        useGrouping: this._useGrouping,
+        minimumFractionDigits: this._minFD,
+        maximumFractionDigits: this._maxFD,
+        notation: this._notation,
+        signDisplay: this._signDisplay
+        };
+    }
+    }
+
+    // ------------------------------ DateTimeFormat ------------------------------
+
+    class PolyfillDateTimeFormat {
+    constructor(locales, options = {}) {
+        const locale = _bestAvailableLocale(locales);
+        const timeZone = (options.timeZone || 'local').toUpperCase() === 'UTC' ? 'UTC' : 'local';
+        const hourCycle = _resolvedHourCycle(options, locale);
+        this._locale = locale;
+        this._timeZone = timeZone;
+        this._options = options;
+        this._hourCycle = hourCycle;
+    }
+
+    format(date) {
+        const d = date == null ? new Date() : (date instanceof Date ? date : new Date(date));
+        if (isNaN(d)) throw new RangeError('Invalid time value');
+        const parts = this.formatToParts(d);
+        return parts.map(p => p.value).join('');
+    }
+
+    formatToParts(date) {
+        const d = date == null ? new Date() : (date instanceof Date ? date : new Date(date));
+        if (isNaN(d)) throw new RangeError('Invalid time value');
+        const tz = this._timeZone;
+        const opts = this._options;
+        const { year, month, day, hour, minute, second, weekday, tzOffsetMin } = _getDateParts(d, tz);
+        const parts = [];
+
+        const push = (type, value) => parts.push({ type, value });
+
+        // Weekday
+        if (opts.weekday) {
+        const style = opts.weekday; // long|short|narrow
+        push('weekday', EN_WEEKDAY[style][weekday]);
+        push('literal', ', ');
+        }
+
+        // Date
+        const dateOrder = 'YMD'; // en default
+        const datePieces = [];
+        if (opts.month) {
+        if (opts.month === 'numeric') datePieces.push({ type:'month', value: String(month) });
+        else if (opts.month === '2-digit') datePieces.push({ type:'month', value: _pad2(month) });
+        else datePieces.push({ type:'month', value: EN_MONTH[opts.month][month-1] });
+        }
+        if (opts.day) {
+        const val = opts.day === '2-digit' ? _pad2(day) : String(day);
+        datePieces.push({ type:'day', value: val });
+        }
+        if (opts.year) {
+        const y = String(year);
+        const val = opts.year === '2-digit' ? y.slice(-2) : y;
+        datePieces.push({ type:'year', value: val });
+        }
+        if (datePieces.length) {
+        // en: month day, year  OR numeric: MM/DD/YYYY
+        if (opts.month && typeof opts.month === 'string' && /long|short|narrow/.test(opts.month)) {
+            // Month name format: Month D, Y
+            for (let i=0;i<datePieces.length;i++){
+            const p = datePieces[i];
+            push(p.type, p.value);
+            if (i === 0 && opts.day) push('literal', ' ');
+            else if (i === 1 && opts.year) push('literal', ', ');
+            }
+        } else {
+            // Numeric: M/D/Y
+            for (let i=0;i<datePieces.length;i++){
+            const p = datePieces[i];
+            push(p.type, p.value);
+            if (i < datePieces.length - 1) push('literal', '/');
+            }
+        }
+        }
+
+        // Time
+        const needTime = opts.hour || opts.minute || opts.second;
+        if (datePieces.length && needTime) push('literal', ', ');
+
+        if (needTime) {
+        let H = hour;
+        const h12 = this._hourCycle === 'h12';
+        let ampm = '';
+        if (h12) {
+            ampm = H >= 12 ? 'PM' : 'AM';
+            H = H % 12;
+            if (H === 0) H = 12;
+        }
+        if (opts.hour) push('hour', opts.hour === '2-digit' ? _pad2(H) : String(H));
+        if (opts.minute) {
+            if (opts.hour) push('literal', ':');
+            push('minute', opts.minute === '2-digit' ? _pad2(minute) : String(minute));
+        }
+        if (opts.second) {
+            push('literal', ':');
+            push('second', opts.second === '2-digit' ? _pad2(second) : String(second));
+        }
+        if (opts.hour || opts.minute || opts.second) {
+            if (h12) push('literal', ' '), push('dayPeriod', ampm);
+        }
+        }
+
+        // Time zone name
+        if (opts.timeZoneName) {
+        if (parts.length) push('literal', ' ');
+        if (tz === 'UTC') {
+            push('timeZoneName', opts.timeZoneName === 'long' ? 'Coordinated Universal Time' : 'UTC');
+        } else {
+            push('timeZoneName', _formatTZOffset(-new Date().getTimezoneOffset()));
+        }
+        }
+
+        return parts;
+    }
+
+    resolvedOptions() {
+        return {
+        locale: this._locale,
+        calendar: DEFAULT_CALENDAR,
+        numberingSystem: DEFAULT_NUMBERING,
+        timeZone: this._timeZone === 'UTC' ? 'UTC' : undefined,
+        hour12: this._hourCycle === 'h12',
+        hourCycle: this._hourCycle,
+        ...this._options
+        };
+    }
+    }
+
+    // ------------------------------ RelativeTimeFormat ------------------------------
+
+    class PolyfillRelativeTimeFormat {
+    constructor(locales, options = {}) {
+        this._locale = _bestAvailableLocale(locales);
+        this._style = options.style || 'long'; // long|short|narrow
+        this._numeric = options.numeric || 'always'; // always|auto
+    }
+    format(value, unit) {
+        const { value: v, unit: u } = this._norm(value, unit);
+        return this._formatCore(v, u);
+    }
+    formatToParts(value, unit) {
+        const s = this.format(value, unit);
+        return [{ type: 'literal', value: s }];
+    }
+    _norm(value, unit) {
+        const u = String(unit);
+        const v = Number(value);
+        if (!Number.isFinite(v)) throw new RangeError('Invalid value');
+        const norm = {
+        second: ['second','sec'],
+        minute: ['minute','min'],
+        hour:   ['hour','hr'],
+        day:    ['day'],
+        week:   ['week','wk'],
+        month:  ['month','mo'],
+        year:   ['year','yr']
+        };
+        for (const k in norm) if (norm[k].includes(u)) return { value:v, unit:k };
+        throw new RangeError('Invalid unit');
+    }
+    _formatCore(v, unit) {
+        const abs = Math.abs(v);
+        const sign = v < 0 ? 'past' : 'future';
+        const style = this._style;
+        const num = (n) => String(Math.round(Math.abs(n)));
+
+        if (this._numeric === 'auto') {
+        if (unit === 'day') {
+            if (v === -1) return 'yesterday';
+            if (v === 0) return 'today';
+            if (v === 1) return 'tomorrow';
+        }
+        if (unit === 'week') {
+            if (v === -1) return 'last week';
+            if (v === 1) return 'next week';
+        }
+        if (unit === 'year') {
+            if (v === -1) return 'last year';
+            if (v === 1) return 'next year';
+        }
+        }
+
+        const long = (u, n, s) => s === 'past' ? `${n} ${u} ago` : `in ${n} ${u}`;
+        const shortLab = {
+        second: { long:'second', short:'sec', narrow:'s' },
+        minute: { long:'minute', short:'min', narrow:'m' },
+        hour:   { long:'hour',   short:'hr',  narrow:'h' },
+        day:    { long:'day',    short:'day', narrow:'d' },
+        week:   { long:'week',   short:'wk',  narrow:'w' },
+        month:  { long:'month',  short:'mo',  narrow:'m' },
+        year:   { long:'year',   short:'yr',  narrow:'y' }
+        };
+        const unitLabel = shortLab[unit][style] || shortLab[unit].long;
+        return long(unitLabel, num(v), sign);
+    }
+    resolvedOptions() {
+        return { locale: this._locale, style: this._style, numeric: this._numeric };
+    }
+    }
+
+    // ------------------------------ ListFormat ------------------------------
+
+    class PolyfillListFormat {
+    constructor(locales, options = {}) {
+        this._locale = _bestAvailableLocale(locales);
+        this._type = options.type || 'conjunction'; // conjunction|disjunction|unit
+        this._style = options.style || 'long'; // long|short|narrow
+    }
+    format(list) {
+        return this.formatToParts(list).map(p => p.value).join('');
+    }
+    formatToParts(list) {
+        if (!Array.isArray(list)) throw new TypeError('List must be array');
+        const items = list.map(x => String(x)).filter(s => s.length);
+        const n = items.length;
+        if (n === 0) return [];
+        if (n === 1) return [{ type:'element', value: items[0] }];
+
+        const conj = this._type === 'disjunction' ? { long:' or ', short:' or ', narrow:' or ' }
+                : this._type === 'unit' ? { long:' ', short:' ', narrow:'' }
+                : { long:' and ', short:' & ', narrow:' & ' };
+
+        const sep = this._style === 'long' ? ', ' : (this._style === 'short' ? ', ' : ',');
+        const parts = [];
+        for (let i=0;i<n;i++){
+        parts.push({ type:'element', value: items[i] });
+        if (i < n - 2) parts.push({ type:'literal', value: sep });
+        else if (i === n - 2) parts.push({ type:'literal', value: conj[this._style] });
+        }
+        return parts;
+    }
+    resolvedOptions() {
+        return { locale: this._locale, type: this._type, style: this._style };
+    }
+    }
+
+    // ------------------------------ PluralRules ------------------------------
+
+    class PolyfillPluralRules {
+    constructor(locales, options = {}) {
+        this._locale = _bestAvailableLocale(locales);
+        this._type = options.type || 'cardinal'; // cardinal|ordinal
+    }
+    select(n) {
+        const v = Number(n);
+        if (!Number.isFinite(v)) throw new RangeError('Invalid number');
+        const type = this._type;
+        if (/^en(-|$)/i.test(this._locale)) {
+        if (type === 'cardinal') return (Math.abs(v) === 1) ? 'one' : 'other';
+        // ordinal: 1st, 2nd, 3rd, 4th... except 11-13
+        const s = Math.abs(v) % 100;
+        if (s >= 11 && s <= 13) return 'other';
+        switch (Math.abs(v) % 10) {
+            case 1: return 'one';
+            case 2: return 'two';
+            case 3: return 'few';
+            default: return 'other';
+        }
+        }
+        // default fallback
+        return (Math.abs(v) === 1) ? 'one' : 'other';
+    }
+    resolvedOptions() { return { locale: this._locale, type: this._type }; }
+    }
+
+    // ------------------------------ DisplayNames ------------------------------
+
+    class PolyfillDisplayNames {
+    constructor(locales, options = {}) {
+        this._locale = _bestAvailableLocale(locales);
+        this._type = options.type; // 'language' | 'region' | 'script' | 'currency' | 'calendar' | 'dateTimeField'
+        if (!this._type) throw new TypeError('DisplayNames requires a type');
+        this._style = options.style || 'long';
+        this._fallback = options.fallback || 'code'; // 'code' | 'none'
+    }
+    of(code) {
+        if (code == null) return undefined;
+        const t = this._type;
+        const c = String(code);
+        if (t === 'currency') {
+        const up = c.toUpperCase();
+        return CURRENCY_NAMES_EN[up] || (this._fallback === 'code' ? up : undefined);
+        }
+        if (t === 'region') {
+        const up = c.toUpperCase();
+        const map = { US:'United States', GB:'United Kingdom', NL:'Netherlands', DE:'Germany', FR:'France', ES:'Spain', IT:'Italy', JP:'Japan', CN:'China', IN:'India', AU:'Australia', CA:'Canada' };
+        return map[up] || (this._fallback === 'code' ? up : undefined);
+        }
+        if (t === 'language') {
+        const low = c.toLowerCase();
+        const map = { en:'English', nl:'Dutch', de:'German', fr:'French', es:'Spanish', it:'Italian', ja:'Japanese', zh:'Chinese', hi:'Hindi' };
+        return map[low] || (this._fallback === 'code' ? low : undefined);
+        }
+        if (t === 'script') {
+        const title = c[0].toUpperCase() + c.slice(1).toLowerCase();
+        const map = { Latn:'Latin', Cyrl:'Cyrillic', Hans:'Simplified Han', Hant:'Traditional Han', Arab:'Arabic' };
+        return map[title] || (this._fallback === 'code' ? title : undefined);
+        }
+        if (t === 'calendar') {
+        const map = { gregory:'Gregorian' };
+        return map[c] || (this._fallback === 'code' ? c : undefined);
+        }
+        if (t === 'dateTimeField') {
+        const map = { year:'year', month:'month', day:'day', hour:'hour', minute:'minute', second:'second' };
+        return map[c] || (this._fallback === 'code' ? c : undefined);
+        }
+        return this._fallback === 'code' ? c : undefined;
+    }
+    resolvedOptions() { return { locale: this._locale, style: this._style, type: this._type, fallback: this._fallback }; }
+    }
+
+    // ------------------------------ DurationFormat ------------------------------
+
+    class PolyfillDurationFormat {
+    constructor(locales, options = {}) {
+        this._locale = _bestAvailableLocale(locales);
+        this._style = options.style || 'digital'; // digital|long|short|narrow
+        this._hoursDisplay = options.hoursDisplay || 'auto'; // auto|always
+        this._minutesDisplay = options.minutesDisplay || 'auto';
+        this._secondsDisplay = options.secondsDisplay || 'auto';
+        this._fractionalDigits = _objectHas(options,'fractionalDigits') ? options.fractionalDigits : 0;
+    }
+    format(duration) {
+        if (!_isPlainObject(duration)) throw new TypeError('Duration should be an object');
+        const { years=0, months=0, weeks=0, days=0, hours=0, minutes=0, seconds=0, milliseconds=0 } = duration;
+
+        if (this._style === 'digital') {
+        // Compute total HMS for display; higher units inserted as prefixes
+        const fracSec = (seconds + milliseconds/1000);
+        const s = this._fractionalDigits > 0 ? fracSec.toFixed(this._fractionalDigits) : Math.round(fracSec);
+        const H = _pad2(hours);
+        const M = _pad2(minutes);
+        const S = String(s).padStart(2 + (this._fractionalDigits ? (1 + this._fractionalDigits) : 0), '0');
+        const prefix = [];
+        if (years) prefix.push(`${years}y`);
+        if (months) prefix.push(`${months}m`);
+        if (weeks) prefix.push(`${weeks}w`);
+        if (days) prefix.push(`${days}d`);
+        const time = `${H}:${M}:${S}`;
+        return (prefix.length ? prefix.join(' ') + ' ' : '') + time;
+        }
+        // lexical units
+        const parts = [];
+        const push = (v, one, many, narrow) => {
+        if (!v) return;
+        if (this._style === 'narrow') parts.push(`${v}${narrow}`);
+        else if (this._style === 'short') parts.push(`${v} ${many}`);
+        else parts.push(`${v} ${v === 1 ? one : many}`);
+        };
+        push(years, 'year','yrs','y');
+        push(months, 'month','mos','mo');
+        push(weeks, 'week','wks','w');
+        push(days, 'day','days','d');
+        push(hours, 'hour','hrs','h');
+        push(minutes, 'minute','mins','m');
+        const sec = (seconds + milliseconds/1000);
+        const s = this._fractionalDigits ? Number(sec.toFixed(this._fractionalDigits)) : Math.round(sec);
+        push(s, 'second','secs','s');
+        return parts.join(this._style === 'narrow' ? ' ' : ', ');
+    }
+    resolvedOptions() {
+        return {
+        locale: this._locale,
+        style: this._style,
+        hoursDisplay: this._hoursDisplay,
+        minutesDisplay: this._minutesDisplay,
+        secondsDisplay: this._secondsDisplay,
+        fractionalDigits: this._fractionalDigits
+        };
+    }
+    }
+
+    // ------------------------------ Segmenter ------------------------------
+
+    class PolyfillSegmenter {
+    constructor(locales, options = {}) {
+        this._locale = _bestAvailableLocale(locales);
+        this._granularity = options.granularity || 'grapheme'; // grapheme|word|sentence
+    }
+    segment(input) {
+        const str = String(input);
+        const gran = this._granularity;
+        const segments = [];
+        if (gran === 'grapheme') {
+        // Code point level (not full grapheme cluster with ZWJ)
+        let i = 0;
+        for (const ch of [...str]) {
+            segments.push({ segment: ch, index: i, isWordLike: /\p{L}|\p{N}/.test(ch) });
+            i += ch.length;
+        }
+        return segments[Symbol.iterator] ? segments : { [Symbol.iterator]: () => segments.values() };
+        } else if (gran === 'word') {
+        const re = /(\p{L}[\p{L}\p{Mn}\p{Nd}\p{Pc}]*)|(\s+)|([^\s\p{L}\p{Mn}\p{Nd}\p{Pc}]+)/g;
+        let m, idx = 0;
+        while ((m = re.exec(str))) {
+            const seg = m[0]; const i = m.index;
+            segments.push({ segment: seg, index: i, isWordLike: !!m[1] });
+            idx = i + seg.length;
+        }
+        return segments;
+        } else {
+        // sentence: split on ., !, ? followed by space or EOS
+        const re = /[^.!?]+[.!?]+(\s+|$)|[^.!?]+$/g;
+        let m; let idx = 0;
+        while ((m = re.exec(str))) {
+            const seg = m[0];
+            segments.push({ segment: seg, index: m.index, isWordLike: /\p{L}/.test(seg) });
+            idx = m.index + seg.length;
+        }
+        return segments;
+        }
+    }
+    resolvedOptions() { return { locale: this._locale, granularity: this._granularity }; }
+    }
+
+    // ------------------------------ supportedValuesOf ------------------------------
+
+    function supportedValuesOf(key) {
+    const k = String(key);
+    if (k === 'calendar') return [...CALENDARS];
+    if (k === 'collation') return [...COLLATIONS];
+    if (k === 'currency') return Object.keys(CURRENCY_SYMBOLS);
+    if (k === 'numberingSystem') return [...NUMBERING_SYSTEMS];
+    if (k === 'timeZone') return [...TIMEZONES];
+    if (k === 'unit') return [...UNITS_EN];
+    throw new RangeError('Invalid key for supportedValuesOf');
+    }
+
+    // ------------------------------ v8BreakIterator (shim) ------------------------------
+
+    function v8BreakIterator() {
+    // Historically exposed in Chrome; here we model as a thin wrapper over Segmenter.
+    return {
+        segment(str) { return new PolyfillSegmenter('en', { granularity:'word' }).segment(str); }
+    };
+    }
+
+    // ------------------------------ Intl object factory ------------------------------
+
+    function makePolyfillIntl() {
+    const IntlPoly = {
+        // Constructors
+        Collator: PolyfillCollator,
+        DateTimeFormat: PolyfillDateTimeFormat,
+        DisplayNames: PolyfillDisplayNames,
+        DurationFormat: PolyfillDurationFormat,
+        ListFormat: PolyfillListFormat,
+        Locale: PolyfillLocale,
+        NumberFormat: PolyfillNumberFormat,
+        PluralRules: PolyfillPluralRules,
+        RelativeTimeFormat: PolyfillRelativeTimeFormat,
+        Segmenter: PolyfillSegmenter,
+
+        // Static
+        getCanonicalLocales,
+        supportedValuesOf,
+        v8BreakIterator
+    };
+    Object.defineProperty(IntlPoly, Symbol.toStringTag, { value: 'Intl' });
+    return IntlPoly;
+    }
+
+    // Merge native Intl where available, and polyfill the rest
+    function makeIntl({ forcePolyfill = false } = {}) {
+    const native = !forcePolyfill && typeof globalThis.Intl === 'object' ? globalThis.Intl : null;
+    const poly = makePolyfillIntl();
+    if (!native) return poly;
+
+    const out = Object.create(null);
+    // Copy natives if present, else poly
+    const keys = [
+        'Collator','DateTimeFormat','DisplayNames','DurationFormat','ListFormat',
+        'Locale','NumberFormat','PluralRules','RelativeTimeFormat','Segmenter',
+        'getCanonicalLocales','supportedValuesOf','v8BreakIterator'
+    ];
+    for (const k of keys) {
+        out[k] = _objectHas(native, k) ? native[k] : poly[k];
+    }
+    Object.defineProperty(out, Symbol.toStringTag, { value: 'Intl' });
+    return out;
+    }
+
+    return makeIntl();
+})();
+//#endregion
 
 //#region Protobuf_UMP
 (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
