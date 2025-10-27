@@ -102,7 +102,7 @@ const USER_AGENT_TVHTML5_EMBED = "Mozilla/5.0 (CrKey armv7l 1.5.16041) AppleWebK
 
 const USE_MOBILE_PAGES = true;
 const USE_ANDROID_FALLBACK = false;
-const USE_IOS_LIVE_FALLBACK = false;
+let USE_IOS_LIVE_FALLBACK = true;
 const USE_IOS_VIDEOS_FALLBACK = true;
 const USE_TV_VIDEOS_FALLBACK = false;
 
@@ -142,7 +142,6 @@ let canBatchDummy = false;
 const rootWindow = this;
 
 const canDoRequestWithBody = !!http.requestWithBody;
-
 
 function getClientContext(isAuth = false) {
 	return (isAuth) ? _clientContextAuth : _clientContext;
@@ -249,6 +248,11 @@ function testOutdatedVersion(showToast) {
 source.enable = (conf, settings, saveStateStr) => {
 	config = conf ?? {};
 	_settings = settings ?? {};
+
+	if(!!_settings?.use_html5_livestreams) {
+		USE_IOS_LIVE_FALLBACK = false;
+	}
+		
 
 	testOutdatedVersion(!saveStateStr);
 
@@ -8813,6 +8817,7 @@ function findSigDecryptorFunction(jsUrl, code) {
 
 	let callerMatch = /[^a-zA-Z0-9_$]([a-zA-Z$_0-9]+)\(([0-9]+),[a-zA-Z0-9$_=,) ]*(?:;|\),)[a-zA-Z0-9$_ ]*=decodeURIComponent/s.exec(code)
 	const callerMatch2 = /[^a-zA-Z0-9_$]([a-zA-Z$_]+)\(([0-9]+),[^;]*?decodeURI[^;]*?\)/s.exec(code);
+	callerMatch = callerMatch ?? callerMatch2;
 	//if(!callerMatch && callerMatch2)
 	//	callerMatch = callerMatch2;
 		//"[^a-zA-Z0-9_$]" + functionMatch[1] + "\\([0-9]+,[^;]*?decodeURI[^;]*?\\)");
