@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 293,
+	"version": 294,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -108,8 +108,15 @@
 			"default": "true"
 		},
 		{
+			"variable": "useHtml5",
+			"name": "Enable HTML5 Streams",
+			"description": "Attempts to use HTML5 streams if available, may be smoother experience. May not always be available.",
+			"type": "Boolean",
+			"default": "false"
+		},
+		{
 			"variable": "useUMP",
-			"name": "Force Experimental UMP Streams",
+			"name": "Force UMP Streams",
 			"description": "Force usage of experimental implementation of UMP. May be unstable and cost more performance.",
 			"type": "Boolean",
 			"default": "false"
@@ -322,7 +329,14 @@
 			"name": "Use HTML5 Livestreams instead of iOS",
 			"description": "We recently found that iOS livestreams sometimes misbehave, html5 sometimes didnt have that issue",
 			"type": "Boolean",
-			"default": "false"
+			"default": "true"
+		},
+		{
+			"variable": "use_html5_livestreams_pot",
+			"name": "Use HTML5 Livestreams POT Tokens",
+			"description": "Adds POT to livestream urls",
+			"type": "Boolean",
+			"default": "true"
 		}
 	],
 
@@ -351,6 +365,10 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"294": [
+			"Fix: Cipher fix",
+			"Fix: POT for Livestreams"
+		],
 		"293": [
 			"Fix: Cipher fix",
 			"Fix: Alternative livestream source in settings (off by default)"

@@ -40,7 +40,7 @@ const URL_YOUTUBE_SPONSORBLOCK = "https://sponsor.ajay.app/api/skipSegments?vide
 const URL_YOUTUBE_RSS = "https://www.youtube.com/feeds/videos.xml?channel_id=";
 
 //Newest to oldest
-const CIPHER_TEST_HASHES = ["bcd893b3", "6956a038", "17ad44a3", "29a37ef6", "81567a87", "475ca5fd", "093288cd", "b7ed0796", "20830619", "4fcd6e4a", "c8dbda2a", "7795af42", "d50f54ef", "e7567ecf", "3bb1f723", "3400486c", "b22ef6e7", "a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
+const CIPHER_TEST_HASHES = ["87644c66", "bcd893b3", "6956a038", "17ad44a3", "29a37ef6", "81567a87", "475ca5fd", "093288cd", "b7ed0796", "20830619", "4fcd6e4a", "c8dbda2a", "7795af42", "d50f54ef", "e7567ecf", "3bb1f723", "3400486c", "b22ef6e7", "a960a0cb", "178de1f2", "4eae42b1", "f98908d1", "0e6aaa83", "d0936ad4", "8e83803a", "30857836", "4cc5d082", "f2f137c6", "1dda5629", "23604418", "71547d26", "b7910ca8"];
 const CIPHER_TEST_PREFIX = "/s/player/";
 const CIPHER_TEST_SUFFIX = "/player_ias.vflset/en_US/base.js";
 
@@ -705,7 +705,12 @@ class YTSessionClient {
 
 	getClientInit(client, usedLogin, overrideHtml) {
 		//TODO: Add client-specific requests
-		let headers = {"Accept-Language": "en-US", "Cookie": "PREF=hl=en&gl=US" };
+		let headers = {
+			"Accept-Language": "en-US", 
+			"Cookie": "PREF=hl=en&gl=US",
+			//"x-youtube-client-name": "56",
+			//"x-youtube-client-version": "1.20250121.00.00"
+		 };
 		const respHome = (usedLogin) ? 
 			http.GET(URL_HOME, headers, true) : 
 			http.GET(URL_HOME, headers, false); //client.GET(URL_HOME, headers);
@@ -908,6 +913,18 @@ class YTSessionClient {
 		//#region Extract Streams
 		if(!simplify) {
 			if(!videoDetails.isLive) {
+				if(!!_settings.useHtml5) {
+					if(playerData.streamingData.adaptiveFormats) {
+						const newDescriptor = extractAdaptiveFormats_VideoDescriptor_WithPOT(playerData.streamingData.adaptiveFormats, context.jsUrl, contextData, "HTML5 ", potToUse);
+						if(IS_TESTING)
+							console.log("HTML5 Streaming Data", newDescriptor);
+						if(newDescriptor) {
+							videoDetails.video = newDescriptor;
+							//TODO: Verify html5
+						}
+					}
+				}
+
 				//#region iOS
 				if(!forceUmp && USE_IOS_VIDEOS_FALLBACK && respiOS && !!_settings.useiOS) {
 
@@ -975,9 +992,15 @@ class YTSessionClient {
 						bridge.toast("Failed to get iOS stream data");
 				}
 				else {
-					//TODO: Non-iOS live streams
 					if(!videoDetails.live)
 						throw new ScriptException("No handling for live videos without iOS implemented");
+					if(!!_settings.use_html5_livestreams_pot) {
+						
+						let liveStreamPot = (!context.playerConfig.useVideoIdPot) ? 
+							await tryGetPOTCustom(videoId, (pot)=>{return pot}, true) :
+							await tryGetPOT(context.bgData, (pot)=>{return pot});
+						videoDetails.live.url = videoDetails.live.url + "?pot=" + liveStreamPot;
+					}
 				}
 
 				
@@ -1642,6 +1665,8 @@ function getPlayerData(videoId, sts, useLogin = true, batch, pot = undefined) {
 	const authHeaders = useLogin ? getAuthContextHeaders(true) : {};
 	authHeaders["Accept-Language"] = "en-US";
 	authHeaders["Cookie"] = "PREF=hl=en&gl=US"
+	//authHeaders["x-youtube-client-name"] = "56";
+	//authHeaders["x-youtube-client-version"] = "1.20250121.00.00";
 	const body = {
 		contentCheckOk: true,
 		context: context.INNERTUBE_CONTEXT,
@@ -6391,6 +6416,31 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, clientConfig, pare
 	);
 }
 
+function extractAdaptiveFormats_VideoDescriptor_WithPOT(adaptiveSources, jsUrl, contextData, prefix, pot) {
+	const sources = extractAdaptiveFormats_VideoDescriptor(adaptiveSources, jsUrl, contextData, prefix);
+	if(sources.videoSources) {
+		for(let source of sources.videoSources) {
+			if(source.url && source.url.indexOf("pot=") < 0) {
+				if(source.url.indexOf("?") > 0)
+					source.url = source.url + "&pot=" + pot;
+				else
+					source.url = source.url + "?pot=" + pot;
+			}
+		}
+	}
+	if(sources.audioSources) {
+		for(let source of sources.audioSources) {
+			if(source.url && source.url.indexOf("pot=") < 0) {
+				if(source.url.indexOf("?") > 0)
+					source.url = source.url + "&pot=" + pot;
+				else
+					source.url = source.url + "?pot=" + pot;
+			}
+		}
+	}
+	return sources;
+}
+
 function extractAdaptiveFormats_VideoDescriptor(adaptiveSources, jsUrl, contextData, prefix) {   
 	const nonce = randomString(16);
 
@@ -8642,7 +8692,7 @@ function readJSScope(code, indexStart) {
 	return undefined;
 }
 function findGlobalFunction(globalCode, name) {
-		const regex = `[^\.][^a-zA-Z0-9_$](${name}\\s*=\\s*(function\\([a-zA-Z_$0-9,\\s]*\\)){)(.*?)\\}`;
+		const regex = `[^\.a-zA-Z0-9_$](${name}\\s*=\\s*(function\\([a-zA-Z_$0-9,\\s]*\\)){)(.*?)\\}`;
 		const funcDefMatch = globalCode.match(new RegExp(regex, "s"));
 		if(!funcDefMatch) {
 			console.log("Unable to find recursive func :" + funcDefMatch, regex);
@@ -8650,7 +8700,7 @@ function findGlobalFunction(globalCode, name) {
 		}
 		let funcBodyPrefix = funcDefMatch[1];
 		let funcFunctionPrefix = funcDefMatch[2];
-		let scopeStartIndex = funcDefMatch.index + funcBodyPrefix.length + 1;
+		let scopeStartIndex = funcDefMatch.index + funcBodyPrefix.length;
 		const funcBody = readJSScope(globalCode, scopeStartIndex);
 		if(!funcBody) {
 			console.log("Recursive func [" + name + "] too complex?")
@@ -9456,6 +9506,12 @@ class UMPResponse {
 				segment = binaryReadBytes(bytes, pointer, length);
 				this.opcodes.push({opcode: opcode, length: length});
 				switch(opcode) {
+					case 10: //OnesieHeader?
+					break;
+					case 11: //OnesieBody?
+					break;
+					case 12: //OnesieEncrypted?
+					break;
 					case 20: //InitStream
 						this.streamCount++;
 						const opCode20 = pb.Opcode20_pb.Opcode20.deserializeBinary(segment);
@@ -9496,36 +9552,68 @@ class UMPResponse {
 					break;
 					case 29: //Unknown
 						const opCode29 = pb.Opcode29_pb.Opcode29.deserializeBinary(segment);
-						
-						console.log("");
+						break;
+					case 31: //LiveMetadata?
+						break;
+					case 32: //HostNameChangeHint?
+						break;
+					case 33: //LiveMetadataPromise?
+						break;
+					case 34: //LiveMetadataPromiseCancel?
 						break;
 					case 35://Opcode35: Playbackcookie
 						const opCode35 = pb.Opcode35_pb.Opcode35.deserializeBinary(segment);
 						this.playbackCookie = opCode35.getPlaybackcookie();
 						this.backOffTime = opCode35.getBackofftimems();
 						break;
+					case 36: //UStreamVideoAndFormatData?
+						break;
+					case 37: //FormatSelectionConfig?
+						break;
+					case 38: //UStreamerSelectedMediaStream?
+						break;
+					case 42: //FormatInitializationMetadata?
+						break;
 					case 43://Message
 						const opCode43 = pb.Opcode43_pb.Opcode43.deserializeBinary(segment);
 						this.redirectUrl = opCode43?.getRedirecturl();
 						log("Redirect url found: " + this.redirectUrl);
 						break;
-					case 44: //Unknown
+					case 44: //Error
 						const opCode44 = pb.Opcode44_pb.Opcode44.deserializeBinary(segment);
 						console.error("UMP Error", opCode44.getBda());
 						log("Error:" + opCode44.getBda());
 						console.log("");
 						break;
+					case 45: //Seek?
+						break;
+					case 46: //ReloadPlayerResponse?
+						break;
 					case 47: //Unknown
 						const opCode47 = pb.Opcode47_pb.Opcode47.deserializeBinary(segment);
 						console.log(opCode47);
 						break;
-					case 52: //Unknown
+					case 48: //AllowedCachedFormats?
+						break;
+					case 49: //StartBWSamplingHint?
+						break;
+					case 50: //PauseBWSamplingHint?
+						break;
+					case 51: //SelectableFormats?
+						break;
+					case 52: //RequestIdentifier?
 						const opCode52 = pb.Opcode52_pb.Opcode52.deserializeBinary(segment);
 						console.log(opCode52);
 						break;
-					case 53: //Unknown
+					case 53: //RequestCancellationPolicy?
 						const opCode53 = pb.Opcode53_pb.Opcode53.deserializeBinary(segment);
 						console.log(opCode53);
+						break;
+					case 54: //OnesiePrefetchRejection?
+						break;
+					case 55: //TimelineContext?
+						break;
+					case 56: //SABRContextUpdate?
 						break;
 					case 57:
 						const opCode57 = pb.Opcode57_pb.Opcode57.deserializeBinary(segment);
@@ -9539,9 +9627,25 @@ class UMPResponse {
 							};
 						}
 						break;
-					case 58: //Unknown
+					case 58: //StreamProtectionStatus?
 						const opCode58 = pb.Opcode58_pb.Opcode58.deserializeBinary(segment);
 						console.log(opCode58);
+						break;
+					case 59: //SABRContextSendingPolicy?
+						break;
+					case 60: //LawnmowerPolicy?
+						break;
+					case 61: //SABRAck?
+						break;
+					case 62: //EndOfTrack?
+						break;
+					case 63: //CacheLoadPolicy?
+						break;
+					case 64: //LawnmowerMesagingPolicy?
+						break;
+					case 65: //PrewarmConnection?
+						break;
+					case 66: //PlaybackDebugInfo?
 						break;
 					case 67:
 						const opCode67 = pb.Opcode49_pb.Opcode49.deserializeBinary(segment);
