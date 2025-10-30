@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 294,
+	"version": 295,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -365,6 +365,9 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"295": [
+			"Fix: Cipher fix"
+		],
 		"294": [
 			"Fix: Cipher fix",
 			"Fix: POT for Livestreams"
