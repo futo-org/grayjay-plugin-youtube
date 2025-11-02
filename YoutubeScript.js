@@ -3597,20 +3597,25 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 	let initialResp = undefined;
 	
 	const requestTime = (new Date()).getTime();
+
+    const useAuth = !!_settings?.authDetails;
+    const useLogin = useAuth && bridge.isLoggedIn();
+
+    let initialHeaders = {
+        "Origin": "https://www.youtube.com",
+        "Accept": "*/*",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"//"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
+    }
+    if (useLogin) {
+        initialHeaders = getAuthContextHeaders(false);
+    }
+
 	if(!options?.httpClient)
-		initialResp = http.POST(abrUrl, postData, {
-			"Origin": "https://www.youtube.com",
-			"Accept": "*/*",
-			"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"//"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
-		}, false, true);
+		initialResp = http.POST(abrUrl, postData, initialHeaders, useLogin, true);
 	else //Broken api for post on client
 	{
 		log("Using custom http client for dash generation")
-		initialResp = options.httpClient.POST(abrUrl, postData, {
-			"Origin": "https://www.youtube.com",
-			"Accept": "*/*",
-			"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"//"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
-		}, true);
+		initialResp = options.httpClient.POST(abrUrl, postData, initialHeaders, true);
 	}
 	if(!initialResp.isOk) {
 		throw new ScriptException("Failed initial stream request [ " + initialResp.code + "]");
@@ -4224,11 +4229,19 @@ class YTABRExecutor {
 		const abrUrlToRequest = this.abrUrl + "&rn=" + this.rn;
 		log("UMP [" + this.type + "] requesting url: " + abrUrlToRequest); 
 
-		const initialResp = http.POST(abrUrlToRequest, postData, {
-			"Origin": "https://www.youtube.com",
-			"Accept": "*/*",
-			"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
-		}, false, true);
+		const useAuth = !!_settings?.authDetails;
+        const useLogin = useAuth && bridge.isLoggedIn();
+
+        let initialHeaders = {
+            "Origin": "https://www.youtube.com",
+            "Accept": "*/*",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+        }
+		if (useLogin) {
+            initialHeaders = getAuthContextHeaders(false);
+        }
+
+		const initialResp = http.POST(abrUrlToRequest, postData, initialHeaders, useLogin, true);
 
 		this.rn = (this.rn ?? 0) + 1;
 
