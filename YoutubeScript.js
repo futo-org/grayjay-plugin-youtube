@@ -7957,11 +7957,12 @@ function extractCommentRenderer_Comment(contextUrl, commentRenderer, replyCount,
 		commentRenderer.authorThumbnail.thumbnails[commentRenderer.authorThumbnail.thumbnails.length - 1].url :
 		""	
 	);
+	const likes = extractText_String(commentRenderer?.voteCount)
 	return new YTComment({
 		contextUrl: contextUrl,
 		author: new PlatformAuthorLink(new PlatformID(PLATFORM, null, config.id, PLATFORM_CLAIMTYPE), escapeUnicode(authorName), URL_BASE + authorEndpoint, authorThumbnail),
 		message: extractText_String(commentRenderer.contentText) ?? "",
-		rating: new RatingLikes(commentRenderer?.voteCount?.simpleText ? extractHumanNumber_Integer(commentRenderer.voteCount.simpleText) : 0),
+		rating: new RatingLikes(likes ? extractHumanNumber_Integer(likes) : 0),
 		date: (commentRenderer.publishedTimeText?.runs ? extractAgoTextRuns_Timestamp(commentRenderer.publishedTimeText.runs) : 0),
 		replyCount: replyCount ?? 0,
 		context: { replyContinuation: replyContinuation, useLogin: useLogin + "", useMobile: useMobile + "" }
