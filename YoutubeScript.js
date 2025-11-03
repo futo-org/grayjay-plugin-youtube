@@ -104,6 +104,7 @@ const USE_MOBILE_PAGES = true;
 const USE_ANDROID_FALLBACK = false;
 let USE_IOS_LIVE_FALLBACK = true;
 const USE_IOS_VIDEOS_FALLBACK = true;
+const USE_ANDROID_VIDEOS_FALLBACK = true;
 const USE_TV_VIDEOS_FALLBACK = false;
 
 let USE_ABR_VIDEOS = false;
@@ -142,6 +143,39 @@ let canBatchDummy = false;
 const rootWindow = this;
 
 const canDoRequestWithBody = !!http.requestWithBody;
+
+const clients = {
+	WEB: {
+		ClientVersion: "",
+		ClientName: 1,
+		ClientDisplayName: "WEB"
+	},
+	ANDROID: {
+		UserAgent: "com.google.android.youtube/19.28.35 (Linux; U; Android 15; US) gzip",
+		Version: "19.28.35",
+		ClientDisplayName: "ANDROID",
+
+		ContextClient: {
+			"clientName":"ANDROID",
+			"clientVersion":"19.28.35",
+			"clientScreen":"WATCH",
+			"platform":"MOBILE",
+			"osName":"Android",
+			"osVersion":"15",
+			"androidSdkVersion":35,
+			"hl":"en-US",
+			"gl":"US",
+			"utcOffsetMinutes":0
+		}
+	},
+	IOS: {
+		ClientVersion: "",
+		ClientName: 5,
+		ClientDisplayName: "IOS"
+	}
+}
+
+
 
 function getClientContext(isAuth = false) {
 	return (isAuth) ? _clientContextAuth : _clientContext;
@@ -263,7 +297,7 @@ source.enable = (conf, settings, saveStateStr) => {
 	
 	const batch = http.batch();
 	canBatchDummy = !!batch.DUMMY
-	if(!canBatchDummy && _settings?.use_session_client) {
+	if(!canBatchDummy) {// && _settings?.use_session_client) {
 		log("Old client, YTSession client disabled")
 	}
 
@@ -474,6 +508,58 @@ source.getTrending = () => {
 		throw new UnavailableException("Trending is unavailable.\nSadly login is required for home pages (for now).");//extractText_String(errorAlerts[0].alertRenderer.text));
 	}
 
+	try {
+		const browseTrending = requestBrowse({
+			"context": {
+				"client": {
+					"hl": "en-GB",
+					"gl": "GB",
+					"clientName": "WEB",
+					"clientVersion": "2.20251030.01.00",
+					"originalUrl": "https://www.youtube.com",
+					"platform": "DESKTOP",
+					"utcOffsetMinutes": 0
+				},
+				"request": {
+					"internalExperimentFlags": [],
+					"useSsl": true
+				},
+				"user": {
+					"lockedSafetyMode": false
+				}
+			},
+			"browseId": "FEtrending",
+			"params": "4gIOGgxtb3N0X3BvcHVsYXI%3D"
+		}, false, false, 0, null, clients.WEB);
+		if (browseTrending.contents) {
+			const tabs = extractPage_Tabs(browseTrending, { allowShorts: false });
+			const tab = tabs.find(x => x.title == "Now" || x.title == "Top stories");
+			if (tab) {
+				if (!tab.videos?.length && tab.shelves && tab.shelves.length > 0) {
+					let newTab = {
+						videos: []
+					};
+					let bestContin = null;
+					let bestContinCount = 0;
+					for (let subTab of tab.shelves) {
+						if (subTab.videos) {
+							newTab.videos = newTab.videos.concat(subTab.videos);
+							if (bestContinCount < subTab.videos.length) {
+								//TODO: Continuation?
+							}
+						}
+					}
+					log("Channel Result Count: " + tab?.videos?.length);
+
+					return new RichGridPager(newTab, {allowShorts: false}, false, false);
+				}
+			}
+		}
+	}
+	catch(ex) {
+		log("Failed to get trending: " + ex);
+	}
+
 	const channel = extractChannel_PlatformChannel(initialData, "https://www.youtube.com/channel/UCF0pVplsI8R5kcAqgtoRqoA", {
 		id: "UCF0pVplsI8R5kcAqgtoRqoA"
 	});
@@ -674,7 +760,7 @@ class YTSessionClient {
 		if(!!_settings["showVerboseToasts"])
 			bridge.toast("Using YTSession Client");
 
-		if (_settings.use_session_client_pot) {
+		if (true) {//_settings.use_session_client_pot) {
 			tryGetBotguard((bg) => {
 				bg.getTokenOrCreate(config.bgData.visitorData, config.bgData.dataSyncId, (pot) => {
 					const potPart = (pot) ? pot.substring(0, 5) : "";
@@ -724,7 +810,7 @@ class YTSessionClient {
 
 		const playerConfig = {};
 		const clientWatchConfig = clientConfig.WEB_PLAYER_CONTEXT_CONFIGS?.WEB_PLAYER_CONTEXT_CONFIG_ID_KEVLAR_WATCH;
-		if(!!_settings.use_variable_pot) {
+		if(!!_settings.detect_session_pot) {
 			if(clientWatchConfig) {
 				if(clientWatchConfig.serializedExperimentFlags) {
 					const queryParams = parseQueryString(clientWatchConfig.serializedExperimentFlags);
@@ -842,7 +928,11 @@ class YTSessionClient {
 			batch = requestIOSStreamingData(videoId, batch, context.bgData, useLogin);
 		else batch = batch.DUMMY();
 
-		let [respPlayerData, respInitialData, respDislikes, respiOS] = batch.execute();
+		if(!USE_ABR_VIDEOS && !simplify)
+			batch = requestAndroidShortStreamingData(videoId, batch, context.bgData, useLogin);
+		else batch = batch.DUMMY();
+
+		let [respPlayerData, respInitialData, respDislikes, respiOS, respAndroid] = batch.execute();
 		//#endregion
 
 		//#region Video Data
@@ -913,7 +1003,7 @@ class YTSessionClient {
 		//#region Extract Streams
 		if(!simplify) {
 			if(!videoDetails.isLive) {
-				if(!!_settings.useHtml5) {
+				if(false && !!_settings.useHtml5) {
 					if(playerData.streamingData.adaptiveFormats) {
 						const newDescriptor = extractAdaptiveFormats_VideoDescriptor_WithPOT(playerData.streamingData.adaptiveFormats, context.jsUrl, contextData, "HTML5 ", potToUse);
 						if(IS_TESTING)
@@ -925,8 +1015,34 @@ class YTSessionClient {
 					}
 				}
 
+
+				//#region Android
+				if(!videoDetails.video && !forceUmp && USE_ANDROID_VIDEOS_FALLBACK && respAndroid && !!_settings.useAndroid) {
+					if(respAndroid.isOk) {
+						let androidData = JSON.parse(respAndroid.body);
+						if(androidData.playerResponse)
+							androidData = androidData.playerResponse;
+						
+						if(IS_TESTING)
+							console.log("Android Streaming Data", androidData);
+
+						if(androidData?.streamingData?.adaptiveFormats) {
+							let newDescriptor = extractAdaptiveFormats_VideoDescriptor(androidData.streamingData.adaptiveFormats, context.jsUrl, contextData, "Android ");
+							
+							if(!canDoRequestWithBody || verifyDirectPlayback(newDescriptor)) {
+								videoDetails.video = newDescriptor;
+								if(!!_settings["showVerboseToasts"])
+									bridge.toast("Using Android sources");
+							}
+							else 
+								log("ANDROID PLAYBACK VERIFICATION FAILED, FALLBACK");
+						}
+					}
+				}
+				//#endregion
+
 				//#region iOS
-				if(!forceUmp && USE_IOS_VIDEOS_FALLBACK && respiOS && !!_settings.useiOS) {
+				if(!videoDetails.video && !forceUmp && USE_IOS_VIDEOS_FALLBACK && respiOS && !!_settings.useiOS) {
 
 					if(respiOS.isOk) {
 						const iosData = JSON.parse(respiOS.body);
@@ -936,10 +1052,7 @@ class YTSessionClient {
 						if(iosData?.streamingData?.adaptiveFormats) {
 							let newDescriptor = extractAdaptiveFormats_VideoDescriptor(iosData.streamingData.adaptiveFormats, context.jsUrl, contextData, "IOS ");
 
-							if(!!_settings.verifyIOSPlayback && !canDoRequestWithBody) {
-								log("Not doing verifyIOSPlayback because canDoRequestWithBody false");
-							}
-							if(!canDoRequestWithBody || !_settings.verifyIOSPlayback || verifyDirectPlayback(newDescriptor)) {
+							if(!canDoRequestWithBody || verifyDirectPlayback(newDescriptor)) {
 								videoDetails.video = newDescriptor;
 								if(!!_settings["showVerboseToasts"])
 									bridge.toast("Using iOS sources");
@@ -1172,7 +1285,7 @@ let sessionClient = undefined;
 
 source.getContentDetails = (url, useAuth, simplify, forceUmp, options) => {
 	if(!isOutdatedVersion) {
-		if(FORCE_YTSESSION || _settings?.force_session_client || (_settings?.use_session_client && canBatchDummy)) {
+		if(FORCE_YTSESSION || (true/*_settings?.use_session_client*/ && canBatchDummy)) {
 			if(!sessionClient) {
 				return new Promise((resolve, reject)=>{
 					try {
@@ -1194,7 +1307,7 @@ source.getContentDetails = (url, useAuth, simplify, forceUmp, options) => {
 			}
 			return sessionClient.getContentDetails(url, useAuth, simplify, options);
 		}
-		else if(!canBatchDummy && _settings?.use_session_client) {
+		else if(!canBatchDummy && true/*_settings?.use_session_client*/) {
 			bridge.toast("YTSession client not supported, using old logic");
 		}
 	}
@@ -3641,9 +3754,9 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 		log("UMPResp Parsed, StreamCount: " + umpResp.streamCount + ", snackBarId: " + umpResp.snackbarId + ", retries: " + retries + ", " + JSON.stringify(retries));
 		if(umpResp.streamCount == 0 && umpResp.snackbarId == 1 && retries < 4) {
 			log("Reload required: " + canUse("ReloadRequiredException") + ", Reload:" + currentDashReloads + ", Setting: " + _settings.allow_ump_plugin_reloads)
-			const wantsAsyncBackoff = canUse("Async") && _settings.allow_ump_backoff_async;
+			const wantsAsyncBackoff = canUse("Async");
 			if(canUse("ReloadRequiredException") && 
-					((currentDashReloads < 1 && _settings.allow_ump_backoff) || (currentDashReloads < 1 && wantsAsyncBackoff) || (currentDashReloads < 4 && !_settings.allow_ump_backoff && !wantsAsyncBackoff)) && 
+					((currentDashReloads < 1) || (currentDashReloads < 1 && wantsAsyncBackoff) || (currentDashReloads < 4 && false && !wantsAsyncBackoff)) && 
 					_settings.allow_ump_plugin_reloads &&
 					(!(wantsAsyncBackoff && umpResp.backOffTime && umpResp.backOffTime < 5000))
 					) {
@@ -3651,7 +3764,7 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 				bridge.toast("Attempting playback workaround (#" + retries + ")");
 				throw new ReloadRequiredException("Playback blocked (#" + retries + ")", JSON.stringify({dashReloads: retries + 1}));
 			}
-			else if(canUse("Async") && umpResp.backOffTime && (_settings.allow_ump_backoff_async || _settings.allow_ump_backoff)) {
+			else if(canUse("Async") && umpResp.backOffTime && (true)) {
 				log("Waiting for " + parseInt(umpResp.backOffTime / 1000) + "s as required (Async)")
 
 				if(backOffSourceContext != parentSource.sharedContext || ((new Date()).getTime() - backOffSourceTime) > 2000) {
@@ -5333,11 +5446,12 @@ function requestNext(body, useAuth = false, useMobile = false) {
 	}
 	return JSON.parse(resp.body);
 }
-function requestBrowse(body, useMobile = false, useAuth = false, attempt = 0, pageId = null) {
+function requestBrowse(body, useMobile = false, useAuth = false, attempt = 0, pageId = null, clientMeta = null) {
 	const clientContext = getClientContext(useAuth);
 	if(!clientContext || !clientContext.INNERTUBE_CONTEXT || !clientContext.INNERTUBE_API_KEY)
 		throw new ScriptException("Missing client context");
-	body.context = clientContext.INNERTUBE_CONTEXT;
+	if(!body.context)
+		body.context = clientContext.INNERTUBE_CONTEXT;
 
 	let headers = !bridge.isLoggedIn() ? {} : getAuthContextHeaders(useMobile);
 	if(useMobile)
@@ -5345,6 +5459,13 @@ function requestBrowse(body, useMobile = false, useAuth = false, attempt = 0, pa
 	if(pageId)
 		headers["X-Goog-Pageid"] = pageId;
 	headers["Content-Type"] = "application/json";
+	
+	if(clientMeta) {
+		headers["X-Youtube-Client-Version"] = clientMeta.ClientVersion;
+		headers["X-Youtube-Client-Name"] = clientMeta.ClientName;
+		if(clientMeta.UserAgent)
+			headers["User-Agent"] = clientMeta.UserAgent;
+	}
  
 	const baseUrl = !useMobile ? URL_BROWSE : URL_BROWSE_MOBILE;
 	const url = baseUrl + "?key=" + clientContext.INNERTUBE_API_KEY + "&prettyPrint=false";
@@ -5577,8 +5698,68 @@ function verifyDirectPlayback(descriptor) {
 	return true;
 }
 
+function requestAndroidShortStreamingData(videoId, batch, visitorData, useLogin) {
+	//const visitorId = getVisitorId(clients.ANDROID);
+	if(IS_TESTING)
+		console.log("Android Visitor ID", visitorId);
+	let body = {
+		context: {
+			client: {
+				"clientName": "ANDROID",
+				"clientVersion": "19.28.35",
+				"clientScreen": "WATCH",
+				"platform": "MOBILE",
+				"osName": "Android",
+				"osVersion": "15",
+				"androidSdkVersion": 35,
+				"hl": langDisplayRegion,
+				"gl": langRegion,
+				"visitorData": visitorData.visitorData,
+            	"utcOffsetMinutes": 0
+			},
+			request: {
+				"internalExperimentFlags": [],
+				"useSsl": true
+			},
+			user: {
+				"lockedSafetyMode": false
+			}
+		},
+		playerRequest: {
+			videoId: videoId,
+			cpn: "" + randomString(16),
+			contentCheckOk: "true",
+			racyCheckOn: "true",
+		},
+		disablePlayerResponse: false
+	};
+	const headers = {
+		"Content-Type": "application/json",
+		"User-Agent": clients.ANDROID.UserAgent,
+		"X-Goog-Api-Format-Version": "2",
+		"Accept-Language": "en-US, en;q=0.9"
+	};
+
+	const token = randomString(12);
+	const clientContext = getClientContext(false);
+	const url = "https://youtubei.googleapis.com/youtubei/v1/reel/reel_item_watch" + 
+		"?prettyPrint=false" + 
+		"&t=" + token +
+		"&id=" + videoId
+		//"&$fields=playerResponse";
+	if(IS_TESTING)
+		console.log("Android Request", body, headers);
+
+	if(batch) {
+		return batch.POST(url, JSON.stringify(body), headers, !!useLogin);
+	}
+	else {
+		const resp = http.POST(url, JSON.stringify(body), headers, !!useLogin);
+		return resp;
+	}
+}
 function requestAndroidStreamingData(videoId) {
-	const body = {
+	let body = {
 		videoId: videoId,
 		cpn: "" + randomString(16),
 		contentCheckOk: "true",
@@ -5600,6 +5781,8 @@ function requestAndroidStreamingData(videoId) {
 			}
 		}
 	};
+
+
 	const headers = {
 		"Content-Type": "application/json",
 		"User-Agent": USER_AGENT_ANDROID,
@@ -5670,6 +5853,40 @@ function requestTvHtml5EmbedStreamingData(videoId, sts, bgData, withLogin = fals
 		return JSON.parse(resp.body);
 	else
 		return null;
+}
+
+
+function getVisitorId(client, useLogin) {
+	const headers = {};
+	const body = {};
+
+	if(!client.ContextClient)
+		throw new ScriptException("No context client for " + client.ClientDisplayName);
+
+	headers["UserAgent"] = client.UserAgent;
+	headers["X-Goog-Api-Format-Version"] = "2";
+	headers["Content-Type"] = "application/json";
+	headers["Accept-Language"] = "en-US, en;q=0.9";
+	body.context = {
+		client: client.ContextClient,
+		request: {
+			internalExperimentFlags: [],
+			useSsl: true
+		},
+		user: {
+			lockedSafetyMode: false
+		}
+	};
+
+	const resp = http.POST("https://youtubei.googleapis.com/youtubei/v1/visitor_id?prettyPrint=false",
+		JSON.stringify(body), headers, !!useLogin
+	);
+	if(!resp.isOk)
+		throw new ScriptException("Failed to get visitorId for " + client.ClientDisplayName);
+	const data = JSON.parse(resp.body);
+	if(IS_TESTING)
+		console.log("VisitorId Resp", data);
+	return data.responseContext.visitorData;
 }
 //#endregion
 

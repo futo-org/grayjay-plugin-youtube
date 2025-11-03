@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 295,
+	"version": 296,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -123,18 +123,18 @@
 			"default": "false"
 		},
 		{
+			"variable": "useAndroid",
+			"name": "Enable Android Streams",
+			"description": "Attempts to use Android streams if available, may be smoother experience. May not always be available.",
+			"type": "Boolean",
+			"default": "true"
+		},
+		{
 			"variable": "useiOS",
 			"name": "Enable iOS Streams",
 			"description": "Attempts to use iOS streams if available, may be smoother experience. May not always be available.",
 			"type": "Boolean",
 			"default": "true"
-		},
-		{
-			"variable": "useHtml5",
-			"name": "Enable HTML5 Streams (WIP, BROKEN)",
-			"description": "Attempts to use HTML5 streams if available, may be smoother experience. May not always be available.",
-			"type": "Boolean",
-			"default": "false"
 		},
 		{
 			"variable": "useUMP",
@@ -147,13 +147,6 @@
 			"variable": "useAggressiveUMPRecovery",
 			"name": "Use Aggressive UMP Recovery",
 			"description": "This feature allows UMP to refetch the entire page to recover from ip changes and such.",
-			"type": "Boolean",
-			"default": "true"
-		},
-		{
-			"variable": "verifyIOSPlayback",
-			"name": "Verify IOS Playback",
-			"description": "This feature will check if iOS sources are playable beyond 60 seconds, or else fallback to other sources.\nMay add a minor delay on video load (< 0.2s)",
 			"type": "Boolean",
 			"default": "true"
 		},
@@ -305,34 +298,6 @@
 			"default": "true"
 		},
 		{
-			"variable": "allow_ump_backoff",
-			"name": "Allow experimental UMP backoff",
-			"description": "This enables an experimental backoff which waits when Youtube requires it. This may cause slower loading in some cases (even between videos)",
-			"type": "Boolean",
-			"default": "false"
-		},
-		{
-			"variable": "allow_ump_backoff_async",
-			"name": "Allow experimental UMP backoff (async)",
-			"description": "Same as above setting, but only if async is supported",
-			"type": "Boolean",
-			"default": "true"
-		},
-		{
-			"variable": "use_session_client",
-			"name": "Use Youtube Session Client",
-			"description": "Uses a different way of fetching video contents through a consistent session.",
-			"type": "Boolean",
-			"default": "true"
-		},
-		{
-			"variable": "use_session_client_pot",
-			"name": "Use Youtube Session POT tokens",
-			"description": "Enables POT generation for session requests",
-			"type": "Boolean",
-			"default": "true"
-		},
-		{
 			"variable": "fallback_home_trending",
 			"name": "Fallback to Trending if Home unavailable",
 			"description": "Will fallback to Trending if home is unavailable (eg. no login)",
@@ -340,11 +305,11 @@
 			"default": "true"
 		},
 		{
-			"variable": "use_variable_pot",
-			"name": "Use Variable POT",
+			"variable": "detect_session_pot",
+			"name": "Detect Session POT",
 			"description": "Try to detect if a session or video pot is required, from our experience this can backfire.",
 			"type": "Boolean",
-			"default": "false"
+			"default": "true"
 		},
 		{
 			"variable": "use_html5_livestreams",
@@ -396,6 +361,12 @@
 
 
 	"changelog": {
+		"296": [
+			"Improvement: Better video sources fallback (Android CDN)",
+			"Improvement: New Trending page for non-logged in users",
+			"Improvement: Removed some old redundant settings",
+			"Improvement: Variable POT now on by default (helps some users)"
+		],
 		"295": [
 			"Fix: Cipher fix"
 		],
