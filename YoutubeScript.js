@@ -5461,8 +5461,8 @@ function requestBrowse(body, useMobile = false, useAuth = false, attempt = 0, pa
 	headers["Content-Type"] = "application/json";
 	
 	if(clientMeta) {
-		headers["X-Youtube-Client-Version"] = clientMeta.ClientVersion;
-		headers["X-Youtube-Client-Name"] = clientMeta.ClientName;
+		headers["X-Youtube-Client-Version"] = "" + clientMeta.ClientVersion;
+		headers["X-Youtube-Client-Name"] = "" + clientMeta.ClientName;
 		if(clientMeta.UserAgent)
 			headers["User-Agent"] = clientMeta.UserAgent;
 	}
@@ -5733,6 +5733,16 @@ function requestAndroidShortStreamingData(videoId, batch, visitorData, useLogin)
 		},
 		disablePlayerResponse: false
 	};
+	const visitorToken = visitorData?.visitorData ?? visitorData?.dataSyncId;
+	if(visitorToken && !useLogin) {
+		body.context.client.visitorData = visitorToken;
+	}
+	else if(visitorData?.visitorDataLogin && useLogin){
+		body.context.client.visitorData = visitorData?.visitorDataLogin;
+	}
+	else if(visitorData?.dataSyncId && useLogin) {
+		body.context.client.datasyncId = visitorData?.dataSyncId;
+	}
 	const headers = {
 		"Content-Type": "application/json",
 		"User-Agent": clients.ANDROID.UserAgent,
