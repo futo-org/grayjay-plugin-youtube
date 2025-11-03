@@ -950,12 +950,12 @@ class YTSessionClient {
 		//#endregion
 
 		//#region Login Required
-		if (playerData.playabilityStatus?.status == "LOGIN_REQUIRED") {
+		if (playerData.playabilityStatus?.status == "LOGIN_REQUIRED" || playerData.playabilityStatus?.status == "CONTENT_CHECK_REQUIRED") {
 			if(!!_settings?.allowLoginFallback && bridge.isLoggedIn()) {
 				context = this.clientConfigAuth;
 				bridge.toast("Using login fallback to resolve:\n" + playerData?.playabilityStatus?.reason);
 				const newPlayerData = getControversialPlayerData(videoId, context.sts, true, potToUse);
-				if (newPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED")
+				if (newPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED" || newPlayerData.playabilityStatus?.status == "CONTENT_CHECK_REQUIRED")
 					throw new ScriptLoginRequiredException("Login required (fallback)\nReason: " + newPlayerData?.playabilityStatus?.reason);
 
 				playerData = newPlayerData;
@@ -965,13 +965,13 @@ class YTSessionClient {
 				throw new ScriptLoginRequiredException("Login required (No fallback)\nReason: " + playerData?.playabilityStatus?.reason);
 		}
 
-		if(playerData.playabilityStatus?.status == "UNPLAYABLE") {
+		if(playerData.playabilityStatus?.status == "UNPLAYABLE" || playerData.playabilityStatus?.status == "CONTENT_CHECK_REQUIRED") {
 			const reason = (playerData?.playabilityStatus?.reason) ? ("\n" + playerData?.playabilityStatus?.reason) : "";
 			if(reason && reason.toLowerCase().indexOf("member-only content") && !useLogin && bridge.isLoggedIn() && !!_settings?.allowLoginFallback) {
 				//Login fallback for membership contentcontext = this.clientConfigAuth;
 				bridge.toast("Using login fallback to resolve:\n" + playerData?.playabilityStatus?.reason);
 				const newPlayerData = getControversialPlayerData(videoId, context.sts, true, potToUse);
-				if (newPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED" || newPlayerData.playabilityStatus?.status == "UNPLAYABLE")
+				if (newPlayerData.playabilityStatus?.status == "LOGIN_REQUIRED" || newPlayerData.playabilityStatus?.status == "UNPLAYABLE" || playerData.playabilityStatus?.status == "CONTENT_CHECK_REQUIRED")
 					throw new UnavailableException("Video unplayable (fallback)\nReason: " + newPlayerData?.playabilityStatus?.reason);
 
 				playerData = newPlayerData;
@@ -1771,9 +1771,9 @@ function getControversialPlayerData(videoId, sts, useLogin = true, pot = undefin
 	if(!resp.isOk)
 		throw new ScriptException("Failed to verify age");
 	
-	return getPlayerData(videoId, sts, useLogin, undefined, pot);
+	return getPlayerData(videoId, sts, useLogin, undefined, pot, true);
 }
-function getPlayerData(videoId, sts, useLogin = true, batch, pot = undefined) {
+function getPlayerData(videoId, sts, useLogin = true, batch, pot = undefined, rco = false) {
 	const context = getClientContext(useLogin);
 	const authHeaders = useLogin ? getAuthContextHeaders(true) : {};
 	authHeaders["Accept-Language"] = "en-US";
@@ -1797,8 +1797,8 @@ function getPlayerData(videoId, sts, useLogin = true, batch, pot = undefined) {
 				watchAmbientModeContext: {hasShownAmbientMode: true, watchAmbientModeEnabled: true}
 			}
 		},
-		racyCheckOk: false,
-		contentCheckOk: false,
+		racyCheckOk: !!rco,
+		contentCheckOk: !!rco,
 		serviceIntegrityDimensions: (pot) ? {
 			poToken: pot
 		} : undefined,
@@ -2716,20 +2716,27 @@ source.getContentRecommendations = (url, initialData) => {
 
 	const contents = initialData.contents;
 	let watchNextFeed = contents.twoColumnWatchNextResults?.secondaryResults?.secondaryResults ?? null;
+
 	//log("Recommendations twoColumnWatchNextResults: " + !!contents.twoColumnWatchNextResults);
-	if(!watchNextFeed) 
-		return new VideoPager([], false);
-	//log("Recommendations watchNextFeed: " + !!watchNextFeed + "\n" + JSON.stringify(watchNextFeed));
-	const originalItems = watchNextFeed.results;
-	if(watchNextFeed.targetId != 'watch-next-feed' && watchNextFeed.results)
-		watchNextFeed = watchNextFeed.results.find(x=>x.targetId == 'watch-next-feed' || x.itemSectionRenderer?.targetId == 'watch-next-feed');
 	if(!watchNextFeed) {
-		log("No videos found?\n" + originalItems.map(x=>JSON.stringify(x)).join("\n\n"));
-		return new VideoPager([], false);
+		watchNextFeed = contents.singleColumnWatchNextResults?.results?.results ?? null;
+		watchNextFeed = watchNextFeed?.contents?.find(x=>x.itemSectionRenderer?.targetId == "watch-next-feed")?.itemSectionRenderer;
+		if(!watchNextFeed)
+			return new VideoPager([], false);
 	}
-	if(watchNextFeed.itemSectionRenderer?.targetId == 'watch-next-feed') {
-		log("Recommendations in sub-section renderer");
-		watchNextFeed = watchNextFeed.itemSectionRenderer;
+	else {
+		//log("Recommendations watchNextFeed: " + !!watchNextFeed + "\n" + JSON.stringify(watchNextFeed));
+		const originalItems = watchNextFeed.results;
+		if(watchNextFeed.targetId != 'watch-next-feed' && watchNextFeed.results)
+			watchNextFeed = watchNextFeed.results.find(x=>x.targetId == 'watch-next-feed' || x.itemSectionRenderer?.targetId == 'watch-next-feed');
+		if(!watchNextFeed) {
+			log("No videos found?\n" + originalItems.map(x=>JSON.stringify(x)).join("\n\n"));
+			return new VideoPager([], false);
+		}
+		if(watchNextFeed.itemSectionRenderer?.targetId == 'watch-next-feed') {
+			log("Recommendations in sub-section renderer");
+			watchNextFeed = watchNextFeed.itemSectionRenderer;
+		}
 	}
 	
 	try {
@@ -5728,8 +5735,8 @@ function requestAndroidShortStreamingData(videoId, batch, visitorData, useLogin)
 		playerRequest: {
 			videoId: videoId,
 			cpn: "" + randomString(16),
-			contentCheckOk: "true",
-			racyCheckOn: "true",
+			contentCheckOk: true,
+			racyCheckOn: true
 		},
 		disablePlayerResponse: false
 	};
