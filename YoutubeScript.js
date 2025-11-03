@@ -3597,7 +3597,6 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 	let initialResp = undefined;
 	
 	const requestTime = (new Date()).getTime();
-	
 	const useAuth = !!_settings?.authDetails;
 	const useLogin = useAuth && bridge.isLoggedIn();
 
@@ -4235,12 +4234,12 @@ class YTABRExecutor {
 		let initialHeaders = {
 			"Origin": "https://www.youtube.com",
 			"Accept": "*/*",
-			"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+			"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"//"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
 		}
 		if (useLogin) {
 			initialHeaders = getAuthContextHeaders(false);
 		}
-
+		
 		const initialResp = http.POST(abrUrlToRequest, postData, initialHeaders, useLogin, true);
 
 		this.rn = (this.rn ?? 0) + 1;
