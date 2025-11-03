@@ -4241,7 +4241,7 @@ class YTABRExecutor {
 			initialHeaders = getAuthContextHeaders(false);
 		}
 
-		const initialResp = http.POST(abrUrl, postData, initialHeaders, useLogin, true);
+		const initialResp = http.POST(abrUrlToRequest, postData, initialHeaders, useLogin, true);
 
 		this.rn = (this.rn ?? 0) + 1;
 
