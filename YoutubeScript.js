@@ -6702,7 +6702,7 @@ function extractAdaptiveFormats_VideoDescriptor(adaptiveSources, jsUrl, contextD
 					if(url.indexOf("&cpn=") < 0)   
 							url = url + "&cpn=" + nonce;   
 
-					const duration = parseInt(parseInt(y.approxDurationMs) / 1000) ?? 0;   
+					const duration = parseInt(Math.ceil(parseInt(y.approxDurationMs) / 1000)) ?? 0;   
 					if(isNaN(duration))   
 							return null;   
 
@@ -6734,7 +6734,7 @@ function extractAdaptiveFormats_VideoDescriptor(adaptiveSources, jsUrl, contextD
 					if(url.indexOf("&cpn=") < 0)   
 							url = url + "&cpn=" + nonce;   
 					   
-					let duration = parseInt(parseInt(y.approxDurationMs) / 1000);
+					let duration = parseInt(Math.ceil(parseInt(y.approxDurationMs) / 1000));
 
 					if(isNaN(duration))   
 							return null;   

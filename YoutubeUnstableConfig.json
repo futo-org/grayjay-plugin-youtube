@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 297,
+	"version": 298,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -337,6 +337,16 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"298": [
+			"HOTFIX: Videos getting cut off at end",
+			"Improvement: Better video sources fallback (Android CDN)",
+			"Improvement: New Trending page for non-logged in users",
+			"Improvement: Removed some old redundant settings",
+			"Improvement: Variable POT now on by default (helps some users)",
+			"Fix: Recommendations not working for logged in users",
+			"Fix: Content-checked content showing as 'Unavailable'",
+			"Fix: Comment likes sometimes being 0"
+		],
 		"297": [
 			"Improvement: Better video sources fallback (Android CDN)",
 			"Improvement: New Trending page for non-logged in users",
