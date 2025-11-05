@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 298,
+	"version": 299,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -337,6 +337,9 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"299": [
+			"Improvement: Added language codes to subtitles"
+		],
 		"298": [
 			"HOTFIX: Videos getting cut off at end",
 			"Improvement: Better video sources fallback (Android CDN)",
