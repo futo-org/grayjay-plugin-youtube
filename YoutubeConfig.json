@@ -257,6 +257,52 @@
 			"options": ["No skip", "Manual", "Automatic"]
 		},
 		{
+			"variable": "deArrowHeader",
+			"name": "DeArrow",
+			"description": "A crowdsourced alternative for thumbnails and titles. These may not be endorsed by creators and are sourced by a third party.\n\n(Using https://sponsor.ajay.app)",
+			"type": "Header"
+		},
+		{
+			"variable": "deArrow",
+			"name": "Enable",
+			"description": "Changes video thumbnails and titles to less 'clickbait' variants. These titles are crowdsources, and may not be endorsed by creators.",
+			"type": "Boolean",
+			"default": "false"
+		},
+		{
+			"variable": "deArrowAllowNoVotes",
+			"name": "Allow 0 Votes",
+			"description": "Allow un-verified titles/thumbnails that have no votes or confirmation",
+			"type": "Boolean",
+			"default": "false",
+			"dependency": "deArrow"
+		},
+		{
+			"variable": "deArrowOverview",
+			"name": "Use for lists",
+			"description": "Will request data for video lists (eg. Home, channels, etc).\nThis requires a lot of requests, and can lead to slow down.",
+			"type": "Boolean",
+			"default": "false",
+			"dependency": "deArrow",
+			"warningDialog": "This can cause slowdown in loading of video lists."
+		},
+		{
+			"variable": "deArrowThumbnails",
+			"name": "Change Thumbnails",
+			"description": "Changes thumbnails when deArrow is enabled.",
+			"type": "Boolean",
+			"default": "true",
+			"dependency": "deArrow"
+		},
+		{
+			"variable": "deArrowTitles",
+			"name": "Change Titles",
+			"description": "Changes titles when deArrow is enabled.",
+			"type": "Boolean",
+			"default": "false",
+			"dependency": "deArrow"
+		},
+		{
 			"variable": "advanced",
 			"name": "Advanced",
 			"description": "These are settings not intended for most users, but may help development or power users.",
@@ -364,6 +410,7 @@
 	"changelog": {
 		"299": [
 			"Feature: Support for private videos (if logged in)",
+			"Feature: DeArrow support",
 			"Improvement: Added language codes to subtitles"
 		],
 		"298": [
