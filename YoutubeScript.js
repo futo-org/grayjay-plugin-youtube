@@ -1221,6 +1221,7 @@ function extractVideoPlayerData_VideoDetails(playerData, jsUrl, contextData) {
 						name: extractText_String(x.name),
 						url: x.baseUrl,
 						format: "text/vtt",
+						language: x.languageCode,
 
 						getSubtitles() {
 							return getConvertedSubtitles(videoDetails.videoId, x, contextData);
@@ -1232,6 +1233,7 @@ function extractVideoPlayerData_VideoDetails(playerData, jsUrl, contextData) {
 						name: extractText_String(x.name),
 						url: x.baseUrl,
 						format: "text/vtt",
+						language: x.languageCode
 					};
 				}
 				else return null;
@@ -6300,6 +6302,7 @@ function extractVideoPage_VideoDetails(parentUrl, initialData, initialPlayerData
 						name: extractText_String(x.name),
 						url: x.baseUrl,
 						format: "text/vtt",
+						language: x.languageCode,
 
 						getSubtitles() {
 							return getConvertedSubtitles(videoDetails.videoId, x, contextData);
@@ -6311,6 +6314,7 @@ function extractVideoPage_VideoDetails(parentUrl, initialData, initialPlayerData
 						name: extractText_String(x.name),
 						url: x.baseUrl,
 						format: "text/vtt",
+						language: x.languageCode
 					};
 				}
 				else return null;

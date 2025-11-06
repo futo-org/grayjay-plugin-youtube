@@ -363,7 +363,8 @@
 
 	"changelog": {
 		"299": [
-			"Feature: Support for private videos (if logged in)"
+			"Feature: Support for private videos (if logged in)",
+			"Improvement: Added language codes to subtitles"
 		],
 		"298": [
 			"HOTFIX: Videos getting cut off at end",
