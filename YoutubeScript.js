@@ -3539,7 +3539,8 @@ class YTABRVideoSource extends DashManifestRawSource {
 		let result = generateDash(this, this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag, 0, {
 			playerData: this.options?.playerData,
 			playerConfig: this.options?.playerConfig,
-			pot: !this.pot ? getInitialPOTVideo() : undefined
+			pot: !this.pot ? getInitialPOTVideo() : undefined,
+			useLogin: this.abrUrl.indexOf(".c.youtube.com/") > 0 //TODO: Could be better through propogate from VideoDetails request.
 		});
 		/*
 		let result = tryGetPOTCustom(this.videoId, (pot)=>{
@@ -3581,7 +3582,9 @@ class YTABRVideoSource extends DashManifestRawSource {
 		const req = new YTABRExecutor(this, this.abrUrl, this.sourceObj, this.ustreamerConfig, 
 			this.initialHeader,
 			this.initialUMP, this.bgData, this.videoId,
-			this.options?.playerConfig);
+			this.options?.playerConfig, {
+				useLogin: this.abrUrl.indexOf(".c.youtube.com/") > 0 //TODO: Could be better through propogate from VideoDetails request.
+			});
 		log("Request Executor ready for video");
 		return req;
 	}
@@ -3646,7 +3649,8 @@ class YTABRAudioSource extends DashManifestRawAudioSource {
 		let result = generateDash(this, this.sourceObj, this.ustreamerConfig, this.abrUrl, this.sourceObj.itag, 0, {
 			playerData: this.options?.playerData,
 			playerConfig: this.options?.playerConfig,
-			pot: !this.pot ? getInitialPOTVideo() : undefined
+			pot: !this.pot ? getInitialPOTVideo() : undefined,
+			useLogin: this.abrUrl.indexOf(".c.youtube.com/") > 0 //TODO: Could be better through propogate from VideoDetails request.
 		});
 		
 		if(result && result.then) {
@@ -3668,7 +3672,9 @@ class YTABRAudioSource extends DashManifestRawAudioSource {
 		const req = new YTABRExecutor(this, this.abrUrl, this.sourceObj, this.ustreamerConfig,
 			this.initialHeader,
 			this.initialUMP, this.bgData, this.videoId,
-			this.options?.playerConfig);
+			this.options?.playerConfig, {
+				useLogin: this.abrUrl.indexOf(".c.youtube.com/") > 0 //TODO: Could be better through propogate from VideoDetails request.
+			});
 		log("Request Executor ready for audio");
 		return req;
 	}
@@ -3722,7 +3728,7 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 			"Origin": "https://www.youtube.com",
 			"Accept": "*/*",
 			"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"//"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
-		}, false, true);
+		}, !!options?.useLogin, true);
 	else //Broken api for post on client
 	{
 		log("Using custom http client for dash generation")
@@ -4085,7 +4091,7 @@ let _executorsVideo = [];
 let _executorsAudio = [];
 let _recoveryCache = {};
 class YTABRExecutor {
-	constructor(parentSource, url, source, ustreamerConfig, header, initialUmp, bgData, videoId, playerConfig) {
+	constructor(parentSource, url, source, ustreamerConfig, header, initialUmp, bgData, videoId, playerConfig, options) {
 		this.parentSource = parentSource;
 		this.executorId = executorCounter++;
 		this.source = source;
@@ -4106,6 +4112,7 @@ class YTABRExecutor {
 		this.childExecutor = undefined;
 		this.videoId = videoId;
 		this.playerConfig = playerConfig;
+		this.useLogin = !!options?.useLogin;
 		
 		if(bgData) {
 			if(bgData.pot)
@@ -4348,7 +4355,7 @@ class YTABRExecutor {
 			"Origin": "https://www.youtube.com",
 			"Accept": "*/*",
 			"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
-		}, false, true);
+		}, !!this.useLogin, true);
 
 		this.rn = (this.rn ?? 0) + 1;
 

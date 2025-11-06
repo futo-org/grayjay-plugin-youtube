@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 298,
+	"version": 299,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -37,7 +37,8 @@
 		"returnyoutubedislikeapi.com",
 		"sponsor.ajay.app",
 		".googlevideo.com",
-		"jnn-pa.googleapis.com"
+		"jnn-pa.googleapis.com",
+		".c.youtube.com"
 	],
 
 	"settings": [
@@ -337,6 +338,9 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"299": [
+			"Feature: Support for private videos (if logged in)"
+		],
 		"298": [
 			"HOTFIX: Videos getting cut off at end",
 			"Improvement: Better video sources fallback (Android CDN)",
