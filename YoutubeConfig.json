@@ -411,7 +411,8 @@
 		"299": [
 			"Feature: Support for private videos (if logged in)",
 			"Feature: DeArrow support",
-			"Improvement: Added language codes to subtitles"
+			"Improvement: Added language codes to subtitles",
+			"Fix: Cipher fix (hXO not defined)"
 		],
 		"298": [
 			"HOTFIX: Videos getting cut off at end",

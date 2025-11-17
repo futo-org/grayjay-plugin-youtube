@@ -386,7 +386,9 @@
 	"changelog": {
 		"299": [
 			"Feature: Support for private videos (if logged in)",
-			"Improvement: Added language codes to subtitles"
+			"Feature: DeArrow support",
+			"Improvement: Added language codes to subtitles",
+			"Fix: Cipher fix (hXO not defined)"
 		],
 		"298": [
 			"HOTFIX: Videos getting cut off at end",
