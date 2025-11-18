@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 299,
+	"version": 300,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -384,6 +384,9 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"300": [
+			"Fix: DeArrow not working"
+		],
 		"299": [
 			"Feature: Support for private videos (if logged in)",
 			"Feature: DeArrow support",
