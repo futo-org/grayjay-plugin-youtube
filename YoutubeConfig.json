@@ -371,6 +371,13 @@
 			"description": "Adds POT to livestream urls",
 			"type": "Boolean",
 			"default": "true"
+		},
+		{
+			"variable": "use_secondry_ump_temp",
+			"name": "Use Secondary UMP",
+			"description": "Will load a seperate UMP source for audio, may be required as a temporary solution",
+			"type": "Boolean",
+			"default": "false"
 		}
 	],
 

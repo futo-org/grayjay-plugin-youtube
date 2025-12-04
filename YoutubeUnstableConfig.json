@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 301,
+	"version": 302,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -354,6 +354,20 @@
 			"variable": "use_html5_livestreams_pot",
 			"name": "Use HTML5 Livestreams POT Tokens",
 			"description": "Adds POT to livestream urls",
+			"type": "Boolean",
+			"default": "true"
+		},
+		{
+			"variable": "use_secondry_ump_temp",
+			"name": "Use Secondary UMP",
+			"description": "Will load a seperate UMP source for audio, may be required as a temporary solution",
+			"type": "Boolean",
+			"default": "false"
+		},
+		{
+			"variable": "allow_player_response_reloading",
+			"name": "Allow UMP Player Response Reloading",
+			"description": "Experimental feature to reload player responses on request",
 			"type": "Boolean",
 			"default": "true"
 		}
