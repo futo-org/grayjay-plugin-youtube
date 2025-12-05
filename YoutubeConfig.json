@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 301,
+	"version": 303,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -376,6 +376,13 @@
 			"variable": "use_secondry_ump_temp",
 			"name": "Use Secondary UMP",
 			"description": "Will load a seperate UMP source for audio, may be required as a temporary solution",
+			"type": "Boolean",
+			"default": "false"
+		},
+		{
+			"variable": "use_combined_ump",
+			"name": "Use Combined UMP",
+			"description": "Experimental feature to use merged streams, which is theoretically better and more compatible",
 			"type": "Boolean",
 			"default": "false"
 		}
