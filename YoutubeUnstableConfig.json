@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 304,
+	"version": 305,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -405,6 +405,9 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"305": [
+			"Fix: Added UMP combined stream support"
+		],
 		"301": [
 			"Fix: Temporary workaround for UMP fallback"
 		],
