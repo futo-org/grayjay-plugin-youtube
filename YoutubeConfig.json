@@ -422,6 +422,9 @@
 
 
 	"changelog": {
+		"306": [
+			"Fix: More strict container compatibility check in UMP combined stream"
+		],
 		"305": [
 			"Fix: Added UMP combined stream support"
 		],
