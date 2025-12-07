@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 306,
+	"version": 307,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -405,6 +405,9 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"307": [
+			"Fix: Improved combined UMP stream support"
+		],
 		"306": [
 			"Fix: More strict container compatibility check in UMP combined stream"
 		],
