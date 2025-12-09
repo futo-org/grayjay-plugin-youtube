@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 306,
+	"version": 309,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -405,10 +405,16 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
-		"306": [
+		"309": [
 			"Fix: Cipher fix",
 			"Fix: Playlist import for non-english languages",
 			"Improvement: Clearer error for logged in users with disabled login fallback"
+		],
+		"307": [
+			"Fix: Improved combined UMP stream support"
+		],
+		"306": [
+			"Fix: More strict container compatibility check in UMP combined stream"
 		],
 		"305": [
 			"Fix: Added UMP combined stream support"
