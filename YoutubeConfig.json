@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 309,
+	"version": 310,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -380,11 +380,11 @@
 			"default": "false"
 		},
 		{
-			"variable": "use_combined_ump",
+			"variable": "use_combined_ump_audio",
 			"name": "Use Combined UMP",
 			"description": "Experimental feature to use merged streams, which is theoretically better and more compatible",
 			"type": "Boolean",
-			"default": "false"
+			"default": "true"
 		}
 	],
 
@@ -422,6 +422,10 @@
 
 
 	"changelog": {
+		"310": [
+			"Improvement: Make combined UMP sources default",
+			"Improvement: Reload Required exception on UMP ReloadPlayerResponse request"
+		],
 		"309": [
 			"Fix: Cipher fix",
 			"Fix: Playlist import for non-english languages",
