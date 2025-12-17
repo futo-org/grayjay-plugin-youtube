@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 310,
+	"version": 311,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -405,6 +405,10 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"311": [
+			"Improvement: Reintroduce language selection for combined UMP",
+			"Improvement: Language now specified on combined video sources"
+		],
 		"310": [
 			"Improvement: Make combined UMP sources default",
 			"Improvement: Reload Required exception on UMP ReloadPlayerResponse request"
