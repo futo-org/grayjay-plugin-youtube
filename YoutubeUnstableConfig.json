@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 312,
+	"version": 314,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -405,6 +405,12 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"314": [
+			"Fix: Cipher fix"
+		],
+		"313": [
+			"Fix: Fixed Android sources on desktop"
+		],
 		"312": [
 			"Fix: Livestreams fixed using n-parameter challenge"
 		],
