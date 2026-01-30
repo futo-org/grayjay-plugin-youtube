@@ -8,13 +8,14 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 314,
+	"version": 315,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
 	"scriptSignature": "",
 	"scriptPublicKey": "",
 	"packages": ["Http", "Utilities", "DOMParser"],
+	"packagesOptional": ["Browser"],
 
 	"subscriptionRateLimit": 140,
 
@@ -405,6 +406,10 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"315": [
+			"Feature: In-Browser token generation (on supported versions)",
+			"Fix: UMP Fix"
+		],
 		"314": [
 			"Fix: Cipher fix"
 		],
