@@ -15,6 +15,7 @@
 	"scriptSignature": "",
 	"scriptPublicKey": "",
 	"packages": ["Http", "Utilities", "DOMParser"],
+	"packagesOptional": ["Browser"],
 
 	"subscriptionRateLimit": 140,
 
@@ -422,6 +423,10 @@
 
 
 	"changelog": {
+		"315": [
+			"Feature: In-Browser token generation (on supported versions)",
+			"Fix: UMP Fix"
+		],
 		"314": [
 			"Fix: Cipher fix"
 		],
