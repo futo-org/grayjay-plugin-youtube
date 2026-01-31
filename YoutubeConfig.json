@@ -386,6 +386,13 @@
 			"description": "Experimental feature to use merged streams, which is theoretically better and more compatible",
 			"type": "Boolean",
 			"default": "true"
+		},
+		{
+			"variable": "use_non_browser",
+			"name": "Use Legacy Token Engine",
+			"description": "Uses an old implementation of the token generator, this may generate invalid tokens. Recommended false",
+			"type": "Boolean",
+			"default": "false"
 		}
 	],
 
@@ -423,6 +430,9 @@
 
 
 	"changelog": {
+		"316": [
+			"Feature: In-Browser token generation now a setting"
+		],
 		"315": [
 			"Feature: In-Browser token generation (on supported versions)",
 			"Fix: UMP Fix"

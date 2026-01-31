@@ -381,8 +381,8 @@
 		},
 		{
 			"variable": "use_non_browser",
-			"name": "Prevent webbrowser used for tokens",
-			"description": "Prevent webbrowser to generator tokens",
+			"name": "Use Legacy Token Engine",
+			"description": "Uses an old implementation of the token generator, this may generate invalid tokens. Recommended false",
 			"type": "Boolean",
 			"default": "false"
 		}
