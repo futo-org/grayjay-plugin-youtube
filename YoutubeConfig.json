@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 314,
+	"version": 317,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -322,28 +322,32 @@
 			"name": "Show Cipher every Video",
 			"description": "Shows a toast with the cipher when loading a video",
 			"type": "Boolean",
-			"default": "false"
+			"default": "false",
+			"isAdvanced": "true"
 		},
 		{
 			"variable": "notify_bg",
 			"name": "Show every new Botguard Token",
 			"description": "Shows a toast with the botguard token used changed",
 			"type": "Boolean",
-			"default": "false"
+			"default": "false",
+			"isAdvanced": "true"
 		},
 		{
 			"variable": "notify_ump_recovery",
 			"name": "Show every time UMP disconnects",
 			"description": "Shows a toast whenever UMP goes into a reconnection mode",
 			"type": "Boolean",
-			"default": "false" 
+			"default": "false",
+			"isAdvanced": "true"
 		},
 		{
 			"variable": "allow_ump_plugin_reloads",
 			"name": "Allow UMP to reload plugin",
 			"description": "Allows the UMP protocol to reload a plugin if it deems required and supported.",
 			"type": "Boolean",
-			"default": "true"
+			"default": "true",
+			"isAdvanced": "true"
 		},
 		{
 			"variable": "fallback_home_trending",
@@ -357,42 +361,48 @@
 			"name": "Detect Session POT",
 			"description": "Try to detect if a session or video pot is required, from our experience this can backfire.",
 			"type": "Boolean",
-			"default": "true"
+			"default": "true",
+			"isAdvanced": "true"
 		},
 		{
 			"variable": "use_html5_livestreams",
 			"name": "Use HTML5 Livestreams instead of iOS",
 			"description": "We recently found that iOS livestreams sometimes misbehave, html5 sometimes didnt have that issue",
 			"type": "Boolean",
-			"default": "true"
+			"default": "true",
+			"isAdvanced": "true"
 		},
 		{
 			"variable": "use_html5_livestreams_pot",
 			"name": "Use HTML5 Livestreams POT Tokens",
 			"description": "Adds POT to livestream urls",
 			"type": "Boolean",
-			"default": "true"
+			"default": "true",
+			"isAdvanced": "true"
 		},
 		{
 			"variable": "use_secondry_ump_temp",
 			"name": "Use Secondary UMP",
 			"description": "Will load a seperate UMP source for audio, may be required as a temporary solution",
 			"type": "Boolean",
-			"default": "false"
+			"default": "false",
+			"isAdvanced": "true"
 		},
 		{
 			"variable": "use_combined_ump_audio",
 			"name": "Use Combined UMP",
 			"description": "Experimental feature to use merged streams, which is theoretically better and more compatible",
 			"type": "Boolean",
-			"default": "true"
+			"default": "true",
+			"isAdvanced": "true"
 		},
 		{
 			"variable": "use_non_browser",
 			"name": "Use Legacy Token Engine",
 			"description": "Uses an old implementation of the token generator, this may generate invalid tokens. Recommended false",
 			"type": "Boolean",
-			"default": "false"
+			"default": "false",
+			"isAdvanced": "true"
 		}
 	],
 
@@ -430,6 +440,10 @@
 
 
 	"changelog": {
+		"317": [
+			"Feature: In-Browser token generation now a setting",
+			"Feature: Advanced settings field are now hidden for supported runtimes behind a toggle"
+		],
 		"316": [
 			"Feature: In-Browser token generation now a setting"
 		],
