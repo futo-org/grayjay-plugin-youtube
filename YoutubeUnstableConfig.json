@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 317,
+	"version": 318,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -414,6 +414,9 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"318": [
+			"Fix: Possible fix for cipher issue [5d93cfdb]"
+		],
 		"317": [
 			"Feature: In-Browser token generation now a setting",
 			"Feature: Advanced settings field are now hidden for supported runtimes behind a toggle"
