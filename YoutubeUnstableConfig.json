@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 319,
+	"version": 320,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -414,6 +414,10 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"320": [
+			"Fix: Possible fix for cipher issue [3510b6ff]",
+			"Fix: Race condition with token generator initialization"
+		],
 		"318": [
 			"Fix: Possible fix for cipher issue [5d93cfdb]"
 		],
