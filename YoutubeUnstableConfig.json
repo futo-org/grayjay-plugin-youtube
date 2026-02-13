@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 324,
+	"version": 325,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -414,6 +414,9 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"325": [
+			"Fix: Browser Botguard re-enabled"
+		],
 		"324": [
 			"Fix: Temporarily disable Browser Botguard for legacy solution till better fix"
 		],
