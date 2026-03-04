@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 329,
+	"version": 330,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -39,7 +39,8 @@
 		"sponsor.ajay.app",
 		".googlevideo.com",
 		"jnn-pa.googleapis.com",
-		".c.youtube.com"
+		".c.youtube.com",
+		"solver.grayjay.app"
 	],
 
 	"testing": {
@@ -395,14 +396,6 @@
 			"type": "Boolean",
 			"default": "true",
 			"isAdvanced": "true"
-		},
-		{
-			"variable": "use_non_browser",
-			"name": "Use Legacy Token Engine",
-			"description": "Uses an old implementation of the token generator, this may generate invalid tokens. Recommended false",
-			"type": "Boolean",
-			"default": "false",
-			"isAdvanced": "true"
 		}
 	],
 
@@ -440,6 +433,9 @@
 
 
 	"changelog": {
+		"330": [
+			"Fix: Adding remote solver for n ciphers"
+		],
 		"329": [
 			"Fix: Cipher fix"
 		],
