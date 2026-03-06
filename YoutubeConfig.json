@@ -40,7 +40,8 @@
 		".googlevideo.com",
 		"jnn-pa.googleapis.com",
 		".c.youtube.com",
-		"solver.grayjay.app"
+		"solver.grayjay.app",
+		"solutions.grayjay.app"
 	],
 
 	"testing": {
