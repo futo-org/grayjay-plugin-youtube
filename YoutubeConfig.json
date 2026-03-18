@@ -436,7 +436,9 @@
 	"changelog": {
 		"334": [
 			"Fix: Possible Audio noise fix",
-			"Fix: DeArrow search fix"
+			"Fix: DeArrow search fix",
+			"Fix: Shows should now work (limited metadata)",
+			"Improvement: Change no comments error"
 		],
 		"333": [
 			"Fix: Android Sources"
