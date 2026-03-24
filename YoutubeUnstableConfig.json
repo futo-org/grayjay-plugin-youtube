@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 334,
+	"version": 335,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -408,6 +408,9 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"335": [
+			"Fix: Removed legacy code"
+		],
 		"334": [
 			"Fix: Possible Audio noise fix",
 			"Fix: DeArrow search fix",
