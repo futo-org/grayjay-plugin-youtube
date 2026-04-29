@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 336,
+	"version": 337,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 	
@@ -434,6 +434,9 @@
 
 
 	"changelog": {
+		"337": [
+			"Fix: Fixed issue causing date to be empty and videos missing from channel"
+		],
 		"336": [
 			"Fix: Sig solver optional"
 		],
