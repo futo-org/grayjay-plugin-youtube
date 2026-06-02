@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 341,
+	"version": 339,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 	
@@ -415,6 +415,11 @@
 	"primaryClaimFieldType": 1,
 	
 	"changelog": {
+		"339": [
+			"Fix: Added Android VR sources",
+			"Fix: Shorts work again",
+			"Fix: Membership video detection"
+		],
 		"338": [
 			"Fix: Membership video detection from VideoLockupModel"
 		],
