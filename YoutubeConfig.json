@@ -15,7 +15,7 @@
 	"scriptSignature": "",
 	"scriptPublicKey": "",
 	"packages": ["Http", "Utilities", "DOMParser"],
-	"packagesOptional": [],
+	"packagesOptional": ["Browser"],
 
 	"subscriptionRateLimit": 140,
 
