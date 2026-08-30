@@ -10742,7 +10742,7 @@ const htmlEncodedCharacters = {
 function decodeHtml(text) {
 	return text.replace(/(?:&amp;|&)#([0-9]*);/gm, function(match, dec) {
 		return String.fromCharCode(dec);
-	}).replace(/&([a-z]*);(#.*?;)?/gm, function(match, c){
+	}).replace(/(?:&amp;|&)([a-z]+);/gm, function(match, c){
 		if(htmlEncodedCharacters[c])
 			return htmlEncodedCharacters[c];
 		return c;
