@@ -382,7 +382,8 @@ source.GrayjayTests = GrayjayTests;
 
 //#region Source Methods
 source.setSettings = function(settings) {
-	_settings = settings;
+	_settings = settings ?? {};
+	USE_ABR_VIDEOS = !!_settings.useUMP && (bridge.buildSpecVersion ?? 1) > 1;
 }
 source.reEnable = (conf, settings) => {
 	return source.enable(conf ?? config, settings ?? _settings);
