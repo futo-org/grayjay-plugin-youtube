@@ -9954,6 +9954,9 @@ function extractVideoLockupModel_Video(videoRenderer, contextData) {
 						viewCount = extractHumanNumber_Integer(matchViews[1]);
 						continue;
 					}
+					if(metadataPart?.leadingIcon?.name == "PLAY_ARROW_OUTLINED") {
+						viewCount = extractHumanNumber_Integer(partText);
+					}
 					const matchAgo = partText.match(REGEX_HUMAN_AGO);
 					if(matchAgo) {
 						date = extractAgoText_Timestamp(partText);
