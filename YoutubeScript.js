@@ -1435,6 +1435,13 @@ class YTSessionClient {
 				return source.getPlaybackTracker(url, playerData)
 			};
 		}
+		
+		try {
+			addSeekThumbnailProvider(videoDetails, playerData, initialData);
+		}
+		catch(ex) {
+			log("Failed to add thumbnail provider: " + ex);
+		}
 
 		if(initialData)
 			videoDetails.__initialData = initialData;
@@ -1548,6 +1555,67 @@ function extractVideoPlayerData_VideoDetails(playerData, jsUrl, contextData) {
 	const result = new PlatformVideoDetails(video);
 	result.video = null;
 	return result;
+}
+
+
+function addSeekThumbnailProvider(videoDetails, playerData, initialData) {
+	const provider = createSeekThumbnailProvider(playerData, initialData);
+	if(provider)
+		videoDetails.getSeekThumbnailProvider = function() { return provider; };
+}
+function createSeekThumbnailProvider(playerData, initialData) {
+	const spec = playerData?.storyboards?.playerStoryboardSpecRenderer?.spec ??
+		initialData?.storyboards?.playerStoryboardSpecRenderer?.spec;
+	if(typeof spec !== "string")
+		return null;
+
+	const parts = spec.split("|");
+	const urlTemplate = parts[0];
+	if(!urlTemplate?.includes("$L") || !urlTemplate.includes("$N"))
+		return null;
+
+	for(let level = Math.min(2, parts.length - 2); level >= 0; level--) {
+		const fields = parts[level + 1].split("#");
+		const [width, height, frameCount, columns, rows, intervalMs] = fields.slice(0, 6).map(Number);
+		const nameTemplate = fields[6];
+		const signature = fields[7];
+		if(![width, height, frameCount, columns, rows, intervalMs].every(Number.isSafeInteger) ||
+			width <= 0 || height <= 0 || frameCount <= 0 || columns <= 0 || rows <= 0 ||
+			intervalMs <= 0 || !nameTemplate || !signature)
+			continue;
+
+		const framesPerSheet = columns * rows;
+		return {
+			resolutionMs: intervalMs,
+			getThumbnail(timeStampMs) {
+				const requestedTime = Number(timeStampMs);
+				const time = Number.isFinite(requestedTime) ? Math.max(0, requestedTime) : 0;
+				const frameIndex = Math.min(frameCount - 1, Math.floor(time / intervalMs));
+				const sheetIndex = Math.floor(frameIndex / framesPerSheet);
+				const firstFrame = sheetIndex * framesPerSheet;
+				const lastFrame = Math.min(firstFrame + framesPerSheet, frameCount);
+				const sheetName = nameTemplate.replace(/\$M/g, sheetIndex);
+				const url = urlTemplate.replace(/\$L/g, level).replace(/\$N/g, sheetName);
+				const frames = [];
+				for(let index = firstFrame; index < lastFrame; index++) {
+					const position = index - firstFrame;
+					frames.push({
+						time: index * intervalMs,
+						x: (position % columns) * width,
+						y: Math.floor(position / columns) * height,
+						w: width,
+						h: height
+					});
+				}
+				return {
+					type: 2,
+					url: url + (url.includes("?") ? "&" : "?") + "sigh=" + encodeURIComponent(signature),
+					frames: frames
+				};
+			}
+		};
+	}
+	return null;
 }
 
 
@@ -2060,6 +2128,14 @@ source.getContentDetails = (url, useAuth, simplify, forceUmp, options) => {
 			"initialData": JSON.stringify(initialData)
 		}
 	}
+
+	try {
+		addSeekThumbnailProvider(finalResult, initialPlayerData, initialData);
+	}
+	catch(ex) {
+		log("Failed to add thumbnail provider: " + ex);
+	}
+
 	finalResult.__initialData = initialData;
 	if (!!_settings["youtubeActivity"] && useLogin) {
 		finalResult.__playerData = initialPlayerData;
