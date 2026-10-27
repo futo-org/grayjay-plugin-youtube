@@ -7,12 +7,20 @@ const URL_CONTEXT_M = "https://m.youtube.com";
 const URL_VIDEO_NEXT = "https://www.youtube.com/youtubei/v1/next?prettyPrint=false";
 
 const URL_CHANNEL_VIDEOS = "/videos";
+const URL_CHANNEL_FEATURED = "/featured";
 const URL_CHANNEL_STREAMS = "/streams";
 const URL_CHANNEL_PLAYLISTS = "/playlists";
 const URL_CHANNEL_SHORTS = "/shorts";
+const CHANNEL_TAB_PARAMS = {
+	"/videos": "EgZ2aWRlb3PyBgQKAjoA",
+	"/shorts": "EgZzaG9ydHPyBgUKA5oBAA%3D%3D",
+	"/streams": "EgdzdHJlYW1z8gYECgJ6AA%3D%3D",
+	"/playlists": "EglwbGF5bGlzdHPyBgoKCEIGCgIQaCIA"
+};
 const URL_SEARCH_SUGGESTIONS = "https://suggestqueries-clients6.youtube.com/complete/search?client=youtube&gs_ri=youtube&ds=yt&q=";
 const URL_SEARCH = "https://www.youtube.com/youtubei/v1/search";
 const URL_BROWSE = "https://www.youtube.com/youtubei/v1/browse";
+const URL_RESOLVE = "https://www.youtube.com/youtubei/v1/navigation/resolve_url";
 const URL_BROWSE_MOBILE = "https://m.youtube.com/youtubei/v1/browse";
 const URL_NEXT = "https://www.youtube.com/youtubei/v1/next";
 const URL_NEXT_MOBILE = "https://m.youtube.com/youtubei/v1/next";
@@ -374,7 +382,8 @@ source.GrayjayTests = GrayjayTests;
 
 //#region Source Methods
 source.setSettings = function(settings) {
-	_settings = settings;
+	_settings = settings ?? {};
+	USE_ABR_VIDEOS = !!_settings.useUMP && (bridge.buildSpecVersion ?? 1) > 1;
 }
 source.reEnable = (conf, settings) => {
 	return source.enable(conf ?? config, settings ?? _settings);
@@ -543,10 +552,12 @@ source.getHome = (initialDataOverride, customHtml) => {
         initialData = _prefetchHomeAuth;
         _prefetchHomeUsed = true;
     }
-    else if(bridge.isLoggedIn())
-        initialData = requestInitialData(URL_CONTEXT_M, USE_MOBILE_PAGES, true, undefined, "getHome");
-	else
-		initialData = requestInitialData(URL_HOME, USE_MOBILE_PAGES, true, undefined, "getHome");
+    else {
+		const useAuth = bridge.isLoggedIn();
+		initialData = useBrowseApi() ? browseFeed("FEwhat_to_watch", useAuth) : null;
+		if(!initialData)
+			initialData = requestInitialData(useAuth ? URL_CONTEXT_M : URL_HOME, USE_MOBILE_PAGES, true, undefined, "getHome");
+	}
 	
 	if(!initialDataOverride && source.homeInitialData)
 		initialDataOverride = source.homeInitialData;
@@ -3295,7 +3306,9 @@ source.isChannelUrl = (url) => {
 		REGEX_VIDEO_CHANNEL_URL4.test(url);
 };
 source.getChannel = (url) => {
-	const initialData = requestInitialData(url);
+	const initialData = useBrowseApi() ?
+		browseChannel(getChannelBrowseId(url), null) :
+		requestInitialData(url);
 	if(!initialData)
 	    throw new ScriptException("No channel data found for: " + url);
 	return extractChannel_PlatformChannel(initialData, url);
@@ -3329,6 +3342,7 @@ function filterChannelUrl(url) {
 }
 source.getChannelContents = (url, type, order, filters) => {
 	let targetTab = null;
+	let targetSuffix = null;
 	url = filterChannelUrl(url);
 
 	if(!!_settings?.channelRssOnly) {
@@ -3344,19 +3358,19 @@ source.getChannelContents = (url, type, order, filters) => {
 		case "":
 		case Type.Feed.Videos:
 			targetTab = "Videos";
-			url = url + URL_CHANNEL_VIDEOS;
+			targetSuffix = URL_CHANNEL_VIDEOS;
 			break;
 		case Type.Feed.Streams:
 			targetTab = "Live";
-			url = url + URL_CHANNEL_STREAMS;
+			targetSuffix = URL_CHANNEL_STREAMS;
 			break;
 		case Type.Feed.Live:
 			targetTab = "Home";
-			url = url;
+			targetSuffix = URL_CHANNEL_FEATURED;
 			break;
 		case Type.Feed.Shorts:
 			targetTab = "Shorts";
-			url = url + URL_CHANNEL_SHORTS;
+			targetSuffix = URL_CHANNEL_SHORTS;
 			break;
 		default:
 			throw new ScriptException("Unsupported type: " + type);
@@ -3366,7 +3380,10 @@ source.getChannelContents = (url, type, order, filters) => {
 	if(useAuth)
 		log("USING AUTH FOR CHANNEL");
 
-	const initialData = requestInitialData(url, useAuth, useAuth);
+	const browseId = useBrowseApi() ? getChannelBrowseId(url, useAuth) : null;
+	const initialData = browseId ?
+		browseChannelTab(browseId, targetSuffix, useAuth) :
+		requestInitialData(url + (targetSuffix == URL_CHANNEL_FEATURED ? "" : targetSuffix), useAuth, useAuth);
 	if(!initialData)
 	    throw new ScriptException("No channel data found for: " + url);
 	
@@ -3381,7 +3398,7 @@ source.getChannelContents = (url, type, order, filters) => {
 		allowShorts: type == Type.Feed.Shorts
 	};
 	const tabs = extractPage_Tabs(initialData, contextData);
-	const tab = tabs.find(x=>x.title == targetTab);
+	const tab = browseId ? tabs[0] : tabs.find(x=>x.title == targetTab);
 	if(!tab) 
 		return new VideoPager([], false);
 	if(IS_TESTING)
@@ -3410,7 +3427,10 @@ source.getChannelPlaylists = (url) => {
 	if(useAuth)
 		log("USING AUTH FOR CHANNEL");
 
-	const initialData = requestInitialData(url + URL_CHANNEL_PLAYLISTS, useAuth, useAuth);
+	const browseId = useBrowseApi() ? getChannelBrowseId(url, useAuth) : null;
+	const initialData = browseId ?
+		browseChannelTab(browseId, URL_CHANNEL_PLAYLISTS, useAuth) :
+		requestInitialData(url + URL_CHANNEL_PLAYLISTS, useAuth, useAuth);
 	if(!initialData)
 	    throw new ScriptException("No channel data found for: " + url);
 	const channel = extractChannel_PlatformChannel(initialData, url);
@@ -3419,7 +3439,7 @@ source.getChannelPlaylists = (url) => {
 	};
 	const tabs = extractPage_Tabs(initialData, contextData);
 	
-	const tab = tabs.find(x=>x.title == targetTab);
+	const tab = browseId ? tabs[0] : tabs.find(x=>x.title == targetTab);
 	if(!tab) 
 		return new PlaylistPager([], false);
 
@@ -3531,7 +3551,10 @@ source.getPlaylist = function (url) {
 	const matchShow = url.match(REGEX_VIDEO_SHOW_URL);
 	const isShow = !!matchShow;
 
-	const initialData = requestInitialData(url, USE_MOBILE_PAGES && !isShow, true);
+	const urlPlaylistId = (useBrowseApi() && !isShow) ? extractPlaylistIdFromUrl(url) : null;
+	const initialData = urlPlaylistId ?
+		browseFeed("VL" + urlPlaylistId, bridge.isLoggedIn()) :
+		requestInitialData(url, USE_MOBILE_PAGES && !isShow, true);
 
 	try {
 		const contents = initialData.contents;
@@ -3934,8 +3957,12 @@ source.getUserSubscriptions = function() {
 		throw new ScriptException("Not logged in");
 	}
 	
-	let subsPage = requestPage(URL_SUB_CHANNELS_M, { "User-Agent": USER_AGENT_PHONE }, true);
-	let result = getInitialData(subsPage);
+	let subsPage = null;
+	let result = useBrowseApi() ? browseFeed("FEchannels", true, true) : null;
+	if(!result) {
+		subsPage = requestPage(URL_SUB_CHANNELS_M, { "User-Agent": USER_AGENT_PHONE }, true);
+		result = getInitialData(subsPage);
+	}
 
 	if(!result) {
 	    log(subsPage);
@@ -4008,8 +4035,9 @@ source.getUserSubscriptions = function() {
 				}
 			});
 		},
-		default() {
+		default(name) {
 			log("Failed to retrieve subscriptions page, wrong items found")
+			if(bridge.devSubmit) bridge.devSubmit("getUserSubscriptions - Unknown renderer: " + name, JSON.stringify(result));
 			return [];
 		}
 	});
@@ -7254,6 +7282,100 @@ function requestNext(body, useAuth = false, useMobile = false) {
 	}
 	return JSON.parse(resp.body);
 }
+const USE_BROWSE_API = false;
+function useBrowseApi() {
+	return USE_BROWSE_API;
+}
+function extractPlaylistIdFromUrl(url) {
+	const match = url.match(/[?&]list=([^&]+)/);
+	return (match) ? match[1] : null;
+}
+function extractChannelBrowseId(url) {
+	const match = removeQuery(url).match(REGEX_VIDEO_CHANNEL_URL);
+	if(!match || match.length != 3)
+		return null;
+	const id = match[2].split("/")[0];
+	return (id && id.startsWith("UC")) ? id : null;
+}
+function browseChannelTab(browseId, urlSuffix, useAuth = false) {
+	if(urlSuffix == URL_CHANNEL_FEATURED)
+		return browseChannel(browseId, null, useAuth);
+
+	const knownParams = CHANNEL_TAB_PARAMS[urlSuffix];
+	if(knownParams) {
+		const data = browseChannel(browseId, knownParams, useAuth);
+		if(extractBrowse_TabEndpointParams(data, urlSuffix)?.selected)
+			return data;
+		log("Known params for " + urlSuffix + " did not select the tab, discovering from channel root");
+	}
+
+	const root = browseChannel(browseId, null, useAuth);
+	const targetEndpoint = extractBrowse_TabEndpointParams(root, urlSuffix);
+	if(!targetEndpoint?.params)
+		return null;
+	CHANNEL_TAB_PARAMS[urlSuffix] = targetEndpoint.params;
+	return browseChannel(browseId, targetEndpoint.params, useAuth);
+}
+function extractBrowse_TabEndpointParams(browseData, urlSuffix) {
+	const renderer = browseData?.contents?.twoColumnBrowseResultsRenderer ??
+		browseData?.contents?.singleColumnBrowseResultsRenderer;
+	const tabs = renderer?.tabs ?? [];
+	for(let tab of tabs) {
+		const tabRenderer = tab.tabRenderer ?? tab.expandableTabRenderer;
+		if(!tabRenderer)
+			continue;
+		const tabUrl = tabRenderer?.endpoint?.commandMetadata?.webCommandMetadata?.url;
+		if(!tabUrl || !tabUrl.endsWith(urlSuffix))
+			continue;
+		return {
+			params: tabRenderer?.endpoint?.browseEndpoint?.params ?? null,
+			selected: !!tabRenderer.selected
+		};
+	}
+	return null;
+}
+function resolveBrowseId(url, useAuth = false) {
+	const clientContext = getClientContext(useAuth);
+	if(!clientContext?.INNERTUBE_CONTEXT || !clientContext?.INNERTUBE_API_KEY)
+		throw new ScriptException("Missing client context");
+
+	const body = {
+		context: clientContext.INNERTUBE_CONTEXT,
+		url: url
+	};
+	let headers = !bridge.isLoggedIn() ? {} : getAuthContextHeaders(false);
+	headers["Content-Type"] = "application/json";
+
+	const resolveUrl = URL_RESOLVE + "?key=" + clientContext.INNERTUBE_API_KEY + "&prettyPrint=false";
+	const resp = http.POST(resolveUrl, JSON.stringify(body), headers, useAuth);
+	throwIfCaptcha(resp);
+	if(!resp.isOk) {
+		if(bridge.devSubmit) bridge.devSubmit("resolveBrowseId - Failed [" + resp.code + "] for [" + url + "]", resp.body ?? "No body");
+		throw new ScriptException("Failed to resolve url [" + resp.code + "]");
+	}
+	const data = JSON.parse(resp.body);
+	return data?.endpoint?.browseEndpoint?.browseId ?? null;
+}
+function getChannelBrowseId(url, useAuth = false) {
+	const direct = extractChannelBrowseId(url);
+	if(direct)
+		return direct;
+	const browseId = resolveBrowseId(url, useAuth);
+	if(!browseId)
+		throw new ScriptException("No channel data found for: " + url);
+	return browseId;
+}
+function browseChannel(browseId, params, useAuth = false) {
+	const body = { browseId: browseId };
+	if(params)
+		body.params = params;
+	const data = requestBrowse(body, false, useAuth);
+	return (data?.contents) ? data : null;
+}
+function browseFeed(browseId, useAuth = false, useMobile = false) {
+	const data = requestBrowse({ browseId: browseId }, useMobile, useAuth);
+	return (data?.contents) ? data : null;
+}
 function requestBrowse(body, useMobile = false, useAuth = false, attempt = 0, pageId = null, clientMeta = null) {
 	const clientContext = getClientContext(useAuth);
 	if(!clientContext || !clientContext.INNERTUBE_CONTEXT || !clientContext.INNERTUBE_API_KEY)
@@ -9907,6 +10029,9 @@ function extractVideoLockupModel_Video(videoRenderer, contextData) {
 					if(matchViews) {
 						viewCount = extractHumanNumber_Integer(matchViews[1]);
 						continue;
+					}
+					if(metadataPart?.leadingIcon?.name == "PLAY_ARROW_OUTLINED") {
+						viewCount = extractHumanNumber_Integer(partText);
 					}
 					const matchAgo = partText.match(REGEX_HUMAN_AGO);
 					if(matchAgo) {
