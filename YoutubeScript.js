@@ -124,6 +124,8 @@ const USER_AGENT_ANDROID = "com.google.android.youtube/17.31.35 (Linux; U; Andro
 const USER_AGENT_ANDROID_VR = "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; en_US; Quest 3 Build/SQ3A.220605.009.A1) gzip";
 const USER_AGENT_TVHTML5_EMBED = "Mozilla/5.0 (CrKey armv7l 1.5.16041) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.0 Safari/537.36";
 const USER_AGENT_VISIONOS = "com.google.visionos.youtube/1.04 (RealityDevice17,1; U; CPU visionOS 26_6_0 like Mac OS X; US) gzip";
+const USER_AGENT_TV_SAMSUNG = "Mozilla/5.0 (SMART-TV; Linux; Tizen 2.4.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/2.4.0 TV Safari/538.1";
+
 
 const USE_MOBILE_PAGES = true;
 const USE_ANDROID_FALLBACK = false;
@@ -133,6 +135,7 @@ const USE_IOS_VIDEOS_FALLBACK = true;
 const USE_ANDROID_VIDEOS_FALLBACK = true;
 const USE_ANDROID_VR_VIDEOS_FALLBACK = true;
 const USE_VISIONOS_VIDEOS_FALLBACK = true;
+const USE_TV_SAMSUNG_VIDEOS_FALLBACK = true;
 const USE_TV_VIDEOS_FALLBACK = false;
 
 let USE_ABR_VIDEOS = false;
@@ -219,6 +222,22 @@ const clients = {
 			"hl":"en-US",
 			"gl":"US",
 			"utcOffsetMinutes":0
+		}
+	},
+	TV_SAMSUNG: {
+		UserAgent: USER_AGENT_TV_SAMSUNG,
+		Version: "5.20260707",
+		ClientName: 7,
+		ClientDisplayName: "TV Samsung",
+
+		ContextClient: {
+			"clientName": "TVHTML5",
+			"clientVersion": "5.20260707",
+			"deviceMake": "Samsung",
+			"deviceModel": "UKS9800",
+			"userAgent": USER_AGENT_TV_SAMSUNG,
+			"osName": "Tizen",
+			"osVersion": "2.4.0"
 		}
 	},
 	VISIONOS: {
@@ -1092,8 +1111,13 @@ class YTSessionClient {
 		if(!USE_ABR_VIDEOS && !simplify)
 			batch = requestVisionOSStreamingData(videoId, batch, context.bgData, useLogin);
 		else batch = batch.DUMMY();
+		
+				//Request: Samsung TV Streaming Data [8]
+		if(!forceUmp && !simplify && _settings.useTvSamsung !== false)
+			batch = requestTvSamsungStreamingData(videoId, batch, context.bgData, useLogin, context.sts);
+		else batch = batch.DUMMY();
 
-		let [respPlayerData, respInitialData, respDislikes, respDeArrow, respiOS, respAndroid, respAndroidVR, respVisionOS] = batch.execute();
+		let [respPlayerData, respInitialData, respDislikes, respDeArrow, respiOS, respAndroid, respAndroidVR, respVisionOS, respTvSamsung] = batch.execute();
 		//#endregion
 
 		//#region Video Data
@@ -1238,6 +1262,33 @@ class YTSessionClient {
 				}
 				//#endregion
 
+				
+				//#region Samsung TV
+				if(!videoDetails.video && !forceUmp && USE_TV_SAMSUNG_VIDEOS_FALLBACK && respTvSamsung && !!_settings.useTvSamsung) {
+					if(respTvSamsung.isOk) {
+						let tvSamsungData = JSON.parse(respTvSamsung.body);
+						if(tvSamsungData.playerResponse)
+							tvSamsungData = tvSamsungData.playerResponse;
+
+						if(IS_TESTING)
+							console.log("Samsung TV Streaming Data", tvSamsungData);
+
+						if(tvSamsungData?.streamingData?.adaptiveFormats) {
+							let newDescriptor = extractAdaptiveFormats_VideoDescriptor(tvSamsungData.streamingData.adaptiveFormats, context.jsUrl, contextData, "Samsung TV ");
+
+							if(!canDoRequestWithBody || verifyDirectPlayback(newDescriptor)) {
+								videoDetails.video = newDescriptor;
+								if(!!_settings["showVerboseToasts"])
+									bridge.toast("Using Samsung TV sources");
+							}
+							else
+								log("SAMSUNG TV PLAYBACK VERIFICATION FAILED, FALLBACK");
+						}
+					}
+				}
+				//#endregion
+
+
 				//#region VisionOS
 				if(!videoDetails.video && !forceUmp && USE_VISIONOS_VIDEOS_FALLBACK && respVisionOS && !!_settings.useVisionOS) {
 					if(respVisionOS.isOk) {
@@ -1328,6 +1379,29 @@ class YTSessionClient {
 						}
 					}
 				}
+
+				if(!videoDetails.live && !forceUmp && USE_TV_SAMSUNG_VIDEOS_FALLBACK && respTvSamsung && !!_settings.useTvSamsung) {
+					if(respTvSamsung.isOk) {
+						let tvSamsungData = JSON.parse(respTvSamsung.body);
+						if(tvSamsungData.playerResponse)
+							tvSamsungData = tvSamsungData.playerResponse;
+
+						if(IS_TESTING)
+							console.log("Samsung TV Streaming Data", tvSamsungData);
+
+						if(tvSamsungData?.streamingData?.hlsManifestUrl) {
+							log("Using Samsung TV HLS substitute");
+							const source = new HLSSource({
+								name: "HLS (Samsung TV)",
+								url: decryptUrlN(tvSamsungData?.streamingData?.hlsManifestUrl, context.jsUrl)
+							});
+							videoDetails.hls = source;
+							videoDetails.live = source;
+							videoDetails.video = new VideoSourceDescriptor([source]);
+						}
+					}
+				}
+
 				if(!videoDetails.live && !forceUmp && USE_VISIONOS_VIDEOS_FALLBACK && respVisionOS && !!_settings.useVisionOS) {
 					if(respVisionOS.isOk) {
 						let visionOSData = JSON.parse(respVisionOS.body);
@@ -6520,6 +6594,9 @@ class YTRequestModifier extends RequestModifier {
 				case "VISIONOS":
 					headers["User-Agent"] = USER_AGENT_VISIONOS;
 					break;
+				case "TV_HTML5":
+					headers["User-Agent"] = USER_AGENT_TV_SAMSUNG;
+					break;
 				default:
 					headers["User-Agent"] = USER_AGENT_WINDOWS;
 					break;
@@ -7606,7 +7683,7 @@ function verifyDirectPlayback(descriptor) {
 	});
 	const resp1 = http.request("HEAD", modified.url, modified.headers, false);
 	if (!resp1.isOk) {
-		log("verifyDirectPlayback failed due couldn't determine content lenght with HEAD");
+		log("verifyDirectPlayback failed: HEAD returned HTTP " + resp1.code);
 		return false;
 	}
 
@@ -7805,6 +7882,59 @@ function requestAndroidVRStreamingData(videoId, batch, visitorData, useLogin) {
 		const resp = http.POST(url, JSON.stringify(body), headers, !!useLogin);
 		return resp;
 	}
+}
+function requestTvSamsungStreamingData(videoId, batch, visitorData, useLogin, sts) {
+	const client = clients.TV_SAMSUNG;
+	const body = {
+		videoId: videoId,
+		cpn: randomString(16),
+		contentCheckOk: true,
+		racyCheckOk: true,
+		context: {
+			client: {
+				...client.ContextClient,
+				hl: langDisplay,
+				gl: langRegion,
+				utcOffsetMinutes: 0
+			},
+			user: {
+				lockedSafetyMode: false
+			}
+		},
+		playbackContext: {
+			contentPlaybackContext: {
+				html5Preference: "HTML5_PREF_WANTS"
+			}
+		}
+	};
+	const signatureTimestamp = parseInt(sts);
+	if(Number.isFinite(signatureTimestamp))
+		body.playbackContext.contentPlaybackContext.signatureTimestamp = signatureTimestamp;
+
+	const visitorToken = useLogin ? (visitorData?.visitorDataLogin ?? visitorData?.visitorData) : visitorData?.visitorData;
+	if(visitorToken)
+		body.context.client.visitorData = visitorToken;
+
+	const headers = useLogin ? getAuthContextHeaders(false) : {};
+	headers["Content-Type"] = "application/json";
+	headers["User-Agent"] = client.UserAgent;
+	headers["x-youtube-client-name"] = "" + client.ClientName;
+	headers["x-youtube-client-version"] = client.Version;
+	headers["Origin"] = URL_BASE;
+	headers["Accept-Language"] = "en-US, en;q=0.9";
+	if(visitorToken)
+		headers["X-Goog-Visitor-Id"] = visitorToken;
+
+	const token = randomString(12);
+	const clientContext = getClientContext(false);
+	const url = URL_PLAYER +
+		"?key=" + clientContext.INNERTUBE_API_KEY +
+		"&prettyPrint=false" +
+		"&t=" + token +
+		"&id=" + videoId;
+	if(batch)
+		return batch.POST(url, JSON.stringify(body), headers, !!useLogin);
+	return http.POST(url, JSON.stringify(body), headers, !!useLogin);
 }
 function requestVisionOSStreamingData(videoId, batch, visitorData, useLogin) {
 	const body = {
