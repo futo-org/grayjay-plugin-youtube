@@ -6594,7 +6594,7 @@ class YTRequestModifier extends RequestModifier {
 				case "VISIONOS":
 					headers["User-Agent"] = USER_AGENT_VISIONOS;
 					break;
-				case "TV_HTML5":
+				case "TVHTML5":
 					headers["User-Agent"] = USER_AGENT_TV_SAMSUNG;
 					break;
 				default:
