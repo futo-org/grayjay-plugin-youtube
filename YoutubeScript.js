@@ -11767,7 +11767,9 @@ function getVirtualizedPlayer(jsUrl, playerjs, extractFunctions, noDecrypts, cod
 		toExtract = extractFunctions ?? [];
 
 	for (let extract of toExtract) {
-		extraction += "try { playerScope[\"" + extract + "\"] = " + extract + "; } catch(ex){}\n";
+		const key = JSON.stringify(extract);
+		extraction += "try { playerScope[" + key + "] = " + extract + "; } catch(ex){ playerScope[" + key + "] = undefined; }\n";
+		extraction += "if (typeof playerScope[" + key + "] !== \"function\" && typeof _yt_player[" + key + "] === \"function\") { playerScope[" + key + "] = _yt_player[" + key + "]; }\n";
 	}
 	let playerJsToUse = playerjs
 		.replace("var window=this;/*", 
@@ -11788,6 +11790,9 @@ function getVirtualizedPlayer(jsUrl, playerjs, extractFunctions, noDecrypts, cod
 
 
 	if(!noDecrypts) {
+		if(typeof playerScope[nDecryptDescriptor?.name] !== "function")
+			throw new ScriptException("N decryptor function [" + nDecryptDescriptor?.name + "] is not available [" + getJsUrlHash(jsUrl) + "]");
+
 		playerScope.decryptSig = function(sig) {
 			try {
 				if(sigDecryptDescriptor?.name == "unknown" || sigDecryptDescriptor == null) {
