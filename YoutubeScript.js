@@ -1211,6 +1211,10 @@ class YTSessionClient {
 					}
 				}
 
+				let useBatchVerify = true;
+				let possibleSources = [];
+				if(useBatchVerify)
+					log("Utilizing batch source verification");
 
 				//#region Android
 				if(!videoDetails.video && !forceUmp && USE_ANDROID_VIDEOS_FALLBACK && respAndroid && !!_settings.useAndroid) {
@@ -1225,7 +1229,13 @@ class YTSessionClient {
 						if(androidData?.streamingData?.adaptiveFormats) {
 							let newDescriptor = extractAdaptiveFormats_VideoDescriptor(androidData.streamingData.adaptiveFormats, context.jsUrl, contextData, "Android ");
 							
-							if(!canDoRequestWithBody || verifyDirectPlayback(newDescriptor)) {
+							if(useBatchVerify) {
+								possibleSources.push({
+									name: "Android",
+									descriptor: newDescriptor
+								});
+							}
+							else if(!canDoRequestWithBody || verifyDirectPlayback(newDescriptor)) {
 								videoDetails.video = newDescriptor;
 								if(!!_settings["showVerboseToasts"])
 									bridge.toast("Using Android sources");
@@ -1250,7 +1260,13 @@ class YTSessionClient {
 						if(androidVRData?.streamingData?.adaptiveFormats) {
 							let newDescriptor = extractAdaptiveFormats_VideoDescriptor(androidVRData.streamingData.adaptiveFormats, context.jsUrl, contextData, "Android VR ");
 
-							if(!canDoRequestWithBody || verifyDirectPlayback(newDescriptor)) {
+							if(useBatchVerify) {
+								possibleSources.push({
+									name: "Android VR",
+									descriptor: newDescriptor
+								});
+							}
+							else if(!canDoRequestWithBody || verifyDirectPlayback(newDescriptor)) {
 								videoDetails.video = newDescriptor;
 								if(!!_settings["showVerboseToasts"])
 									bridge.toast("Using Android VR sources");
@@ -1276,7 +1292,13 @@ class YTSessionClient {
 						if(tvSamsungData?.streamingData?.adaptiveFormats) {
 							let newDescriptor = extractAdaptiveFormats_VideoDescriptor(tvSamsungData.streamingData.adaptiveFormats, context.jsUrl, contextData, "Samsung TV ");
 
-							if(!canDoRequestWithBody || verifyDirectPlayback(newDescriptor)) {
+							if(useBatchVerify) {
+								possibleSources.push({
+									name: "Samsung TV",
+									descriptor: newDescriptor
+								});
+							}
+							else if(!canDoRequestWithBody || verifyDirectPlayback(newDescriptor)) {
 								videoDetails.video = newDescriptor;
 								if(!!_settings["showVerboseToasts"])
 									bridge.toast("Using Samsung TV sources");
@@ -1302,7 +1324,13 @@ class YTSessionClient {
 						if(visionOSData?.streamingData?.adaptiveFormats) {
 							let newDescriptor = extractAdaptiveFormats_VideoDescriptor(visionOSData.streamingData.adaptiveFormats, context.jsUrl, contextData, "VisionOS ");
 
-							if(!canDoRequestWithBody || verifyDirectPlayback(newDescriptor)) {
+							if(useBatchVerify) {
+								possibleSources.push({
+									name: "VisionOS",
+									descriptor: newDescriptor
+								});
+							}
+							else if(!canDoRequestWithBody || verifyDirectPlayback(newDescriptor)) {
 								videoDetails.video = newDescriptor;
 								if(!!_settings["showVerboseToasts"])
 									bridge.toast("Using VisionOS sources");
@@ -1312,14 +1340,8 @@ class YTSessionClient {
 						}
 					}
 				}
+				//#endregion
 
-				if(!videoDetails.video && canUseNativeUMP()) {
-					try {
-						videoDetails.video = await extractUMP_VideoDescriptor(playerData, context.jsUrl, context.clientConfig, url, useLogin, contextData);
-					} catch(ex) {
-						log("UMP VOD descriptor failed: " + ex);
-					}
-				}
 				//#region iOS
 				if(!videoDetails.video && !forceUmp && USE_IOS_VIDEOS_FALLBACK && respiOS && !!_settings.useiOS) {
 
@@ -1331,7 +1353,13 @@ class YTSessionClient {
 						if(iosData?.streamingData?.adaptiveFormats) {
 							let newDescriptor = extractAdaptiveFormats_VideoDescriptor(iosData.streamingData.adaptiveFormats, context.jsUrl, contextData, "IOS ");
 
-							if(!canDoRequestWithBody || verifyDirectPlayback(newDescriptor)) {
+							if(useBatchVerify) {
+								possibleSources.push({
+									name: "IOS",
+									descriptor: newDescriptor
+								});
+							}
+							else if(!canDoRequestWithBody || verifyDirectPlayback(newDescriptor)) {
 								videoDetails.video = newDescriptor;
 								if(!!_settings["showVerboseToasts"])
 									bridge.toast("Using iOS sources");
@@ -1343,6 +1371,34 @@ class YTSessionClient {
 					}
 				}
 				//#endregion
+
+				//#region Batch Verify
+				if(useBatchVerify && possibleSources.length > 0) {
+					const startTime = new Date();
+					const results = verifyDirectPlaybackBatch(possibleSources.map(x=>x.descriptor));
+					const resultPrint = {};
+					for(let source of possibleSources) {
+						if(results[source.descriptor] === true && !videoDetails.video) {
+							log("Batch verify found result: " + source.name);
+							videoDetails.video = source;
+						}
+						resultPrint[source.name] = results[source.descriptor] === true;
+					}
+					const timeToCheck = (new Date()).getTime() - startTime.getTime();
+					log("Batch verify result (" + timeToCheck + "ms): " + JSON.stringify(resultPrint, null, "   "));
+				}
+				else if(useBatchVerify && possibleSources.length <= 0) {
+					log("No sources found to batch verify");
+				}
+				//#endregion
+
+				if(!videoDetails.video && canUseNativeUMP()) {
+					try {
+						videoDetails.video = await extractUMP_VideoDescriptor(playerData, context.jsUrl, context.clientConfig, url, useLogin, contextData);
+					} catch(ex) {
+						log("UMP VOD descriptor failed: " + ex);
+					}
+				}
 
 				if(!videoDetails.video)
 					videoDetails.video = extractABR_VideoDescriptor(playerData, context.jsUrl, context.clientConfig, url, useLogin, contextData, !!_settings?.use_secondry_ump_temp);
@@ -7658,7 +7714,109 @@ function requestIOSStreamingData(videoId, batch, visitorData, useLogin) {
 		return resp;
 	}
 }
-function verifyDirectPlayback(descriptor) {
+
+
+function verifyDirectPlaybackBatch(descriptors) {
+	let opCollections = new Map();
+	let total = 0;
+	for(let descriptor of descriptors) {
+		const op = verifyDirectPlaybackBatchOps(descriptor);
+		opCollections.set(descriptor, op);
+		if(total < op.length)
+			total = op.length;
+	}
+
+	let results = new Map();
+	let resultsInter = new Map();
+	
+	for(let i = 0; i < total; i++) {
+		let toExecute = new Map();
+
+		let batch = http.batch();
+		let x = 0;
+		for(let [descriptor, ops] of opCollections) {
+			if(i < ops.length) {
+				resultsInter.set(descriptor, ops[i](batch, resultsInter.get(descriptor)));
+				let interResult = resultsInter.get(descriptor);
+				if(interResult !== false && interResult !== true)
+					toExecute.set(descriptor, x);
+				else if(interResult === true || interResult === false)
+					results.set(descriptor, interResult);
+				x++;
+			}
+		}
+
+		let respResults = batch.execute();
+		for(let [descriptor, index] of toExecute) {
+			let resp = respResults[index];
+			resultsInter.set(descriptor, resp);
+		}
+	}
+	return results;
+}
+function verifyDirectPlaybackBatchOps(descriptor) {
+	let modifier = null;
+	let modified = null;
+	let modified2 = null;
+	let startTime = new Date();
+	let sourceToTest = null;
+	return [
+		(batch) => {
+			if (!descriptor) {
+				log("verifyDirectPlayback failed due to no descriptor");
+				return false;
+			}
+			if (!descriptor.audioSources) {
+				log("verifyDirectPlayback failed due to no descriptor");
+				return false;
+			}
+			if (descriptor.audioSources.length == 0) {
+				log("verifyDirectPlayback failed due to no audio streams");
+				return false;
+			}
+			sourceToTest = descriptor.audioSources[0];
+
+
+			modifier = sourceToTest.getRequestModifier();
+			console.log(modifier);
+
+			modified = modifier.modifyRequest(sourceToTest.url, {
+
+			});
+			return batch.request("HEAD", modified.url, modified.headers, false);
+		},
+		(batch, resp1) => {
+			if (!resp1.isOk) {
+				log("verifyDirectPlayback failed: HEAD returned HTTP " + resp1.code);
+				return false;
+			}
+			const contentLength = (+Object.entries(resp1.headers).find(([k]) => k.toLowerCase() === "content-length")?.[1]?.[0]) || -1;
+			if(contentLength && contentLength <= 0) {
+				log("verifyDirectPlayback failed due couldn't determine content lenght with HEAD (missing header)\n" + JSON.stringify(resp1));
+				return false;
+			}
+
+			const toTestRange = "bytes=" + (contentLength - 150) + "-" + (contentLength - 50);
+
+			modified2 = modifier.modifyRequest(sourceToTest.url, {
+				"accept-ranges": "bytes",
+				"range": toTestRange
+			});
+			return batch.GET(modified2.url, modified2.headers, false);
+		},
+		(resp2) => {
+			console.log(resp2);
+			if (!resp2.isOk) {
+				log("verifyDirectPlayback failed due couldn't get segment beyond 60 seconds");
+				return false;
+			}
+			const timeToCheck = (new Date()).getTime() - startTime.getTime();
+			log("verifyDirectPlayback succeeded in " + timeToCheck + "ms");
+			return true;
+		}
+	];
+}
+function verifyDirectPlayback(descriptor, batch) {
 	const startTime = new Date();
 	if (!descriptor) {
 		log("verifyDirectPlayback failed due to no descriptor");
@@ -7883,6 +8041,8 @@ function requestAndroidVRStreamingData(videoId, batch, visitorData, useLogin) {
 		return resp;
 	}
 }
+
+
 function requestTvSamsungStreamingData(videoId, batch, visitorData, useLogin, sts) {
 	const client = clients.TV_SAMSUNG;
 	const body = {
