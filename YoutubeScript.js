@@ -1378,11 +1378,11 @@ class YTSessionClient {
 					const results = verifyDirectPlaybackBatch(possibleSources.map(x=>x.descriptor));
 					const resultPrint = {};
 					for(let source of possibleSources) {
-						if(results[source.descriptor] === true && !videoDetails.video) {
+						if(results.get(source.descriptor) === true && !videoDetails.video) {
 							log("Batch verify found result: " + source.name);
-							videoDetails.video = source;
+							videoDetails.video = source.descriptor;
 						}
-						resultPrint[source.name] = results[source.descriptor] === true;
+						resultPrint[source.name] = results.get(source.descriptor) === true;
 					}
 					const timeToCheck = (new Date()).getTime() - startTime.getTime();
 					log("Batch verify result (" + timeToCheck + "ms): " + JSON.stringify(resultPrint, null, "   "));
@@ -7736,13 +7736,20 @@ function verifyDirectPlaybackBatch(descriptors) {
 		let x = 0;
 		for(let [descriptor, ops] of opCollections) {
 			if(i < ops.length) {
-				resultsInter.set(descriptor, ops[i](batch, resultsInter.get(descriptor)));
-				let interResult = resultsInter.get(descriptor);
-				if(interResult !== false && interResult !== true)
-					toExecute.set(descriptor, x);
-				else if(interResult === true || interResult === false)
-					results.set(descriptor, interResult);
-				x++;
+				let interResultBefore = resultsInter.get(descriptor);
+				if(interResultBefore === true || interResultBefore === false) {
+					results.set(descriptor, interResultBefore);
+				}
+				else {
+					resultsInter.set(descriptor, ops[i](batch, interResultBefore));
+					let interResult = resultsInter.get(descriptor);
+					if(interResult !== false && interResult !== true) {
+						toExecute.set(descriptor, x);
+						x++;
+					}
+					else if(interResult === true || interResult === false)
+						results.set(descriptor, interResult);
+				}
 			}
 		}
 
@@ -7804,7 +7811,7 @@ function verifyDirectPlaybackBatchOps(descriptor) {
 			});
 			return batch.GET(modified2.url, modified2.headers, false);
 		},
-		(resp2) => {
+		(batch, resp2) => {
 			console.log(resp2);
 			if (!resp2.isOk) {
 				log("verifyDirectPlayback failed due couldn't get segment beyond 60 seconds");
