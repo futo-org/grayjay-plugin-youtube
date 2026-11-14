@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 369,
+	"version": 370,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 
@@ -449,6 +449,11 @@
 
 
 	"changelog": {
+        "370": [
+            "Feature: SamsungTV sources support",
+			"Feature: Batch source-checking, speed up video loads",
+            "Fix: N decryption fix"
+        ],
         "369": [
             "Fix: N decryption fix"
         ],
