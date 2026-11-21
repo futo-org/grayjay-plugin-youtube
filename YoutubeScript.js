@@ -7851,12 +7851,24 @@ function verifyDirectPlaybackBatch(descriptors) {
 	}
 	return results;
 }
+function getDirectPlaybackContentLength(source) {
+	let contentLength = Number(source.contentLength);
+	if (Number.isSafeInteger(contentLength) && contentLength >= 150)
+		return contentLength;
+	try {
+		contentLength = Number(new URL(source.url).searchParams.get("clen"));
+	} catch (_) {
+		return null;
+	}
+	return Number.isSafeInteger(contentLength) && contentLength >= 150 ? contentLength : null;
+}
 function verifyDirectPlaybackBatchOps(descriptor) {
 	let modifier = null;
 	let modified = null;
 	let modified2 = null;
 	let startTime = new Date();
 	let sourceToTest = null;
+	let contentLength = null;
 	return [
 		(batch) => {
 			if (!descriptor) {
@@ -7877,20 +7889,26 @@ function verifyDirectPlaybackBatchOps(descriptor) {
 			modifier = sourceToTest.getRequestModifier();
 			console.log(modifier);
 
+			contentLength = getDirectPlaybackContentLength(sourceToTest);
+			if (contentLength !== null)
+				return batch.DUMMY();
+
 			modified = modifier.modifyRequest(sourceToTest.url, {
 
 			});
 			return batch.request("HEAD", modified.url, modified.headers, false);
 		},
 		(batch, resp1) => {
-			if (!resp1.isOk) {
-				log("verifyDirectPlayback failed: HEAD returned HTTP " + resp1.code);
-				return false;
-			}
-			const contentLength = (+Object.entries(resp1.headers).find(([k]) => k.toLowerCase() === "content-length")?.[1]?.[0]) || -1;
-			if(contentLength && contentLength <= 0) {
-				log("verifyDirectPlayback failed due couldn't determine content lenght with HEAD (missing header)\n" + JSON.stringify(resp1));
-				return false;
+			if (contentLength === null) {
+				if (!resp1.isOk) {
+					log("verifyDirectPlayback failed: HEAD returned HTTP " + resp1.code);
+					return false;
+				}
+				contentLength = (+Object.entries(resp1.headers).find(([k]) => k.toLowerCase() === "content-length")?.[1]?.[0]) || -1;
+				if(!Number.isSafeInteger(contentLength) || contentLength < 150) {
+					log("verifyDirectPlayback failed due couldn't determine content lenght with HEAD (missing header)\n" + JSON.stringify(resp1));
+					return false;
+				}
 			}
 
 			const toTestRange = "bytes=" + (contentLength - 150) + "-" + (contentLength - 50);
@@ -7933,19 +7951,22 @@ function verifyDirectPlayback(descriptor, batch) {
 	const modifier = sourceToTest.getRequestModifier();
 	console.log(modifier);
 
-	const modified = modifier.modifyRequest(sourceToTest.url, {
+	let contentLength = getDirectPlaybackContentLength(sourceToTest);
+	if (contentLength === null) {
+		const modified = modifier.modifyRequest(sourceToTest.url, {
 
-	});
-	const resp1 = http.request("HEAD", modified.url, modified.headers, false);
-	if (!resp1.isOk) {
-		log("verifyDirectPlayback failed: HEAD returned HTTP " + resp1.code);
-		return false;
-	}
+		});
+		const resp1 = http.request("HEAD", modified.url, modified.headers, false);
+		if (!resp1.isOk) {
+			log("verifyDirectPlayback failed: HEAD returned HTTP " + resp1.code);
+			return false;
+		}
 
-	const contentLength = (+Object.entries(resp1.headers).find(([k]) => k.toLowerCase() === "content-length")?.[1]?.[0]) || -1;
-	if(contentLength && contentLength <= 0) {
-		log("verifyDirectPlayback failed due couldn't determine content lenght with HEAD (missing header)\n" + JSON.stringify(resp1));
-		return false;
+		contentLength = (+Object.entries(resp1.headers).find(([k]) => k.toLowerCase() === "content-length")?.[1]?.[0]) || -1;
+		if(!Number.isSafeInteger(contentLength) || contentLength < 150) {
+			log("verifyDirectPlayback failed due couldn't determine content lenght with HEAD (missing header)\n" + JSON.stringify(resp1));
+			return false;
+		}
 	}
 
 	const toTestRange = "bytes=" + (contentLength - 150) + "-" + (contentLength - 50);
@@ -9606,6 +9627,7 @@ function extractAdaptiveFormats_VideoDescriptor(adaptiveSources, jsUrl, contextD
 							audioChannels: y.audioChannels   
 					}, contextData.url);
 					
+					source.contentLength = Number(y.contentLength);
 					return source;
 			}).filter(x=>x!=null),
 	) : new VideoSourceDescriptor([])   
