@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 371,
+	"version": 373,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 
@@ -456,6 +456,10 @@
 
 
 	"changelog": {
+        "373": [
+            "Feature: iOS Producer sources support",
+            "Improvement: Reduce required requests for sources"
+        ],
         "371": [
             "Feature: SamsungTV sources support",
 			"Feature: Batch source-checking, speed up video loads",
