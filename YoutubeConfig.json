@@ -141,6 +141,13 @@
 			"default": "true"
 		},
 		{
+			"variable": "useIOSProducer",
+			"name": "Enable iOS Producer Streams",
+			"description": "Attempts to use anonymous iOS Producer streams if available (H.264 video and AAC audio). May not always be available.",
+			"type": "Boolean",
+			"default": "true"
+		},
+		{
 			"variable": "useVisionOS",
 			"name": "Enable VisionOS Streams",
 			"description": "Attempts to use VisionOS streams if available, may be smoother experience. May not always be available.",

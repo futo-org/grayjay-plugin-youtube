@@ -123,6 +123,7 @@ const USER_AGENT_IOS = "com.google.ios.youtube/" + IOS_APP_VERSION + "(" + IOS_D
 const USER_AGENT_ANDROID = "com.google.android.youtube/17.31.35 (Linux; U; Android 12; US) gzip";
 const USER_AGENT_ANDROID_VR = "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; en_US; Quest 3 Build/SQ3A.220605.009.A1) gzip";
 const USER_AGENT_TVHTML5_EMBED = "Mozilla/5.0 (CrKey armv7l 1.5.16041) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.0 Safari/537.36";
+const USER_AGENT_IOS_PRODUCER = "com.google.ios.youtubeproducer/0.147.945 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)";
 const USER_AGENT_VISIONOS = "com.google.visionos.youtube/1.04 (RealityDevice17,1; U; CPU visionOS 26_6_0 like Mac OS X; US) gzip";
 const USER_AGENT_TV_SAMSUNG = "Mozilla/5.0 (SMART-TV; Linux; Tizen 2.4.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/2.4.0 TV Safari/538.1";
 
@@ -136,6 +137,7 @@ const USE_ANDROID_VIDEOS_FALLBACK = true;
 const USE_ANDROID_VR_VIDEOS_FALLBACK = true;
 const USE_VISIONOS_VIDEOS_FALLBACK = true;
 const USE_TV_SAMSUNG_VIDEOS_FALLBACK = true;
+const USE_IOS_PRODUCER_VIDEOS_FALLBACK = true;
 const USE_TV_VIDEOS_FALLBACK = false;
 
 let USE_ABR_VIDEOS = false;
@@ -238,6 +240,22 @@ const clients = {
 			"userAgent": USER_AGENT_TV_SAMSUNG,
 			"osName": "Tizen",
 			"osVersion": "2.4.0"
+		}
+	},
+	IOS_PRODUCER: {
+		UserAgent: USER_AGENT_IOS_PRODUCER,
+		Version: "0.147.945",
+		ClientName: 92,
+		ClientDisplayName: "iOS Producer",
+
+		ContextClient: {
+			"clientName": "IOS_PRODUCER",
+			"clientVersion": "0.147.945",
+			"deviceMake": "Apple",
+			"deviceModel": "iPhone16,2",
+			"userAgent": USER_AGENT_IOS_PRODUCER,
+			"osName": "iPhone",
+			"osVersion": "18.3.2.22D82"
 		}
 	},
 	VISIONOS: {
@@ -1117,7 +1135,12 @@ class YTSessionClient {
 			batch = requestTvSamsungStreamingData(videoId, batch, context.bgData, useLogin, context.sts);
 		else batch = batch.DUMMY();
 
-		let [respPlayerData, respInitialData, respDislikes, respDeArrow, respiOS, respAndroid, respAndroidVR, respVisionOS, respTvSamsung] = batch.execute();
+		//Request: iOS Producer Streaming Data [9]
+		if(!forceUmp && !simplify && _settings.useIOSProducer !== false)
+			batch = requestIOSProducerStreamingData(videoId, batch, context.bgData);
+		else batch = batch.DUMMY();
+
+		let [respPlayerData, respInitialData, respDislikes, respDeArrow, respiOS, respAndroid, respAndroidVR, respVisionOS, respTvSamsung, respIOSProducer] = batch.execute();
 		//#endregion
 
 		//#region Video Data
@@ -1342,6 +1365,37 @@ class YTSessionClient {
 				}
 				//#endregion
 
+				//#region iOS Producer
+				if(!videoDetails.video && !forceUmp && USE_IOS_PRODUCER_VIDEOS_FALLBACK && respIOSProducer && !!_settings.useIOSProducer) {
+					if(respIOSProducer.isOk) {
+						let iosProducerData = JSON.parse(respIOSProducer.body);
+						if(iosProducerData.playerResponse)
+							iosProducerData = iosProducerData.playerResponse;
+
+						if(IS_TESTING)
+							console.log("iOS Producer Streaming Data", iosProducerData);
+
+						if(iosProducerData?.streamingData?.adaptiveFormats) {
+							let newDescriptor = extractAdaptiveFormats_VideoDescriptor(iosProducerData.streamingData.adaptiveFormats, context.jsUrl, contextData, "iOS Producer ");
+
+							if(useBatchVerify) {
+								possibleSources.push({
+									name: "iOS Producer",
+									descriptor: newDescriptor
+								});
+							}
+							else if(!canDoRequestWithBody || verifyDirectPlayback(newDescriptor)) {
+								videoDetails.video = newDescriptor;
+								if(!!_settings["showVerboseToasts"])
+									bridge.toast("Using iOS Producer sources");
+							}
+							else
+								log("IOS_PRODUCER PLAYBACK VERIFICATION FAILED, FALLBACK");
+						}
+					}
+				}
+				//#endregion
+
 				//#region iOS
 				if(!videoDetails.video && !forceUmp && USE_IOS_VIDEOS_FALLBACK && respiOS && !!_settings.useiOS) {
 
@@ -1472,6 +1526,28 @@ class YTSessionClient {
 							const source = new HLSSource({
 								name: "HLS (VisionOS)",
 								url: decryptUrlN(visionOSData?.streamingData?.hlsManifestUrl, context.jsUrl)
+							});
+							videoDetails.hls = source;
+							videoDetails.live = source;
+							videoDetails.video = new VideoSourceDescriptor([source]);
+						}
+					}
+				}
+
+				if(!videoDetails.live && !forceUmp && USE_IOS_PRODUCER_VIDEOS_FALLBACK && respIOSProducer && !!_settings.useIOSProducer) {
+					if(respIOSProducer.isOk) {
+						let iosProducerData = JSON.parse(respIOSProducer.body);
+						if(iosProducerData.playerResponse)
+							iosProducerData = iosProducerData.playerResponse;
+
+						if(IS_TESTING)
+							console.log("iOS Producer Streaming Data", iosProducerData);
+
+						if(iosProducerData?.streamingData?.hlsManifestUrl) {
+							log("Using iOS Producer HLS substitute");
+							const source = new HLSSource({
+								name: "HLS (iOS Producer)",
+								url: decryptUrlN(iosProducerData?.streamingData?.hlsManifestUrl, context.jsUrl)
 							});
 							videoDetails.hls = source;
 							videoDetails.live = source;
@@ -6658,6 +6734,9 @@ class YTRequestModifier extends RequestModifier {
 				case "IOS":
 					headers["User-Agent"] = USER_AGENT_IOS;
 					break;
+				case "IOS_PRODUCER":
+					headers["User-Agent"] = USER_AGENT_IOS_PRODUCER;
+					break;
 				case "VISIONOS":
 					headers["User-Agent"] = USER_AGENT_VISIONOS;
 					break;
@@ -8113,6 +8192,51 @@ function requestTvSamsungStreamingData(videoId, batch, visitorData, useLogin, st
 	if(batch)
 		return batch.POST(url, JSON.stringify(body), headers, !!useLogin);
 	return http.POST(url, JSON.stringify(body), headers, !!useLogin);
+}
+function requestIOSProducerStreamingData(videoId, batch, visitorData) {
+	const client = clients.IOS_PRODUCER;
+	const body = {
+		videoId: videoId,
+		cpn: randomString(16),
+		contentCheckOk: true,
+		racyCheckOk: true,
+		context: {
+			client: {
+				...client.ContextClient,
+				hl: langDisplay,
+				gl: langRegion,
+				utcOffsetMinutes: 0
+			},
+			user: {
+				lockedSafetyMode: false
+			}
+		}
+	};
+	// IOS_PRODUCER uses an anonymous session, including when other clients use login.
+	const visitorToken = visitorData?.visitorData;
+	if(visitorToken)
+		body.context.client.visitorData = visitorToken;
+
+	const headers = {
+		"Content-Type": "application/json",
+		"User-Agent": client.UserAgent,
+		"x-youtube-client-name": "" + client.ClientName,
+		"x-youtube-client-version": client.Version,
+		"X-Goog-Api-Format-Version": "2",
+		"Accept-Language": "en-US, en;q=0.9"
+	};
+	if(visitorToken)
+		headers["X-Goog-Visitor-Id"] = visitorToken;
+
+	const clientContext = getClientContext(false);
+	const url = URL_PLAYER +
+		"?key=" + clientContext.INNERTUBE_API_KEY +
+		"&prettyPrint=false" +
+		"&t=" + randomString(12) +
+		"&id=" + videoId;
+	if(batch)
+		return batch.POST(url, JSON.stringify(body), headers, false);
+	return http.POST(url, JSON.stringify(body), headers, false);
 }
 function requestVisionOSStreamingData(videoId, batch, visitorData, useLogin) {
 	const body = {
