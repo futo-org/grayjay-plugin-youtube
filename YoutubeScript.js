@@ -4908,7 +4908,8 @@ function fetchCombinedInitialHeaders(parentSource, videoSource, audioSource, ust
         if (umpResp.reloadPlayerResponse && !!_settings?.allow_player_response_reloading) {
 			
 			if(retries < 3) {
-            	bridge.toast("Youtube: ReloadPlayerResponse [Reloading]");
+                if (_settings.notify_ump_recovery)
+                    bridge.toast("Youtube: ReloadPlayerResponse [Reloading]");
 				throw new ReloadRequiredException("ReloadPlayerResponse requested by Youtube", JSON.stringify({ dashReloads: retries + 1 }));
 			}
 			else
@@ -4941,7 +4942,8 @@ function fetchCombinedInitialHeaders(parentSource, videoSource, audioSource, ust
                 (!(wantsAsyncBackoff && umpResp.backOffTime && umpResp.backOffTime < 5000))
             ) {
                 log("Combined: attempting playback workaround (#" + retries + ")");
-                bridge.toast("Attempting playback workaround (#" + retries + ")");
+                if (_settings.notify_ump_recovery)
+	                bridge.toast("Attempting playback workaround (#" + retries + ")");
                 throw new ReloadRequiredException("Playback blocked (#" + retries + ")", JSON.stringify({ dashReloads: retries + 1 }));
             } else if (canUse("Async") && umpResp.backOffTime) {
                 log("Combined: waiting for " + parseInt(umpResp.backOffTime / 1000) + "s as required (Async)");
@@ -4949,7 +4951,8 @@ function fetchCombinedInitialHeaders(parentSource, videoSource, audioSource, ust
                 if (backOffSourceContext != parentSource.sharedContext || ((new Date()).getTime() - backOffSourceTime) > 2000) {
                     backOffSourceContext = parentSource.sharedContext;
                     backOffSourceTime = (new Date()).getTime();
-                    bridge.toast("Waiting for " + parseInt(umpResp.backOffTime / 1000) + "s as required (Async)");
+                    if (_settings.showVerboseToasts)
+	                    bridge.toast("Waiting for " + parseInt(umpResp.backOffTime / 1000) + "s as required (Async)");
                 }
 
                 const promise = new Promise((resolve, reject) => {
@@ -4997,7 +5000,8 @@ function fetchCombinedInitialHeaders(parentSource, videoSource, audioSource, ust
 
         if (!hasData) {
             if (umpResp.redirectUrl && i < maxRedirect - 1) {
-                bridge.toast("UMP Redirect..");
+                if (_settings.showVerboseToasts)
+	                bridge.toast("UMP Redirect..");
                 currentAbrUrl = umpResp.redirectUrl;
                 options.rn = (options?.rn ?? 1) + 1;
                 if (currentAbrUrl.indexOf("&cpn=") <= 0) {
@@ -5167,7 +5171,8 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 			throw new ScriptException("Invalid UMP response found");
 
 		if(umpResp.reloadPlayerResponse && !!_settings?.allow_player_response_reloading) {
-			bridge.toast("Youtube: ReloadPlayerResponse");
+			if (_settings.notify_ump_recovery)
+				bridge.toast("Youtube: ReloadPlayerResponse");
 			const newSource = refetchSource(parentSource);
 			//Inject new data into parent source
 			if(parentSource != newSource) {
@@ -5176,7 +5181,8 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 				}
 				ustreamerConfig = newSource.ustreamerConfig;
 				abrUrl = newSource.url;
-				bridge.toast("Youtube: ReloadPlayerResponse succesfull");
+				if (_settings.notify_ump_recovery)
+					bridge.toast("Youtube: ReloadPlayerResponse succesfull");
 				return generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, retries + 1, options);
 			}
 		}
@@ -5191,7 +5197,8 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 					(!(wantsAsyncBackoff && umpResp.backOffTime && umpResp.backOffTime < 5000))
 					) {
 				log("Attempting playback workaround (#" + retries + ")");
-				bridge.toast("Attempting playback workaround (#" + retries + ")");
+				if (_settings.notify_ump_recovery)
+					bridge.toast("Attempting playback workaround (#" + retries + ")");
 				throw new ReloadRequiredException("Playback blocked (#" + retries + ")", JSON.stringify({dashReloads: retries + 1}));
 			}
 			else if(canUse("Async") && umpResp.backOffTime && (true)) {
@@ -5200,7 +5207,8 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 				if(backOffSourceContext != parentSource.sharedContext || ((new Date()).getTime() - backOffSourceTime) > 2000) {
 					backOffSourceContext = parentSource.sharedContext;
 					backOffSourceTime = (new Date()).getTime();
-					bridge.toast("Waiting for " + parseInt(umpResp.backOffTime / 1000) + "s as required (Async)");
+					if (_settings.showVerboseToasts)
+						bridge.toast("Waiting for " + parseInt(umpResp.backOffTime / 1000) + "s as required (Async)");
 				}
 				const promise = new Promise((resolve, reject)=>{
 					setTimeout(()=>{
@@ -5238,7 +5246,8 @@ function generateDash(parentSource, sourceObj, ustreamerConfig, abrUrl, itag, re
 
 		if(!umpResp.streams[0]?.data) {
 			if(umpResp.redirectUrl && i < maxRedirect - 1) {
-				bridge.toast("UMP Redirect..");
+				if (_settings.showVerboseToasts)
+					bridge.toast("UMP Redirect..");
 				abrUrl = umpResp.redirectUrl;
 				options.rn = (options?.rn ?? 1) + 1;
 				if(abrUrl.indexOf("&cpn=") <= 0) {
@@ -5698,7 +5707,8 @@ class YTABRExecutor {
 		
 		
 		//this.abrUrl = newSource.abrUrl;
-		bridge.toast("UMP [" + this.type + "] Recovered");
+		if (_settings.notify_ump_recovery)
+			bridge.toast("UMP [" + this.type + "] Recovered");
 	}
 
 	executeRequest(url, headers, retryCount, overrideSegment) {
@@ -5779,7 +5789,8 @@ class YTABRExecutor {
 		const umpResp = new UMPResponse(byteArray, this.reusableBuffer);
 		if(umpResp.snackbarId == 1 && umpResp.streamCount == 0 && retryCount < 3) {
 			log("Attempting playback workaround (#" + retryCount + " - E)");
-			bridge.toast("Attempting playback workaround (#" + retryCount + " - E)");
+			if (_settings.notify_ump_recovery)
+				bridge.toast("Attempting playback workaround (#" + retryCount + " - E)");
 
 			const newExecutor = this.recreateExecutor(true);
 			this.childExecutor = newExecutor;
@@ -8928,7 +8939,8 @@ function refetchSource(source) {
 		log("Failed to refetch source, missing metadata");
 		return source;
 	}
-	bridge.toast("Refetching source [" + source.sourceObj.itag + "]");
+	if (_settings.notify_ump_recovery)
+		bridge.toast("Refetching source [" + source.sourceObj.itag + "]");
 	log("Refetching source..");
 	const playerData = getPlayerData(videoId, sts, usedLogin, null, contextData?.pot, false);
 	if(playerData) {
@@ -9321,11 +9333,11 @@ async function extractUMP_VideoDescriptorAsync(initialPlayerData, jsUrl, clientC
 	const useVideoIdPot = !!contextData?.playerConfig?.useVideoIdPot;
 	const videoId = contextData?.videoId ?? initialPlayerData?.videoDetails?.videoId ?? "";
 
-	const potState = { pot: getInitialPOTVideo(), pending: false };
+	const potState = { pot: null, pending: false };
 	function refreshPot(forceNew) {
 		if (potState.pending) return potState.promise;
 		potState.pending = true;
-		potState.promise = (useVideoIdPot
+		potState.promise = Promise.resolve(forceNew ? refreshPOTMinter() : null).then(() => useVideoIdPot
 			? tryGetPOTCustom(videoId, (pot) => pot, "UMP", forceNew)
 			: tryGetPOT(bgData, (pot) => pot, "UMP", forceNew))
 			.then((pot) => { if (pot) { potState.pot = pot; } potState.pending = false; return pot; },
@@ -9333,11 +9345,8 @@ async function extractUMP_VideoDescriptorAsync(initialPlayerData, jsUrl, clientC
 		return potState.promise;
 	}
 
-	try {
-		await refreshPot(false);
-	} catch (ex) {
-		log("UMP initial POT failed: " + ex);
-	}
+	if (!await refreshPot(false) && !await refreshPot(true))
+		throw new ScriptException("Could not mint a playback attestation token. Please retry.");
 
 	const source = new UMPSource({
 		name: "UMP " + ((bestVideo.height ?? 0) ? (bestVideo.height + "p") : "audio"),
@@ -12884,34 +12893,105 @@ var existingBotguard = undefined;
 var isCreatingBotguard = false;
 var isCreatingBotguardCallbacks = [];
 
-function tryGetBrowserBotguard(cb, cbFail) {
-		console.log("No Botguard yet, initializing");
-		if(!isCreatingBotguard) {
-			isCreatingBotguard = true;
-			isCreatingBotguardCallbacks.push(cb);
-			const botguard = new BotGuardBrowserGenerator(globalThis, (glob)=> {
+const PO_UNKNOWN_TTL_MS = 5 * 60 * 1000;
+var poMinterGeneration = 0;
+var poBrowserScriptIds = [];
 
-			});
-			botguard.initialize((result, failReason)=>{
-				log("newSessionClient.initialize result: " + result + ", failReason: " + failReason);
-				if(result) {
-					existingBotguard = botguard;
-					let cbs = isCreatingBotguardCallbacks;
-					isCreatingBotguardCallbacks = [];
-					isCreatingBotguard = false;
-					for(let cb of cbs)
-						cb(botguard);
-				}
-				else {
-					bridge.toast("Failed to initialize Botguard [Browser]:\n" + failReason + "\nUsing fallback.");
-					if(cbFail) {
-						cbFail();
-					}
-				}
-			});
-		}
-		else
-			isCreatingBotguardCallbacks.push(cb);
+function poTrace(event, fields) {
+    log("POTrace " + JSON.stringify({ event, ...fields }));
+}
+
+function poBindingKey(kind, id) { return kind + ":" + id; }
+function poCachedToken(generator, kind, id) {
+    const key = poBindingKey(kind, id);
+    const cached = generator.generatedTokens[key];
+    if (!cached) return null;
+    if (cached.generation !== generator.minterGeneration || Date.now() >= cached.refreshAtMs) {
+        delete generator.generatedTokens[key];
+        poTrace("cache-expired", { provenance: generator.provenance, bindingKind: kind,
+            generation: cached.generation, tokenAgeMs: Date.now() - cached.createdAtMs });
+        return null;
+    }
+    poTrace("cache-hit", { provenance: generator.provenance, bindingKind: kind,
+        generation: cached.generation, fingerprint: cached.fingerprint,
+        tokenAgeMs: Date.now() - cached.createdAtMs, minterAgeMs: Date.now() - generator.minterMetadata.createdAtMs,
+        integrityAgeMs: cached.expiryKnown ? Date.now() - generator.minterMetadata.createdAtMs : null,
+        expiryKnown: cached.expiryKnown, remainingMs: cached.refreshAtMs - Date.now() });
+    return cached.tokenBase64;
+}
+
+function poStoreToken(generator, kind, id, token, tokenBase64, fingerprint = null) {
+    const metadata = generator.minterMetadata;
+    if (!metadata || Date.now() >= metadata.refreshAtMs) throw new ScriptException("Attestation expired while minting");
+    const cached = { ...metadata, token, tokenBase64, createdAtMs: Date.now(), generation: generator.minterGeneration,
+        fingerprint: typeof fingerprint === "string" && /^[a-f0-9]{12}$/i.test(fingerprint) ? fingerprint.toUpperCase() : null };
+    generator.generatedTokens[poBindingKey(kind, id)] = cached;
+    poTrace("minted", { provenance: generator.provenance, bindingKind: kind,
+        generation: cached.generation, fingerprint: cached.fingerprint, decodedBytes: token.length,
+        minterAgeMs: Date.now() - metadata.createdAtMs,
+        integrityAgeMs: metadata.expiryKnown ? Date.now() - metadata.createdAtMs : null, remainingMs: metadata.refreshAtMs - Date.now(),
+        expiryKnown: metadata.expiryKnown, mintRefreshThreshold: metadata.mintRefreshThreshold });
+}
+
+function withPOTGenerator(context, cb, reject) {
+    if (context !== "UMP") { tryGetBotguard(cb); return; }
+    if (!USE_BROWSER || !browser?.addScriptOnLoad) {
+        reject(new ScriptException("Native UMP requires browser-backed playback attestation"));
+        return;
+    }
+    if (existingBotguard?.provenance === "browser") { cb(existingBotguard); return; }
+    tryGetBrowserBotguard(cb, () => reject(new ScriptException("Could not initialize browser-backed playback attestation")));
+}
+
+function refreshPOTMinter() {
+    return new Promise((resolve, reject) => {
+        const previous = existingBotguard;
+        try {
+            withPOTGenerator("UMP", bg => {
+                if (bg !== previous) { resolve(); return; }
+                try { bg.refreshMinter(ok => ok ? resolve() : reject(new ScriptException("Could not renew browser-backed playback attestation"))); }
+                catch (ex) { reject(ex); }
+            }, reject);
+        } catch (ex) { reject(ex); }
+    });
+}
+
+function installPoMinterObserver(fallbackTtlMs) {
+    const state = window.__GJGlob = window.__GJGlob || {};
+    if (state.poObserverInstalled) return;
+    state.poObserverInstalled = true;
+    let generation = 0;
+    state.poAttachMinter = mint => {
+        if (mint === state.mint) return;
+        state.mint = mint;
+        const createdAtMs = Date.now();
+        state.poMinter = { createdAtMs, expiresAtMs: createdAtMs + fallbackTtlMs,
+            refreshAtMs: createdAtMs + fallbackTtlMs - Math.min(30000, fallbackTtlMs / 10),
+            expiryKnown: false, mintRefreshThreshold: null, generation: ++generation };
+    };
+}
+
+function tryGetBrowserBotguard(cb, cbFail) {
+    isCreatingBotguardCallbacks.push({ ready: cb, failed: cbFail });
+    if (isCreatingBotguard) return;
+    isCreatingBotguard = true;
+    let finished = false;
+    const finish = result => {
+        if (finished) return;
+        finished = true;
+        const waiters = isCreatingBotguardCallbacks;
+        isCreatingBotguardCallbacks = [];
+        isCreatingBotguard = false;
+        if (result) existingBotguard = botguard;
+        poTrace(result ? "browser-ready" : "browser-failed", { provenance: "browser", waiterCount: waiters.length });
+        for (const waiter of waiters) {
+            try { if (result) waiter.ready(botguard); else if (waiter.failed) waiter.failed(); }
+            catch (_) { poTrace("initialization-callback-failed", { provenance: "browser" }); }
+        }
+    };
+    const botguard = new BotGuardBrowserGenerator(globalThis, () => {});
+    try { botguard.initialize(finish); }
+    catch (_) { finish(false); }
 }
 function tryGetEngineBotguard(cb) {
 		getJSDOM();
@@ -12982,10 +13062,9 @@ function getInitialPOT(j, clientState) {
 function tryGetPOT(bgData, cb, contextStr, forceNew) {
 	return new Promise((res, rej) =>{
 		try {
-			tryGetBotguard((bg)=>{
+			withPOTGenerator(contextStr, (bg)=>{
 				bg.getTokenOrCreate(bgData.visitorData, bgData.dataSyncId, (pot)=>{
-					log("Botguard token to use: " + pot);
-					console.log("Botguard Token to use:", pot);
+
 					if(!pot)
 					{
 						rej("No POT Found for " + contextStr);
@@ -13006,7 +13085,7 @@ function tryGetPOT(bgData, cb, contextStr, forceNew) {
 						rej(ex);
 					}
 				}, bgData.visitorDataType, forceNew);
-			});
+			}, rej);
 		}
 		catch(ex) {
 			rej(ex);
@@ -13016,11 +13095,10 @@ function tryGetPOT(bgData, cb, contextStr, forceNew) {
 function tryGetPOTCustom(customId, cb, contextStr, forceNew) {
 	return new Promise((res, rej) =>{
 		try {
-			tryGetBotguard((bg)=>{
+			withPOTGenerator(contextStr, (bg)=>{
 				try {
 					bg.getTokenOrCreateCustom(customId, (pot)=>{
-						log("Botguard token to use: " + pot);
-						console.log("Botguard Token to use:", pot);
+
 						//rej("test");
 						//return;
 						if(!pot)
@@ -13047,7 +13125,7 @@ function tryGetPOTCustom(customId, cb, contextStr, forceNew) {
 				catch(ex) {
 					rej(ex);
 				}
-			});
+			}, rej);
 		}
 		catch(ex) {
 			rej(ex);
@@ -13079,7 +13157,11 @@ class BotGuardBrowserGenerator {
 		this.globalInitializer = globalInitializer;
 		this.minterWaiters = [];
 		this.minterFailure = undefined;
-		this.generatedTokens = {};
+		this.generatedTokens = Object.create(null);
+        this.provenance = "browser";
+        this.browserEpoch = 0;
+        this.minterGeneration = 0;
+        this.minterMetadata = null;
 		if (onReady)
 			this.minterWaiters.push(onReady);
 	}
@@ -13098,9 +13180,12 @@ class BotGuardBrowserGenerator {
 
 		log("Initializing browser");
 		browser.initialize();
-		browser.addScriptOnLoad(`
+        for (const scriptId of poBrowserScriptIds) browser.removeScriptOnLoad(scriptId);
+        poBrowserScriptIds = [];
+        this.observerScript = browser.addScriptOnLoad("(" + installPoMinterObserver.toString() + ")(" + PO_UNKNOWN_TTL_MS + ");");
+		this.minterScript = browser.addScriptOnLoad(`
 			(() => {
-				var __GJGlob = {}; 
+				var __GJGlob = window.__GJGlob || {};
 				window.__GJGlob = __GJGlob; 
 				console.log('Injected Script');
 
@@ -13110,9 +13195,7 @@ class BotGuardBrowserGenerator {
 				const wrapCache = new WeakMap();
 				const resolveByCbCache = new WeakMap();
 
-				const log = (...args) => {
-					console.log("[trayride]", ...args);
-				};
+                const log = () => {};
 
 				const safeDefine = (obj, prop, desc) => {
 					try {
@@ -13175,11 +13258,13 @@ class BotGuardBrowserGenerator {
 							log("relevant() res", res);
 							if (typeof res === "function") {
 								log("wrapped manter fn");
-								__GJGlob.mint = res;
+								__GJGlob.poAttachMinter(res);
 								log("__GJGlob manter fn found");
 								return wrapManter(res);
 							} else {
-								log("manter fn not found", relevant);
+								if (res && typeof res.then === "function")
+                                    res.then(mint => { if (typeof mint === "function") __GJGlob.poAttachMinter(mint); }).catch(() => {});
+                                log("minter constructor did not return a synchronous function");
 								return res;
 							}
 							
@@ -13337,6 +13422,7 @@ class BotGuardBrowserGenerator {
 				hookTrayride();
 			})();
 		`);
+        poBrowserScriptIds = [this.observerScript, this.minterScript];
 
 		browser.load(bridge.buildPlatform === "desktop" ? "https://www.youtube.com" : "https://m.youtube.com/");
 		log("Waiting till load..");
@@ -13345,141 +13431,167 @@ class BotGuardBrowserGenerator {
 		else
 			log("Load timeout?");
 
-		const callbackId = randomString(5);
-		browser.run(`
-			let callbackID = "${callbackId}";
-			const TIMEOUT_MS = 10000;
-			const POLL_MS = 50;
-			const startTime = Date.now();
+        this.waitForMinter(cb);
+    }
+    waitForMinter(cb) {
+        const callbackId = randomString(8);
+        let finished = false;
+        const finish = (success, stage) => {
+            if (finished) return;
+            finished = true;
+            clearTimeout(timeout);
+            poTrace(success ? "browser-minter-ready" : "browser-minter-failed", { provenance: "browser", stage });
+            cb(success, stage);
+        };
+        const timeout = setTimeout(() => finish(false, "host-timeout"), 15000);
+        try {
+            browser.run(`(() => {
+                const callbackID = "${callbackId}";
+                const started = Date.now();
+                (function poll() {
+                    const state = window.__GJGlob;
+                    const ready = !!state?.poMinter && typeof state?.mint === "function";
+                    if (ready || Date.now() - started >= 10000) {
+                        const stage = ready ? "ready" : state?.poObserverInstalled ? "minter-capture" : "document-start-injection";
+                        window.__GJ?.callback(callbackID, JSON.stringify({success:ready, stage}));
+                        return;
+                    }
+                    setTimeout(poll, 50);
+                })();
+            })()`, callbackId, str => {
+                try { const result = JSON.parse(str); finish(result?.success === true, result?.stage || "invalid-result"); }
+                catch (_) { finish(false, "invalid-result"); }
+            });
+        } catch (_) { finish(false, "script-execution"); }
+    }
 
-			(function poll() {
-				if (Date.now() - startTime > TIMEOUT_MS) {
-					let reason = "Timeout waiting for prerequisites: ";
-
-					if (!__GJGlob.mint)
-						reason += "failed to find minter";
-					else
-						reason += "unknown";
-
-					return __GJ.callback(callbackID, JSON.stringify({ success: false, reason }));
-				}
-
-				if (!__GJGlob.mint) {
-					return setTimeout(poll, POLL_MS);
-				}
-
-				__GJ.callback(callbackID, JSON.stringify({ success: true }));
-			})();`, callbackId, (str) => {
-				log("Browser result: " + str);
-				const result = JSON.parse(str);
-				if(result.success) {
-					log("Minter Browser Successful");
-				} else {
-					log("Minter Browser Failed");
-				}
-				cb(result.success);
-			}
-		);
-	}
-	
 	getTokenOrCreateCustom(customToken, cb, forceNew) {
-		if(!customToken)
-			throw new ScriptException("No token Id provided for botguard");
-
-		let idToUse = customToken;
-		if(overridePOT) {
-			cb(overridePOT);
-			return;
-		}
-
-		const existing = this.generatedTokens[idToUse];
-		if(!existing || forceNew) {
-			if(existing && forceNew)
-				console.log("Force creating new PO Token");
-			log("No existing botguard customToken, generating new");
-			this.generateBase64(customToken, customToken, (token)=>{
-				cb(token);
-			});
-		}
-		else //TODO: check expiry?
-			cb(existing.tokenBase64);
+		if (!customToken) throw new ScriptException("No content binding provided for botguard");
+		if (overridePOT) { poTrace("override", { provenance: this.provenance }); cb(overridePOT); return; }
+		this.ensureMinter(ok => {
+			if (!ok) { cb(null); return; }
+			const cached = !forceNew && poCachedToken(this, "content", customToken);
+			if (cached) { cb(cached); return; }
+			this.generateBase64(customToken, null, cb, undefined, "content");
+		});
 	}
 	getTokenOrCreate(visitorId, dataSyncId, cb, type, force) {
-		if(!visitorId && !dataSyncId)
-			throw new ScriptException("No visitor or datasync Id provided for botguard");
-
-		let idToUse = visitorId ?? dataSyncId;
-		if(overridePOT) {
-			cb(overridePOT);
-			return;
-		}
-
-		const existing = this.generatedTokens[idToUse];
-		if(!existing || force) {
-			log("No existing botguard token, generating new");
-			this.generateBase64(visitorId, dataSyncId, (token)=>{
-				cb(token);
-			}, type);
-		}
-		else //TODO: check expiry?
-			cb(existing.tokenBase64);
-	}
-
-	generateBase64(visitorId, dataSyncId, cb, type) {
-		if(!(visitorId ?? dataSyncId))
-			console.log("NO VISITORID OR DATASYNC PROVIDED FOR POT");
-		this.generate(visitorId, dataSyncId, (result) => {
-			const originId = visitorId;
-			let poToken = btoa(String.fromCharCode(...result))
-				.replace(/\+/g, '-')
-				.replace(/\//g, '_');
-
-			console.log("New Generated POT", [visitorId ?? dataSyncId, poToken]);
-			
-			cb(poToken);
-		}, type);
-	}
-	generate(visitorId, dataSyncId, cb, type) {
-		if(!visitorId && !dataSyncId)
-			throw new ScriptException("No visitor or datasync Id provided for botguard");
-		
-		const idToUse = visitorId ?? dataSyncId;
-		if(idToUse == dataSyncId)
-			log("BOTGUARD USING DATASYNCID");
-
-		console.log("Minting visitor: " + idToUse);
-		this.runMinter(idToUse, (poTokenResult) => {
-			try {
-				//TODO: Handle dataSync
-				log("Minter Result: " + poTokenResult)
-				const newPoToken = {
-					token: poTokenResult.poToken,
-					tokenBase64: poTokenResult.poTokenBase64,
-					expires: poTokenResult.expire
-				};
-				this.generatedTokens[idToUse] = newPoToken;
-				log("New PO Token: " + newPoToken.tokenBase64);
-				if(_settings?.notify_bg)
-					bridge.toast("New Botguard Token: " + (type ? "(" + type + ") " : "") + newPoToken?.tokenBase64?.substring(0, 10) + "...");
-				cb(poTokenResult.poToken);
-			}
-			catch(ex) {
-				log("Minting failed due to: " + ex);
-			}
+		const id = visitorId ?? dataSyncId;
+		if (!id) throw new ScriptException("No session binding provided for botguard");
+		if (overridePOT) { poTrace("override", { provenance: this.provenance }); cb(overridePOT); return; }
+		const kind = visitorId ? "visitor" : "account";
+		this.ensureMinter(ok => {
+			if (!ok) { cb(null); return; }
+			const cached = !force && poCachedToken(this, kind, id);
+			if (cached) { cb(cached); return; }
+			this.generateBase64(visitorId, dataSyncId, cb, type, kind);
 		});
 	}
-	runMinter(value, cb) {
-		log("Browser Running POToken creation for: " + value);
-		browser.runWithReturn(
-			"(()=>{\n" +
-			"const poToken = __GJGlob.mint(new TextEncoder().encode(" + JSON.stringify(value) + "));\n" + 
-			"const poTokenBase64 = btoa(String.fromCharCode(...poToken)).replaceAll('+', '-').replaceAll('/', '_');\n" +
-			"return JSON.stringify({poToken: [...poToken], poTokenBase64: poTokenBase64});\n" +
-			"\n})();", (result) =>{
-			log("Result from minter: " + result);
-			cb(JSON.parse(result));
-		});
+	generateBase64(visitorId, dataSyncId, cb, type, kind) {
+		this.generate(visitorId, dataSyncId, result => {
+			cb(result ? btoa(String.fromCharCode(...result)).replace(/\+/g, "-").replace(/\//g, "_") : null);
+		}, type, kind);
 	}
+
+    updateMinterMetadata(metadata) {
+        if (!metadata) return false;
+        if (this.pageGeneration !== metadata.generation || this.minterMetadata?.createdAtMs !== metadata.createdAtMs) {
+            this.pageGeneration = metadata.generation;
+            this.minterGeneration = ++poMinterGeneration;
+            this.generatedTokens = Object.create(null);
+            poTrace("minter-installed", { provenance: this.provenance, generation: this.minterGeneration,
+                expiryKnown: metadata.expiryKnown, remainingMs: metadata.refreshAtMs - Date.now() });
+        }
+        this.minterMetadata = metadata;
+        return Date.now() < metadata.refreshAtMs;
+    }
+    runBrowserExpression(expression, cb) {
+        const callbackId = randomString(16);
+        let finished = false;
+        const finish = value => {
+            if (finished) return;
+            finished = true;
+            clearTimeout(timeout);
+            cb(value);
+        };
+        const timeout = setTimeout(() => finish(null), 15000);
+        try {
+            browser.run(`(() => {
+                const deliver = value => window.__GJ?.callback(${JSON.stringify(callbackId)}, value ?? null);
+                Promise.resolve().then(() => (${expression}
+)).then(deliver, () => deliver(null));
+            })()`, callbackId, finish);
+        } catch (_) { finish(null); }
+    }
+    ensureMinter(cb, renewed = false) {
+        this.runBrowserExpression("JSON.stringify(window.__GJGlob?.poMinter || null)", str => {
+            let valid = false;
+            try { valid = this.updateMinterMetadata(JSON.parse(str)); } catch (_) {}
+            if (valid) cb(true);
+            else if (renewed) cb(false);
+            else this.refreshMinter(ok => ok ? this.ensureMinter(cb, true) : cb(false));
+        });
+    }
+    refreshMinter(cb) {
+        this.refreshWaiters = this.refreshWaiters || [];
+        this.refreshWaiters.push(cb);
+        if (this.refreshing) return;
+        this.refreshing = true;
+        this.browserEpoch++;
+        this.generatedTokens = Object.create(null);
+        poTrace("minter-renewal", { provenance: this.provenance, generation: this.minterGeneration });
+        let finished = false;
+        const finish = ok => {
+            if (finished) return;
+            finished = true;
+            const waiters = this.refreshWaiters;
+            this.refreshWaiters = [];
+            this.refreshing = false;
+            this.pageGeneration = null;
+            for (const waiter of waiters) waiter(ok);
+        };
+        try {
+            browser.load(bridge.buildPlatform === "desktop" ? "https://www.youtube.com" : "https://m.youtube.com/");
+            browser.waitTillLoaded(20000);
+            this.waitForMinter(finish);
+        } catch (_) { finish(false); }
+    }
+    generate(visitorId, dataSyncId, cb, type, kind = visitorId ? "visitor" : "account") {
+        const id = visitorId ?? dataSyncId;
+        if (!id) throw new ScriptException("No token binding provided for botguard");
+        this.runMinter(id, result => {
+            try {
+                if (!result || result.error || !result.poToken?.length) throw new Error("Browser mint failed");
+                if (!this.updateMinterMetadata(result.metadata)) throw new Error("Browser attestation expired");
+                poStoreToken(this, kind, id, result.poToken, result.poTokenBase64, result.fingerprint);
+                cb(result.poToken);
+            } catch (_) {
+                poTrace("mint-failed", { provenance: this.provenance, generation: this.minterGeneration, bindingKind: kind });
+                cb(null);
+            }
+        });
+    }
+    runMinter(value, cb) {
+        this.ensureMinter(ok => {
+            if (!ok) { cb(null); return; }
+            const epoch = this.browserEpoch;
+            this.runBrowserExpression("(async () => {" +
+                "const state = window.__GJGlob; const metadata = state?.poMinter;" +
+                "if (!metadata || Date.now() >= metadata.refreshAtMs) return JSON.stringify({error:'expired'});" +
+                "try { const poToken = await state.mint(new TextEncoder().encode(" + JSON.stringify(value) + "));" +
+                "if (metadata !== state.poMinter || Date.now() >= metadata.refreshAtMs) return JSON.stringify({error:'changed'});" +
+                "const poTokenBase64 = btoa(String.fromCharCode(...poToken)).replaceAll('+','-').replaceAll('/','_');" +
+                "let fingerprint = null; if (globalThis.crypto?.subtle) {" +
+                "const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', Uint8Array.from(poToken)));" +
+                "fingerprint = Array.from(digest.slice(0,6), x => x.toString(16).padStart(2,'0')).join('').toUpperCase();}" +
+                "if (metadata !== state.poMinter || Date.now() >= metadata.refreshAtMs) return JSON.stringify({error:'changed'});" +
+                "return JSON.stringify({poToken:[...poToken],poTokenBase64,metadata,fingerprint});" +
+                "} catch (_) {return JSON.stringify({error:'mint-failed'});} })()", str => {
+                    if (epoch !== this.browserEpoch) { cb(null); return; }
+                    try { cb(JSON.parse(str)); } catch (_) { cb(null); }
+                });
+        });
+    }
 }
 
 class BotGuardGenerator {
