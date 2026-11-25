@@ -1222,6 +1222,15 @@ class YTSessionClient {
 		//#region Extract Streams
 		if(!simplify) {
 			if(!videoDetails.isLive) {
+				if (_settings.preferThumbnailSources && !forceUmp) {
+					try {
+						videoDetails.video = getThumbnailVideoDescriptor(videoId, context.jsUrl, context.clientConfig, url, playerData);
+						log("Using thumbnail sources (test preference)");
+					} catch (ex) {
+						log("Thumbnail sources unavailable, trying other sources: " + ex);
+					}
+				}
+
 				if(false && !!_settings.useHtml5) {
 					if(playerData.streamingData.adaptiveFormats) {
 						const newDescriptor = extractAdaptiveFormats_VideoDescriptor_WithPOT(playerData.streamingData.adaptiveFormats, context.jsUrl, contextData, "HTML5 ", potToUse);
@@ -2191,6 +2200,17 @@ source.getContentDetails = (url, useAuth, simplify, forceUmp, options) => {
 		throw new UnavailableException("No video found");
 	}
 
+	let preferredThumbnailDescriptor;
+	if (_settings.preferThumbnailSources && !simplify && !options?.noSources && !forceUmp && !videoDetails.isLive) {
+		try {
+			preferredThumbnailDescriptor = getThumbnailVideoDescriptor(videoId, jsUrl, clientConfig, urlFiltered, initialPlayerData);
+			videoDetails.video = preferredThumbnailDescriptor;
+			log("Using thumbnail sources (test preference)");
+		} catch (ex) {
+			log("Thumbnail sources unavailable, trying other sources: " + ex);
+		}
+	}
+
 	if (!videoDetails.live &&
 		(videoDetails.video?.videoSources == null || videoDetails.video.videoSources.length == 0) &&
 		(!videoDetails.datetime || videoDetails.datetime < (((new Date()).getTime() / 1000) - 60 * 60))) {
@@ -2240,7 +2260,7 @@ source.getContentDetails = (url, useAuth, simplify, forceUmp, options) => {
 		else
 			bridge.toast("Failed to get iOS stream data");
 	}
-	else if (!USE_ABR_VIDEOS && !simplify) {
+	else if (!preferredThumbnailDescriptor && !USE_ABR_VIDEOS && !simplify) {
 		let foundWorking = false;
 
 		let reqIndex = 0;
@@ -7987,9 +8007,8 @@ function verifyDirectPlayback(descriptor, batch) {
 }
 
 function requestAndroidShortStreamingData(videoId, batch, visitorData, useLogin) {
-	//const visitorId = getVisitorId(clients.ANDROID);
 	if(IS_TESTING)
-		console.log("Android Visitor ID", visitorId);
+		console.log("Android Visitor ID", visitorData?.visitorData);
 	let body = {
 		context: {
 			client: {
@@ -9404,6 +9423,47 @@ function extractABR_VideoDescriptor(initialPlayerData, jsUrl, clientConfig, pare
 	);
 }
 
+function getThumbnailVideoDescriptor(videoId, jsUrl, clientConfig, parentUrl, existingPlayerData) {
+	for (let playerData of existingPlayerData ? [existingPlayerData, null] : [null]) {
+		if (playerData === null) {
+			const visitorData = getBGDataFromClientConfig(clientConfig, false).visitorData;
+			const response = requestAndroidShortStreamingData(videoId, null, { visitorData }, false);
+			if (!response.isOk)
+				throw new ScriptException("Failed to fetch thumbnail streams [" + response.code + "]");
+			playerData = JSON.parse(response.body);
+		}
+		playerData = playerData.playerResponse || playerData;
+		if (playerData.videoDetails?.videoId !== videoId || playerData.playabilityStatus?.status !== "OK")
+			continue;
+
+		const sources = (playerData.streamingData?.formats || [])
+			.filter(format => format.mimeType?.startsWith("video/") && format.audioQuality && !format.drmFamilies?.length)
+			.map(format => {
+				const url = decryptUrlN(format.url, jsUrl)
+					?? decryptUrl(format.signatureCipher || format.cipher, jsUrl);
+				if (!url)
+					return null;
+				const codecs = format.mimeType.match(/codecs="([^"]+)"/)?.[1];
+				const source = new VideoUrlSource({
+					name: "Thumbnail " + (format.qualityLabel || (format.height + "p")),
+					url: url,
+					width: format.width,
+					height: format.height,
+					container: format.mimeType.split(";")[0],
+					codec: codecs?.split(",")[0]?.trim(),
+					bitrate: format.bitrate,
+					duration: Math.ceil(Number(format.approxDurationMs) / 1000)
+						|| Number(playerData.videoDetails?.lengthSeconds) || 0
+				});
+				source.getRequestModifier = () => new YTRequestModifier(parentUrl);
+				return source;
+			}).filter(source => source !== null);
+		if (sources.length > 0)
+			return new VideoSourceDescriptor(sources);
+	}
+	throw new UnavailableException("No playable thumbnail streams were returned");
+}
+
 function extractUMP_VideoDescriptor(initialPlayerData, jsUrl, clientConfig, parentUrl, usedLogin, contextData) {
 	return extractUMP_VideoDescriptorAsync(initialPlayerData, jsUrl, clientConfig, parentUrl, usedLogin, contextData);
 }
@@ -9511,6 +9571,9 @@ async function extractUMP_VideoDescriptorAsync(initialPlayerData, jsUrl, clientC
 		osVersion: "10.0",
 		poToken: potState.pot
 	});
+
+	if (!isLive)
+		source.getFallbackSource = () => getThumbnailVideoDescriptor(videoId, jsUrl, clientConfig, parentUrl, initialPlayerData);
 
 	return new VideoSourceDescriptor([source]);
 }

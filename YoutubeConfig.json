@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 373,
+	"version": 374,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120002",
 
@@ -130,6 +130,13 @@
 			"variable": "allowMemberContent",
 			"name": "Allow Member Content",
 			"description": "Allow listing of member content (will prefix \"[MEMBER]\")",
+			"type": "Boolean",
+			"default": "false"
+		},
+		{
+			"variable": "preferThumbnailSources",
+			"name": "Prefer Thumbnail Sources",
+			"description": "For testing: try low-resolution video with audio before other sources. Uses Android streams when the existing player response has none.",
 			"type": "Boolean",
 			"default": "false"
 		},
@@ -456,6 +463,9 @@
 
 
 	"changelog": {
+        "374": [
+            "Feature: Fallback Thumbnail Sources"
+        ],
         "373": [
             "Feature: iOS Producer sources support",
             "Improvement: Reduce required requests for sources"
