@@ -8,7 +8,7 @@
 	"repositoryUrl": "https://gitlab.futo.org/videostreaming/plugins/youtube",
 	"scriptUrl": "./YoutubeScript.js",
 
-	"version": 374,
+	"version": 375,
 	"iconUrl": "./youtube.png",
 	"id": "35ae969a-a7db-11ed-afa1-0242ac120003",
 
@@ -437,6 +437,9 @@
 	"primaryClaimFieldType": 1,
 
 	"changelog": {
+        "375": [
+            "Fix: Playback attestation in the desktop browser"
+        ],
         "374": [
             "Feature: Fallback Thumbnail Sources"
         ],

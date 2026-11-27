@@ -13165,20 +13165,124 @@ function refreshPOTMinter() {
     });
 }
 
-function installPoMinterObserver(fallbackTtlMs) {
-    const state = window.__GJGlob = window.__GJGlob || {};
-    if (state.poObserverInstalled) return;
-    state.poObserverInstalled = true;
+function installPoBrowserHooks(stateKey, fallbackTtlMs) {
+    const define = Object.defineProperty, getDescriptor = Object.getOwnPropertyDescriptor;
+    const nativeToString = Function.prototype.toString;
+    const fakes = new WeakMap();
+    const patchedRealms = new WeakSet();
+    const nativeSource = name => "function " + name + "() { [native code] }";
+    const sourceOf = fn => fakes.has(fn) ? fakes.get(fn) : Reflect.apply(nativeToString, fn, []);
+
+    const patchRealm = w => {
+        try {
+            if (!w || patchedRealms.has(w)) return;
+            patchedRealms.add(w);
+            const FP = w.Function.prototype, originalToString = FP.toString;
+            const toString = { toString() { return fakes.has(this) ? fakes.get(this) : Reflect.apply(originalToString, this, arguments); } }.toString;
+            fakes.set(toString, nativeSource("toString"));
+            define(FP, "toString", { ...getDescriptor(FP, "toString"), value: toString });
+
+            const Anchor = w.HTMLAnchorElement, anchorProto = Anchor && Anchor.prototype;
+            if (anchorProto && !("hrefTranslate" in anchorProto)) {
+                const TypeErr = w.TypeError, getAttribute = w.Element.prototype.getAttribute, setAttribute = w.Element.prototype.setAttribute;
+                const accessors = {
+                    get hrefTranslate() { if (!(this instanceof Anchor)) throw new TypeErr("Illegal invocation"); const v = Reflect.apply(getAttribute, this, ["hreftranslate"]); return v === null ? "" : v; },
+                    set hrefTranslate(value) { if (!(this instanceof Anchor)) throw new TypeErr("Illegal invocation"); Reflect.apply(setAttribute, this, ["hreftranslate", String(value)]); },
+                };
+                const d = getDescriptor(accessors, "hrefTranslate");
+                fakes.set(d.get, nativeSource("get hrefTranslate"));
+                fakes.set(d.set, nativeSource("set hrefTranslate"));
+                define(anchorProto, "hrefTranslate", { get: d.get, set: d.set, enumerable: true, configurable: true });
+            }
+
+            for (const ctor of ["HTMLIFrameElement", "HTMLFrameElement", "HTMLObjectElement"]) {
+                const proto = w[ctor] && w[ctor].prototype;
+                if (!proto) continue;
+                for (const key of ["contentWindow", "contentDocument"]) {
+                    const desc = getDescriptor(proto, key);
+                    if (!desc || !desc.get) continue;
+                    const originalGet = desc.get;
+                    const holder = { get [key]() { const result = Reflect.apply(originalGet, this, arguments); try { patchRealm(key === "contentWindow" ? result : result && result.defaultView); } catch (_) {} return result; } };
+                    const get = getDescriptor(holder, key).get;
+                    fakes.set(get, nativeSource("get " + key));
+                    define(proto, key, { ...desc, get });
+                }
+            }
+        } catch (_) {}
+    };
+    patchRealm(window);
+
+    let top = false;
+    try { top = window === window.top; } catch (_) {}
+    if (!top) return;
+
+    const state = { observerInstalled: true, mint: undefined, poMinter: null };
+    define(window, Symbol(stateKey), { value: state });
     let generation = 0;
-    state.poAttachMinter = mint => {
-        if (mint === state.mint) return;
+    const attachMinter = mint => {
+        if (typeof mint !== "function" || mint === state.mint) return;
         state.mint = mint;
         const createdAtMs = Date.now();
         state.poMinter = { createdAtMs, expiresAtMs: createdAtMs + fallbackTtlMs,
             refreshAtMs: createdAtMs + fallbackTtlMs - Math.min(30000, fallbackTtlMs / 10),
             expiryKnown: false, mintRefreshThreshold: null, generation: ++generation };
     };
+
+    const wrappers = new WeakMap();
+    const wrap = (orig, before, after) => {
+        if (typeof orig !== "function" || fakes.has(orig)) return orig;
+        let wrapped = wrappers.get(orig);
+        if (wrapped) return wrapped;
+        const call = (self, args) => {
+            if (before) try { before(args); } catch (_) {}
+            const res = Reflect.apply(orig, self, args);
+            if (after) try { after(res); } catch (_) {}
+            return res;
+        };
+        wrapped = Object.prototype.hasOwnProperty.call(orig, "prototype")
+            ? function (...args) { return call(this, args); }
+            : { w(...args) { return call(this, args); } }.w;
+        define(wrapped, "length", { value: orig.length, configurable: true });
+        define(wrapped, "name", { value: orig.name, configurable: true });
+        fakes.set(wrapped, sourceOf(orig));
+        wrappers.set(orig, wrapped);
+        return wrapped;
+    };
+
+    const onMinterConstructed = res => {
+        if (typeof res === "function") attachMinter(res);
+        else if (res && typeof res.then === "function") res.then(attachMinter, () => {});
+    };
+    const wrapSnapshot = fn => wrap(fn, args => {
+        args[0] = wrap(args[0], () => {
+            const slot = args[1][2];
+            slot[0] = wrap(slot[0], null, onMinterConstructed);
+        });
+    });
+    const wrapA = a => wrap(a, args => { if (typeof args[1] === "function") args[1] = wrap(args[1], cbArgs => { cbArgs[0] = wrapSnapshot(cbArgs[0]); }); });
+
+    const dataProperty = value => ({ value, writable: true, enumerable: true, configurable: true });
+    const catchFirstAssignment = (obj, key, onValue) => {
+        const holder = {
+            get [key]() { return undefined; },
+            set [key](value) { define(this, key, dataProperty(onValue(value))); },
+        };
+        const d = getDescriptor(holder, key);
+        fakes.set(d.get, nativeSource("get " + key));
+        fakes.set(d.set, nativeSource("set " + key));
+        define(obj, key, { get: d.get, set: d.set, enumerable: true, configurable: true });
+    };
+    const hookVm = vm => {
+        if (!vm || (typeof vm !== "object" && typeof vm !== "function")) return vm;
+        const d = getDescriptor(vm, "a");
+        if (d && "value" in d) { if (d.writable || d.configurable) define(vm, "a", { ...d, value: wrapA(d.value) }); }
+        else if (!d && Object.isExtensible(vm)) catchFirstAssignment(vm, "a", wrapA);
+        return vm;
+    };
+    if (window.trayride !== undefined) hookVm(window.trayride);
+    else catchFirstAssignment(window, "trayride", hookVm);
 }
+const poStateExpression = key => "window[Object.getOwnPropertySymbols(window).find(s => s.description === " + JSON.stringify(key) + ")]";
 
 function tryGetBrowserBotguard(cb, cbFail) {
     isCreatingBotguardCallbacks.push({ ready: cb, failed: cbFail });
@@ -13368,6 +13472,7 @@ class BotGuardBrowserGenerator {
 		this.minterFailure = undefined;
 		this.generatedTokens = Object.create(null);
         this.provenance = "browser";
+        this.stateKey = randomString(16);
         this.browserEpoch = 0;
         this.minterGeneration = 0;
         this.minterMetadata = null;
@@ -13391,247 +13496,8 @@ class BotGuardBrowserGenerator {
 		browser.initialize();
         for (const scriptId of poBrowserScriptIds) browser.removeScriptOnLoad(scriptId);
         poBrowserScriptIds = [];
-        this.observerScript = browser.addScriptOnLoad("(" + installPoMinterObserver.toString() + ")(" + PO_UNKNOWN_TTL_MS + ");");
-		this.minterScript = browser.addScriptOnLoad(`
-			(() => {
-				var __GJGlob = window.__GJGlob || {};
-				window.__GJGlob = __GJGlob; 
-				console.log('Injected Script');
-
-				const OBJ_MARK = Symbol.for("trayride.a.intercepted");
-				const WRAPPED_MARK = Symbol.for("trayride.wrapped");
-
-				const wrapCache = new WeakMap();
-				const resolveByCbCache = new WeakMap();
-
-                const log = () => {};
-
-				const safeDefine = (obj, prop, desc) => {
-					try {
-						Object.defineProperty(obj, prop, desc);
-						return true;
-					} catch {
-						return false;
-					}
-				};
-
-				const wrapStable = (fn, factory) => {
-					if (typeof fn !== "function") return fn;
-					if (fn[WRAPPED_MARK]) return fn;
-
-					const cached = wrapCache.get(fn);
-					if (cached) return cached;
-
-					const wrapped = factory(fn);
-					safeDefine(wrapped, WRAPPED_MARK, { value: true, configurable: true });
-					wrapCache.set(fn, wrapped);
-					return wrapped;
-				};
-
-				const toBase64Url = (u8) => {
-					if (!(u8 instanceof Uint8Array)) return u8;
-					let bin = "";
-					const chunk = 0x8000;
-					for (let i = 0; i < u8.length; i += chunk) {
-						bin += String.fromCharCode(...u8.subarray(i, i + chunk));
-					}
-					return btoa(bin).replaceAll("+", "-").replaceAll("/", "_");
-				};
-
-				const toText = (v) => {
-					if (v instanceof Uint8Array) {
-						try {
-							return new TextDecoder().decode(v);
-						} catch {
-							return v;
-						}
-					}
-					return v;
-				};
-
-				const wrapManter = (fn) =>
-					wrapStable(fn, (orig) =>
-						function (...args) {
-							log("manter()", args);
-							const out = orig.apply(this, args);
-							log("manter:io", { input: toText(args[0]), output: toBase64Url(out) });
-							return out;
-						}
-					);
-
-				const wrapRelevant = (fn) =>
-					wrapStable(fn, (orig) =>
-						function (...args) {
-							log("relevant()", args);
-							const res = orig.apply(this, args);
-							log("relevant() res", res);
-							if (typeof res === "function") {
-								log("wrapped manter fn");
-								__GJGlob.poAttachMinter(res);
-								log("__GJGlob manter fn found");
-								return wrapManter(res);
-							} else {
-								if (res && typeof res.then === "function")
-                                    res.then(mint => { if (typeof mint === "function") __GJGlob.poAttachMinter(mint); }).catch(() => {});
-                                log("minter constructor did not return a synchronous function");
-								return res;
-							}
-							
-						}
-					);
-
-				const wrapResolve = (resolve, onResolve) => {
-					if (typeof resolve !== "function") return resolve;
-					if (resolve[WRAPPED_MARK]) return resolve;
-
-					if (typeof onResolve === "function") {
-						let byCb = resolveByCbCache.get(resolve);
-						if (!byCb) {
-							byCb = new WeakMap();
-							resolveByCbCache.set(resolve, byCb);
-						}
-
-						const cached = byCb.get(onResolve);
-						if (cached) return cached;
-
-						const wrapped = function (...args) {
-							log("resolve()", args);
-							try {
-								onResolve(args);
-							} catch (e) {
-								log("onResolve error", e);
-							}
-							return resolve.apply(this, args);
-						};
-
-						safeDefine(wrapped, WRAPPED_MARK, { value: true, configurable: true });
-						byCb.set(onResolve, wrapped);
-						return wrapped;
-					}
-
-					return function (...args) {
-						log("resolve()", args);
-						return resolve.apply(this, args);
-					};
-				};
-
-				const wrapFn = (fn) =>
-					wrapStable(fn, (orig) =>
-						function (...fnArgs) {
-							log("fn()", fnArgs);
-
-							if (typeof fnArgs[0] === "function") {
-								const onResolve = (resolveArgs) => {
-									log("onResolve()", resolveArgs);
-
-									let relevant;
-									try {
-										relevant = fnArgs[1][2][0];
-									} catch {}
-
-									if (typeof relevant === "function") {
-										const wrappedRelevant = wrapRelevant(relevant);
-										try {
-											fnArgs[1][2][0] = wrappedRelevant;
-										} catch {}
-										log("wrapped relevant fn");
-									} else {
-										log("relevant fn not found", relevant);
-									}
-								};
-
-								fnArgs[0] = wrapResolve(fnArgs[0], onResolve);
-							}
-
-							return orig.apply(this, fnArgs);
-						}
-					);
-
-				const wrapCallback = (cb) =>
-					wrapStable(cb, (orig) =>
-						function (...cbArgs) {
-							log("callback()", cbArgs);
-							if (typeof cbArgs[0] === "function") cbArgs[0] = wrapFn(cbArgs[0]);
-							return orig.apply(this, cbArgs);
-						}
-					);
-
-				const interceptA = (obj) => {
-					if (!obj || (typeof obj !== "object" && typeof obj !== "function")) return;
-					if (obj[OBJ_MARK]) return;
-					if (!safeDefine(obj, OBJ_MARK, { value: true, configurable: true })) return;
-
-					const desc = Object.getOwnPropertyDescriptor(obj, "a");
-					if (desc && desc.configurable === false) return;
-
-					const enumerable = desc ? !!desc.enumerable : true;
-					const origGet = desc ? desc.get : undefined;
-					const origSet = desc ? desc.set : undefined;
-
-					let current =
-						desc && "value" in desc ? desc.value : (() => {
-							try {
-								return obj.a;
-							} catch {
-								return undefined;
-							}
-						})();
-
-					const getA = function () {
-						return origGet ? origGet.call(this) : current;
-					};
-
-					const setA = function (v) {
-						if (origSet) origSet.call(this, v);
-						else current = v;
-					};
-
-					const wrappedA = function (...args) {
-						log("a()", args);
-						if (typeof args[1] === "function") args[1] = wrapCallback(args[1]);
-
-						const fn = getA.call(this);
-						return typeof fn === "function" ? fn.apply(this, args) : fn;
-					};
-
-					const ok = safeDefine(obj, "a", {
-						configurable: true,
-						enumerable,
-						get() {
-							const fn = getA.call(this);
-							return typeof fn === "function" ? wrappedA : fn;
-						},
-						set(v) {
-							setA.call(this, v);
-						},
-					});
-
-					if (ok) log("intercepted obj.a");
-				};
-
-				const hookTrayride = () => {
-					let inner = window.trayride;
-
-					const ok = safeDefine(window, "trayride", {
-						configurable: true,
-						enumerable: true,
-						get() {
-							return inner;
-						},
-						set(v) {
-							inner = v;
-							interceptA(v);
-						},
-					});
-
-					if (!ok && inner !== undefined) interceptA(inner);
-					if (inner !== undefined) interceptA(inner);
-				};
-
-				hookTrayride();
-			})();
-		`);
-        poBrowserScriptIds = [this.observerScript, this.minterScript];
+        this.hookScript = browser.addScriptOnLoad("(" + installPoBrowserHooks.toString() + ")(" + JSON.stringify(this.stateKey) + ", " + PO_UNKNOWN_TTL_MS + ");");
+        poBrowserScriptIds = [this.hookScript];
 
 		browser.load(bridge.buildPlatform === "desktop" ? "https://www.youtube.com" : "https://m.youtube.com/");
 		log("Waiting till load..");
@@ -13658,11 +13524,11 @@ class BotGuardBrowserGenerator {
                 const callbackID = "${callbackId}";
                 const started = Date.now();
                 (function poll() {
-                    const state = window.__GJGlob;
+                    const state = ${poStateExpression(this.stateKey)};
                     const ready = !!state?.poMinter && typeof state?.mint === "function";
                     if (ready || Date.now() - started >= 10000) {
-                        const stage = ready ? "ready" : state?.poObserverInstalled ? "minter-capture" : "document-start-injection";
-                        window.__GJ?.callback(callbackID, JSON.stringify({success:ready, stage}));
+                        const stage = ready ? "ready" : state?.observerInstalled ? "minter-capture" : "document-start-injection";
+                        __GJ.callback(callbackID, JSON.stringify({success:ready, stage}));
                         return;
                     }
                     setTimeout(poll, 50);
@@ -13726,14 +13592,14 @@ class BotGuardBrowserGenerator {
         const timeout = setTimeout(() => finish(null), 15000);
         try {
             browser.run(`(() => {
-                const deliver = value => window.__GJ?.callback(${JSON.stringify(callbackId)}, value ?? null);
+                const deliver = value => __GJ.callback(${JSON.stringify(callbackId)}, value ?? null);
                 Promise.resolve().then(() => (${expression}
 )).then(deliver, () => deliver(null));
             })()`, callbackId, finish);
         } catch (_) { finish(null); }
     }
     ensureMinter(cb, renewed = false) {
-        this.runBrowserExpression("JSON.stringify(window.__GJGlob?.poMinter || null)", str => {
+        this.runBrowserExpression("JSON.stringify(" + poStateExpression(this.stateKey) + "?.poMinter || null)", str => {
             let valid = false;
             try { valid = this.updateMinterMetadata(JSON.parse(str)); } catch (_) {}
             if (valid) cb(true);
@@ -13785,7 +13651,7 @@ class BotGuardBrowserGenerator {
             if (!ok) { cb(null); return; }
             const epoch = this.browserEpoch;
             this.runBrowserExpression("(async () => {" +
-                "const state = window.__GJGlob; const metadata = state?.poMinter;" +
+                "const state = " + poStateExpression(this.stateKey) + "; const metadata = state?.poMinter;" +
                 "if (!metadata || Date.now() >= metadata.refreshAtMs) return JSON.stringify({error:'expired'});" +
                 "try { const poToken = await state.mint(new TextEncoder().encode(" + JSON.stringify(value) + "));" +
                 "if (metadata !== state.poMinter || Date.now() >= metadata.refreshAtMs) return JSON.stringify({error:'changed'});" +
